@@ -1,0 +1,66 @@
+{
+  "name": "openbucket",
+  "version": "0.1.0",
+  "description": "Turn any local disk or folder into S3-compatible object storage.",
+  "license": "Apache-2.0",
+  "private": false,
+  "bin": {
+    "openbucket": "dist/cli/main.js"
+  },
+  "files": [
+    "dist",
+    "docs",
+    "examples",
+    "scripts",
+    ".env.example",
+    "Dockerfile",
+    "docker-compose.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "dev": "vinext dev",
+    "dev:daemon": "tsx src/cli/main.ts serve ./.openbucket-data --no-open",
+    "openbucket": "tsx src/cli/main.ts",
+    "build": "npm run build:web && npm run build:cli",
+    "build:cli": "tsc -p tsconfig.node.json",
+    "build:web": "vinext build",
+    "prepack": "npm run build",
+    "start": "vinext start",
+    "type-check": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "test": "npm run test:unit && npm run test:web && npm run test:docs",
+    "test:unit": "npm run build:cli && node --test tests/daemon/*.test.mjs tests/cli/*.test.mjs",
+    "test:web": "npm run build && node --test tests/rendered-html.test.mjs tests/dashboard-server.test.mjs",
+    "test:docs": "node --test tests/docs-links.test.mjs",
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .vinext --ignore-pattern node_modules"
+  },
+  "dependencies": {
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.45.0",
+    "@tailwindcss/postcss": "^4.3.2",
+    "@types/node": "22.19.19",
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "^6.0.3",
+    "@vitejs/plugin-rsc": "^0.5.27",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.2.10",
+    "react-server-dom-webpack": "^19.2.7",
+    "tailwindcss": "^4.3.2",
+    "tsx": "^4.23.1",
+    "typescript": "5.9.3",
+    "vinext": "0.0.50",
+    "vite": "^8.1.4",
+    "wrangler": "^4.111.0"
+  },
+  "overrides": {
+    "next": "16.3.0-canary.87"
+  },
+  "type": "module"
+}

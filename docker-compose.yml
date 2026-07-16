@@ -1,0 +1,58 @@
+name: openbucket
+
+services:
+  daemon:
+    build:
+      context: .
+      target: daemon
+    restart: unless-stopped
+    init: true
+    environment:
+      OPENBUCKET_STORAGE_ROOT: /data
+      OPENBUCKET_HOME: /state
+      OPENBUCKET_HOST: 0.0.0.0
+      OPENBUCKET_MANAGEMENT_PORT: ${OPENBUCKET_MANAGEMENT_PORT:-7272}
+      OPENBUCKET_S3_PORT: ${OPENBUCKET_S3_PORT:-8333}
+      OPENBUCKET_NODE_NAME: ${OPENBUCKET_NODE_NAME:-openbucket-docker}
+      OPENBUCKET_DASHBOARD_URL: http://localhost:${OPENBUCKET_DASHBOARD_PORT:-3000}
+      OPENBUCKET_SERVE_DASHBOARD: "false"
+      OPENBUCKET_OPEN_DASHBOARD: "false"
+      OPENBUCKET_SHOW_INITIAL_CREDENTIALS: "false"
+      OPENBUCKET_ALLOWED_ORIGINS: "${OPENBUCKET_ALLOWED_ORIGINS:-http://localhost:${OPENBUCKET_DASHBOARD_PORT:-3000},http://127.0.0.1:${OPENBUCKET_DASHBOARD_PORT:-3000}}"
+      OPENBUCKET_ADMIN_TOKEN: ${OPENBUCKET_ADMIN_TOKEN:?Copy .env.example to .env and replace OPENBUCKET_ADMIN_TOKEN}
+      OPENBUCKET_PUBLIC_BASE_URL: ${OPENBUCKET_PUBLIC_BASE_URL:-}
+    ports:
+      - "${OPENBUCKET_DOCKER_BIND_HOST:-127.0.0.1}:${OPENBUCKET_MANAGEMENT_PORT:-7272}:${OPENBUCKET_MANAGEMENT_PORT:-7272}"
+      - "${OPENBUCKET_DOCKER_BIND_HOST:-127.0.0.1}:${OPENBUCKET_S3_PORT:-8333}:${OPENBUCKET_S3_PORT:-8333}"
+    volumes:
+      - "${OPENBUCKET_STORAGE_MOUNT:-openbucket-data}:/data"
+      - openbucket-state:/state
+    security_opt:
+      - no-new-privileges:true
+
+  dashboard:
+    build:
+      context: .
+      target: dashboard
+      args:
+        NEXT_PUBLIC_OPENBUCKET_API_URL: ${NEXT_PUBLIC_OPENBUCKET_API_URL:-http://127.0.0.1:${OPENBUCKET_MANAGEMENT_PORT:-7272}}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:${OPENBUCKET_DASHBOARD_PORT:-3000}}
+        NEXT_PUBLIC_DOCS_URL: ${NEXT_PUBLIC_DOCS_URL:-https://openbucket.dev/docs}
+    restart: unless-stopped
+    init: true
+    depends_on:
+      daemon:
+        condition: service_healthy
+    environment:
+      PORT: 3000
+      NEXT_PUBLIC_OPENBUCKET_API_URL: ${NEXT_PUBLIC_OPENBUCKET_API_URL:-http://127.0.0.1:${OPENBUCKET_MANAGEMENT_PORT:-7272}}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:${OPENBUCKET_DASHBOARD_PORT:-3000}}
+      NEXT_PUBLIC_DOCS_URL: ${NEXT_PUBLIC_DOCS_URL:-https://openbucket.dev/docs}
+    ports:
+      - "${OPENBUCKET_DOCKER_BIND_HOST:-127.0.0.1}:${OPENBUCKET_DASHBOARD_PORT:-3000}:3000"
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  openbucket-data:
+  openbucket-state:
