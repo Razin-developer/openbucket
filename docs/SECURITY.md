@@ -6,7 +6,7 @@ The current v0.1 code is suitable for local development and carefully controlled
 
 ## Report a vulnerability
 
-Do not publish exploit details or real credentials in a public issue. Use the repository host's private security-advisory channel or contact the maintainers privately once an official security contact is published. Include:
+Do not publish exploit details or real credentials in a public issue. The repository ships a [GitHub security policy](../.github/SECURITY.md); after private vulnerability reporting is enabled, use **Security -> Report a vulnerability** in the repository. If that control is not yet visible, contact the maintainer privately instead. Include:
 
 - affected version/commit and platform;
 - minimal reproduction;
@@ -14,7 +14,7 @@ Do not publish exploit details or real credentials in a public issue. Use the re
 - whether secrets or user data were accessed;
 - suggested mitigation, if known.
 
-Until an official channel exists, avoid testing against systems you do not own and redact all state files, tokens, access keys, object paths, and logs from reports.
+Avoid testing against systems you do not own and redact all state files, tokens, access keys, object paths, and logs from reports.
 
 ## Security boundaries
 
@@ -40,7 +40,7 @@ It does not defend object bytes against an attacker who can directly write the s
 | User able to read storage root | Filesystem ACLs only | Can read object bytes, S3 secrets, share secret, and request logs |
 | User able to write storage root | Single daemon lock and path checks for API operations | Can replace data/state or interfere with availability outside the daemon |
 | Disk loss/corruption | Atomic state rename and ordinary filesystem behavior | No replication, erasure coding, journal, scrub, or automatic repair |
-| Compromised dependency/build | Lockfile and reproducible `npm ci` | No published SBOM/provenance/signing pipeline yet |
+| Compromised dependency/build | Lockfile, SHA-pinned GitHub Actions, CodeQL/dependency review, and release-time container SBOM/provenance attestations | No independent audit; controls only protect releases produced through the documented workflow |
 
 ## Safe deployment baseline
 
@@ -265,14 +265,14 @@ Before deployment:
 
 ## Known security gaps
 
-- No independent security audit or published secure-development/release attestation.
+- No independent security audit. The release workflow creates container SBOMs and provenance attestations, but the first public release has not yet been produced or independently verified.
 - A long-lived, full-control management bearer is handed to the browser for the session; no short-lived pairing or operator RBAC exists.
 - Plaintext secrets in node/CLI state and one-time foreground/operator output.
 - No built-in origin TLS, authentication rate limiting, IP policy, or management RBAC; Quick Tunnel TLS terminates at the provider edge and is explicitly a development mode.
 - No short-lived S3 credentials or fine-grained IAM/prefix policy.
 - No encrypted object layer, KMS/HSM integration, or key rotation workflow.
 - No immutable audit log, log rotation, quota, or abuse controls.
-- No automatic vulnerability/SBOM/provenance release gate documented as operational today.
+- No direct artifact signatures beyond registry/GitHub OIDC provenance attestations, and no reproducible-build guarantee across independent builders.
 - No per-link revocation.
 - No protection from a malicious actor with storage-root write access.
 

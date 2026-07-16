@@ -1,0 +1,50 @@
+name: Feature request
+description: Propose an improvement to OpenBucket
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What user problem or operational need does this address?
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the desired behavior and CLI, API, or dashboard experience.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or alternative designs have you considered?
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Product area
+      options:
+        - Daemon / storage
+        - S3 compatibility
+        - CLI
+        - Dashboard
+        - JavaScript integration
+        - Python client
+        - Containers / deployment
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission check
+      options:
+        - label: I searched existing issues and discussions for this request.
+          required: true

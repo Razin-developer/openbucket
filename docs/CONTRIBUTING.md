@@ -37,14 +37,12 @@ Requirements:
 - free local ports if running the product defaults.
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/Razin-developer/openbucket.git
 cd openbucket
 npm ci
 npm run build
 npm test
 ```
-
-The repository URL is intentionally not invented here; use the official source location for the release you are contributing to.
 
 ## Repository map
 
@@ -58,6 +56,9 @@ tests/daemon/            disk, API, SigV4, traversal integration tests
 tests/*.test.mjs          rendered-dashboard/server tests
 docs/                    product, architecture, API, security, operations
 examples/                SDK and management examples
+python/                  typed Python management client and integration tests
+vercel/                  static Vercel dashboard entry
+.github/workflows/       CI, security, release, container, and Vercel automation
 scripts/                 install and local development helpers
 Dockerfile               daemon and dashboard build targets
 docker-compose.yml       two-service local deployment
@@ -75,11 +76,13 @@ npm run openbucket -- help   # run source CLI through tsx
 npm run build:web            # vinext production client/server bundle
 npm run build:cli            # compile all src/**/*.ts to dist
 npm run build                # web first, then CLI; required release shape
+npm run build:vercel         # static Vercel dashboard in vercel-dist
 npm run type-check           # web + Node TypeScript checks
 npm run lint                 # ESLint excluding generated output
 npm run test:unit            # compile CLI and run daemon/CLI tests
 npm run test:web             # full build + rendered/embedded server tests
 npm test                     # unit then web verification
+npm run release:check        # complete Node/Vercel release gate
 npm pack                     # build and inspect the publishable package
 ```
 
@@ -127,6 +130,8 @@ Changes to these areas require focused regression tests:
 | Embedded dashboard | missing build/failure behavior, port behavior, HTTP render, shutdown |
 | Dashboard UI | real response normalization, empty/error/loading state, accessible control |
 | Packaging | clean build, package contents/bin execution, container target/health where changed |
+| Python client | real loopback HTTP behavior, typed models/errors, wheel and sdist validation |
+| Vercel target | static production build, no secret injection, security headers and SPA routing |
 
 ### Compatibility changes
 
@@ -189,7 +194,7 @@ Update [SECURITY.md](SECURITY.md) whenever a trust boundary, credential, public 
 ## Documentation style
 
 - Describe current behavior in present tense and future work as a plan.
-- Do not claim that npm packages, domains, tunnels, relays, certificates, signed images, or hosted services exist until they are verifiably released.
+- Do not claim that npm packages, domains, tunnels, relays, certificates, attested images, or hosted services exist until they are verifiably released.
 - Give commands that operate on disposable example paths and environment-provided secrets.
 - Mark destructive commands such as forced bucket deletion.
 - State relevant defaults, precedence, response/error behavior, and limitations.
@@ -232,7 +237,11 @@ npm run build
 npm run type-check
 npm run lint
 npm test
+npm run build:vercel
+npm run verify:release
 npm pack --dry-run
+python -m unittest discover -s python/tests -v
+python -m build python
 ```
 
 It should also be manually smoke-tested for:
@@ -245,4 +254,4 @@ It should also be manually smoke-tested for:
 - upgrade from the previous supported version;
 - secret redaction in artifacts/logs/support output.
 
-Publishing npm packages, images, checksums, signatures, SBOMs, provenance, domains, or installers is a separate authorized release action. Repository readiness does not imply those external releases have happened.
+The tagged [release workflow](RELEASING.md) publishes npm/PyPI packages, images, checksums, SBOMs, provenance, and GitHub release assets through protected environments. Domain allocation and every registry publish remain separate authorized external actions; repository readiness does not imply they have happened.

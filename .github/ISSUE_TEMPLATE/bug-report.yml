@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a reproducible problem with OpenBucket
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve OpenBucket. Do not include credentials, access keys, tokens, private object names, or other sensitive data.
+
+  - type: input
+    id: version
+    attributes:
+      label: OpenBucket version
+      description: Run `openbucket --version` or provide the container tag.
+      placeholder: 0.1.0
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation method
+      options:
+        - npm
+        - Docker / GHCR
+        - Python client
+        - Source checkout
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, architecture, Node/Python version, and browser if relevant.
+      placeholder: Windows 11 x64, Node 24.4.1, Chrome 138
+    validations:
+      required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and what you expected instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest safe sequence of commands or requests that reproduces the issue.
+      placeholder: |
+        1. Start OpenBucket with ...
+        2. Create a bucket with ...
+        3. Observe ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized logs
+      description: Remove all secrets, tokens, signatures, URLs containing credentials, and private data before pasting logs.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Pre-submission checks
+      options:
+        - label: I searched existing issues for this problem.
+          required: true
+        - label: I removed credentials and sensitive data from this report.
+          required: true
+        - label: This is not a security vulnerability; security reports follow SECURITY.md.
+          required: true

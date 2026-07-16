@@ -5,6 +5,7 @@
 .vscode
 node_modules
 dist
+vercel-dist
 .next
 .vinext
 .wrangler
@@ -15,6 +16,18 @@ work
 outputs
 *.tsbuildinfo
 *.log
+**/__pycache__
+*.py[cod]
+.venv
+python/.venv
+python/.pytest_cache
+**/.tox
+**/.coverage
+python/build
+python/dist
+**/*.egg-info
+.release
+openbucket-*.tgz
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
@@ -28,4 +41,8 @@ Dockerfile*
 docker-compose*.yml
 docs
 examples
+python
 tests
+vercel
+vercel.json
+vite.vercel.config.ts

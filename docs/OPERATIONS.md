@@ -96,6 +96,10 @@ npm start -- --hostname 0.0.0.0 --port 3000
 
 Set `OPENBUCKET_DASHBOARD_URL` to the origin users actually open so the daemon configures the correct CORS trust. Add only exact extra origins with `OPENBUCKET_ALLOWED_ORIGINS`.
 
+### Vercel-hosted dashboard
+
+The static Vercel target is an independent browser client; it never moves object data or daemon state into Vercel. Configure the exact `*.vercel.app` origin in `OPENBUCKET_DASHBOARD_URL`/`OPENBUCKET_ALLOWED_ORIGINS`, expose the management API through an authenticated HTTPS access layer, and enter the bearer token in the connection dialog. Never compile that token into a dashboard environment variable. See [Hosting the dashboard on Vercel](VERCEL.md).
+
 ## Docker Compose
 
 Prepare configuration:

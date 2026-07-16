@@ -40,7 +40,27 @@ yarn-error.log*
 # typescript
 next-env.d.ts
 /dist/
+/vercel-dist/
 /.wrangler/
 /outputs/
 /work/
 *.tsbuildinfo
+
+# Python build/test environments
+**/__pycache__/
+*.py[cod]
+/.venv/
+/python/.venv/
+/python/.pytest_cache/
+/python/.mypy_cache/
+/python/.ruff_cache/
+**/.tox/
+**/.coverage
+/python/build/
+/python/dist/
+**/*.egg-info/
+coverage.xml
+
+# release artifacts
+/.release/
+/openbucket-*.tgz

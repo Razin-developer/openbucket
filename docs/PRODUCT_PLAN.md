@@ -105,9 +105,12 @@ The repository currently implements:
 - path-style SigV4 S3 authentication, presigned query authentication, public object reads, ranges, copy, and basic multipart;
 - read-only and bucket-scoped credentials;
 - Docker daemon/dashboard targets and Compose deployment;
+- a static Vercel dashboard target and environment-driven deployment configuration;
+- a typed, dependency-free Python management client and console command;
+- cross-platform CI, CodeQL, dependency review, trusted-publishing, GHCR, SBOM/provenance, and release workflows;
 - unit/integration/rendered-dashboard tests and user/operations documentation.
 
-The implementation does not include a managed relay, account service, DNS, certificates, npm publication, OS service registration, replication, or desktop app.
+The implementation does not include a managed relay, account service, owned DNS/certificates, completed external registry publication, OS service registration, replication, or desktop app. Publication automation is present, but registry/domain ownership remains an operator action.
 
 ## MVP acceptance criteria
 
@@ -160,7 +163,8 @@ The first distributable MVP is accepted only when all blocking criteria pass.
 ### Release
 
 - [x] Apache-2.0 license, package manifest, README, API/security/operations docs, and examples exist.
-- [ ] CI publishes checksums, an SBOM, provenance, changelog, npm package, and signed container images.
+- [x] A protected tag workflow builds checksums, SBOMs, signed provenance attestations, changelog-linked release assets, npm/PyPI packages, and container images.
+- [ ] The workflow completes its first authorized npm, PyPI, GHCR, and GitHub release against owner-controlled registry projects.
 - [ ] Ownership of package names and `openbucket.dev` DNS is verified before documentation advertises live availability.
 
 ## Architecture at a glance
@@ -198,7 +202,7 @@ Work:
 
 - CI matrix for supported Node/OS versions;
 - npm ownership and release pipeline;
-- multi-architecture signed container images;
+- multi-architecture container images with SBOMs and signed provenance attestations;
 - service-manager recipes and uninstall paths;
 - state schema migration framework;
 - bounded log rotation and multipart/temp cleanup;

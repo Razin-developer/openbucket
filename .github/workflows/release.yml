@@ -1,0 +1,327 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  npm-build:
+    name: Verify and build npm distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Validate npm version against tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          node --input-type=module -e "import pkg from './package.json' with { type: 'json' }; const stable = /^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$/; const expected = 'v' + pkg.version; if (!stable.test(pkg.version)) { console.error('Release version ' + pkg.version + ' must be stable MAJOR.MINOR.PATCH; prereleases require a separate workflow and dist-tag policy.'); process.exit(1); } if (process.env.RELEASE_TAG !== expected) { console.error('Release tag ' + process.env.RELEASE_TAG + ' must equal ' + expected); process.exit(1); }"
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type-check
+        run: npm run type-check
+
+      - name: Test
+        run: npm test
+
+      - name: Build Vercel artifacts
+        run: npm run build:vercel
+
+      - name: Verify release metadata and artifacts
+        run: npm run verify:release
+
+      - name: Build npm package
+        shell: bash
+        run: |
+          mkdir -p npm-dist
+          npm pack --pack-destination npm-dist
+
+      - name: Upload npm distribution
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: npm-distribution
+          path: npm-dist/*.tgz
+          if-no-files-found: error
+          retention-days: 7
+
+  python-build:
+    name: Verify and build Python distribution
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: python/pyproject.toml
+
+      - name: Validate Python version against tag
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import pathlib
+          import tomllib
+
+          metadata = tomllib.loads(pathlib.Path("python/pyproject.toml").read_text(encoding="utf-8"))
+          expected = "v" + metadata["project"]["version"]
+          actual = os.environ["RELEASE_TAG"]
+          parts = metadata["project"]["version"].split(".")
+          if len(parts) != 3 or any(not part.isdigit() or (len(part) > 1 and part.startswith("0")) for part in parts):
+              raise SystemExit("Python release version must be stable MAJOR.MINOR.PATCH; prereleases require a separate workflow and index policy")
+          if actual != expected:
+              raise SystemExit(f"Release tag {actual} must equal {expected}")
+          PY
+
+      - name: Install packaging tools
+        run: python -m pip install --disable-pip-version-check --editable "./python[dev]" twine
+
+      - name: Lint and type-check Python client
+        run: |
+          python -m ruff format --check --config python/pyproject.toml python
+          python -m ruff check --config python/pyproject.toml python
+          python -m mypy --config-file python/pyproject.toml python/src/openbucket
+
+      - name: Test Python client
+        run: python -m unittest discover -s python/tests -p "test_*.py" -v
+
+      - name: Build and validate Python distributions
+        run: |
+          python -m build --outdir python-dist python
+          python -m twine check python-dist/*
+
+      - name: Upload Python distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: python-distribution
+          path: python-dist/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish-npm:
+    name: Publish to npm
+    needs: [npm-build, python-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: npm
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Set up Node.js for trusted publishing
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Download npm distribution
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: npm-distribution
+          path: npm-dist
+
+      - name: Install OIDC-capable npm CLI
+        run: npm install --global npm@12.0.1
+
+      - name: Publish with npm trusted publishing
+        run: npm publish npm-dist/*.tgz --access public
+
+  publish-pypi:
+    name: Publish to PyPI
+    needs: [npm-build, python-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: pypi
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Download Python distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: python-distribution
+          path: python-dist
+
+      - name: Publish with PyPI trusted publishing
+        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+        with:
+          packages-dir: python-dist/
+
+  container:
+    name: Publish multi-platform containers
+    needs: [npm-build, python-build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          persist-credentials: false
+
+      - name: Normalize GHCR image names
+        id: images
+        shell: bash
+        run: |
+          owner="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "daemon=ghcr.io/${owner}/openbucket" >> "${GITHUB_OUTPUT}"
+          echo "dashboard=ghcr.io/${owner}/openbucket-dashboard" >> "${GITHUB_OUTPUT}"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Generate daemon image metadata
+        id: daemon-meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ steps.images.outputs.daemon }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+          labels: |
+            org.opencontainers.image.title=OpenBucket daemon
+            org.opencontainers.image.description=Local-disk S3-compatible object storage
+
+      - name: Build and push daemon image
+        id: daemon-build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          target: daemon
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.daemon-meta.outputs.tags }}
+          labels: ${{ steps.daemon-meta.outputs.labels }}
+          annotations: ${{ steps.daemon-meta.outputs.annotations }}
+          cache-from: type=gha,scope=daemon
+          cache-to: type=gha,mode=max,scope=daemon
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest daemon image provenance
+        uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
+        with:
+          subject-name: ${{ steps.images.outputs.daemon }}
+          subject-digest: ${{ steps.daemon-build.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+
+      - name: Generate dashboard image metadata
+        id: dashboard-meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
+        with:
+          images: ${{ steps.images.outputs.dashboard }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+          labels: |
+            org.opencontainers.image.title=OpenBucket dashboard
+            org.opencontainers.image.description=Web dashboard for OpenBucket object storage
+
+      - name: Build and push dashboard image
+        id: dashboard-build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: .
+          target: dashboard
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.dashboard-meta.outputs.tags }}
+          labels: ${{ steps.dashboard-meta.outputs.labels }}
+          annotations: ${{ steps.dashboard-meta.outputs.annotations }}
+          cache-from: type=gha,scope=dashboard
+          cache-to: type=gha,mode=max,scope=dashboard
+          provenance: mode=max
+          sbom: true
+
+      - name: Attest dashboard image provenance
+        uses: actions/attest@f6bf1532d7d6793fce74eac584813a8eee607999 # v4
+        with:
+          subject-name: ${{ steps.images.outputs.dashboard }}
+          subject-digest: ${{ steps.dashboard-build.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+
+  github-release:
+    name: Create GitHub Release
+    needs: [publish-npm, publish-pypi, container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download npm distribution
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: npm-distribution
+          path: release-assets
+
+      - name: Download Python distributions
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: python-distribution
+          path: release-assets
+
+      - name: Generate release checksums
+        shell: bash
+        run: (cd release-assets && sha256sum -- * > SHA256SUMS)
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "${GITHUB_REF_NAME}" release-assets/* --verify-tag --generate-notes --title "OpenBucket ${GITHUB_REF_NAME}"

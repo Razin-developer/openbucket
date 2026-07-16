@@ -1,0 +1,73 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openbucket-client"
+version = "0.1.0"
+description = "Typed, dependency-free Python client for the OpenBucket management API"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "Apache-2.0"
+license-files = ["LICENSE"]
+authors = [{ name = "OpenBucket contributors" }]
+keywords = ["openbucket", "object-storage", "s3", "storage", "api-client"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: System Administrators",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Typing :: Typed",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+  "build>=1.2,<2",
+  "mypy>=1.10,<2",
+  "ruff>=0.9,<1",
+  "tox>=4.20,<5",
+  "twine>=6,<7",
+]
+
+[project.scripts]
+openbucket-client = "openbucket.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/Razin-developer/openbucket"
+Source = "https://github.com/Razin-developer/openbucket"
+Documentation = "https://github.com/Razin-developer/openbucket/tree/main/docs"
+Issues = "https://github.com/Razin-developer/openbucket/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openbucket"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src/openbucket",
+  "/tests",
+  "/README.md",
+  "/LICENSE",
+  "/pyproject.toml",
+  "/tox.ini",
+]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+files = ["src/openbucket"]

@@ -6,6 +6,8 @@ OpenBucket writes real object bytes to the directory you choose. There is no fak
 
 > OpenBucket is currently a single-node, self-hosted v0.1 product. It is useful for development, homelabs, local backup targets, and trusted private networks. Read [Security](#security) and [Current limitations](#current-limitations) before exposing it outside a machine you control.
 
+The source is release-ready for npm, PyPI, GitHub Container Registry, GitHub Releases, and Vercel. Registry publication and the first `*.vercel.app` allocation require the owner's npm, PyPI, GitHub, and Vercel accounts; see [Releasing](docs/RELEASING.md).
+
 ## What is included
 
 - A foreground or detached daemon with independent management (`7272`) and S3 (`8333`) listeners.
@@ -16,6 +18,8 @@ OpenBucket writes real object bytes to the directory you choose. There is no fak
 - A responsive dashboard for status, buckets, uploads/downloads, keys, connections, logs, and analytics.
 - Opt-in supervised Cloudflare Quick Tunnels that make the S3 API, authenticated management API, and local dashboard reachable over temporary HTTPS URLs for development/demo use.
 - A management REST API, request logs, health checks, Docker targets, Compose, examples, tests, and operations documentation.
+- A typed `openbucket-client` Python management SDK and console client.
+- A production Vercel dashboard target plus CI, security scanning, trusted publishing, SBOM/provenance-attested containers, and release workflows.
 
 The desktop application is intentionally deferred. See [the product plan](docs/PRODUCT_PLAN.md).
 
@@ -81,14 +85,14 @@ npm install --global ./openbucket-0.1.0.tgz
 
 ### From npm
 
-Once a release has been published to the npm registry:
+After the first trusted release is published to the npm registry:
 
 ```bash
 npm install --global openbucket
 openbucket serve /path/to/storage
 ```
 
-The repository is npm-package-ready, but this README does not imply that a registry release or the `openbucket.dev` hosted URLs already exist.
+The unscoped package name was available when the release configuration was prepared. Package names are first-come-first-served, and this README does not imply that a registry release or the `openbucket.dev` hosted URLs already exist. See [all installation methods](docs/INSTALLATION.md) for pinned npm, `npx`, GitHub release, Docker/GHCR, source, and Python options.
 
 ### Installer scripts
 
@@ -192,6 +196,17 @@ aws --endpoint-url http://127.0.0.1:8333 s3 cp ./sample.txt s3://photos/sample.t
 
 Then verify real bytes on disk at `./openbucket-data/photos/sample.txt`.
 
+### Python management SDK
+
+The separately published `openbucket-client` package controls the management API; it does not install the Node daemon:
+
+```bash
+python -m pip install openbucket-client
+openbucket-client --url http://127.0.0.1:7272 --token "$OPENBUCKET_ADMIN_TOKEN" status
+```
+
+Use `boto3` for object data and `openbucket-client` for status, buckets, keys, shares, logs, and analytics. The typed library and CLI are documented in [python/README.md](python/README.md).
+
 ## Management API examples
 
 The CLI generates a random management token when one is not configured and keeps it in its permission-restricted active state file. For automation, set `OPENBUCKET_ADMIN_TOKEN` before starting the daemon and send it as a bearer token:
@@ -232,6 +247,10 @@ NEXT_PUBLIC_APP_URL=https://app.openbucket.dev
 Set `OPENBUCKET_SERVE_DASHBOARD=false` when an independent server owns the dashboard port. Run `openbucket dashboard` whenever the active local page needs to be opened or re-paired. Users can also override the management URL and enter a token in the connection modal. The URL is saved in local storage; the admin token is kept in API-scoped session storage only.
 
 If the dashboard and daemon have different origins, set `OPENBUCKET_DASHBOARD_URL` on the daemon or add exact comma-separated origins with `OPENBUCKET_ALLOWED_ORIGINS`. CORS permits the browser connection; every protected management call still needs the bearer token. See [Dashboard pairing and CORS](docs/SECURITY.md#dashboard-pairing-and-cors).
+
+### Vercel
+
+`npm run build:vercel` validates a static dashboard in `vercel-dist`. Deploy the repository with `npx vercel@latest deploy --prod`; Vercel runs the configured build and assigns the project a `*.vercel.app` production domain. Later domain changes require only environment/DNS updates. Vercel hosts the dashboard, not the disk-backed daemon. Follow [the Vercel deployment guide](docs/VERCEL.md) for environment variables, CORS, GitHub Actions secrets, and the later `openbucket.dev` cutover.
 
 ## Docker Compose
 
@@ -354,7 +373,7 @@ Important facts:
 - Share URLs are bearer secrets and can live for at most seven days.
 - TLS and public routing belong at a reverse proxy/tunnel you operate.
 
-Read [docs/SECURITY.md](docs/SECURITY.md) before any non-local deployment and report vulnerabilities privately rather than opening a public exploit issue.
+Read [docs/SECURITY.md](docs/SECURITY.md) before any non-local deployment. Report vulnerabilities through the repository's [private security-reporting policy](.github/SECURITY.md), never through a public exploit issue.
 
 ## Supported S3 surface
 
@@ -384,9 +403,11 @@ npm run dev:daemon          # foreground daemon on ./.openbucket-data
 npm run openbucket -- help  # source CLI through tsx
 
 npm run build
+npm run build:vercel
 npm run type-check
 npm run lint
 npm test
+npm run release:check
 ```
 
 Cross-platform two-process development helpers are available:
@@ -410,7 +431,7 @@ Tests use temporary directories and ephemeral ports for real management/S3 I/O. 
 - S3 compatibility is deliberately partial; test each client/workload against the matrix.
 - Object content type and custom S3 metadata are not persisted; downloads are `application/octet-stream`.
 - No quotas, lifecycle cleanup, checksummed background scrub, garbage collection UI, or multipart resume/list APIs.
-- The dashboard is deployable independently, but `openbucket.dev` ownership/custom domains, npm publication, signing, release automation, stable named-tunnel provisioning, and a managed relay require operator/release infrastructure outside this source tree.
+- Release automation and deployable dashboard/container artifacts are included, but claiming registry names, allocating a `vercel.app` project, `openbucket.dev` ownership/DNS, stable named-tunnel provisioning, and a managed relay require operator accounts or infrastructure outside this source tree.
 - The desktop application is planned after the daemon/CLI/web foundation, not included in v0.1.
 
 ## Roadmap
@@ -433,6 +454,9 @@ See [docs/PRODUCT_PLAN.md](docs/PRODUCT_PLAN.md) for acceptance criteria, sequen
 - [S3 compatibility](docs/S3_COMPATIBILITY.md)
 - [Security](docs/SECURITY.md)
 - [Operations](docs/OPERATIONS.md)
+- [Installation](docs/INSTALLATION.md)
+- [Vercel deployment](docs/VERCEL.md)
+- [Release process](docs/RELEASING.md)
 - [End-to-end demo](docs/DEMO.md)
 - [Contributing](docs/CONTRIBUTING.md)
 

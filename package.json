@@ -2,40 +2,68 @@
   "name": "openbucket",
   "version": "0.1.0",
   "description": "Turn any local disk or folder into S3-compatible object storage.",
+  "author": "Razin",
   "license": "Apache-2.0",
   "private": false,
+  "homepage": "https://github.com/Razin-developer/openbucket#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Razin-developer/openbucket.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Razin-developer/openbucket/issues"
+  },
+  "keywords": [
+    "s3",
+    "object-storage",
+    "local-storage",
+    "self-hosted",
+    "storage",
+    "backup",
+    "cli"
+  ],
   "bin": {
     "openbucket": "dist/cli/main.js"
   },
   "files": [
-    "dist",
+    "dist/cli",
+    "dist/client",
+    "dist/daemon",
+    "dist/dashboard",
+    "dist/server",
     "docs",
     "examples",
-    "scripts",
     ".env.example",
-    "Dockerfile",
-    "docker-compose.yml",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "engines": {
     "node": ">=22.13.0"
   },
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vinext dev",
+    "dev:vercel": "vite --config vite.vercel.config.ts",
     "dev:daemon": "tsx src/cli/main.ts serve ./.openbucket-data --no-open",
     "openbucket": "tsx src/cli/main.ts",
     "build": "npm run build:web && npm run build:cli",
     "build:cli": "tsc -p tsconfig.node.json",
     "build:web": "vinext build",
+    "build:vercel": "vite build --config vite.vercel.config.ts",
     "prepack": "npm run build",
+    "prepublishOnly": "npm run release:check",
     "start": "vinext start",
     "type-check": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
     "test": "npm run test:unit && npm run test:web && npm run test:docs",
     "test:unit": "npm run build:cli && node --test tests/daemon/*.test.mjs tests/cli/*.test.mjs",
     "test:web": "npm run build && node --test tests/rendered-html.test.mjs tests/dashboard-server.test.mjs",
     "test:docs": "node --test tests/docs-links.test.mjs",
-    "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .vinext --ignore-pattern node_modules"
+    "lint": "eslint . --ignore-pattern dist --ignore-pattern vercel-dist --ignore-pattern .next --ignore-pattern .vinext --ignore-pattern node_modules --ignore-pattern python/.venv --ignore-pattern python/dist --ignore-pattern python/build",
+    "verify:release": "node scripts/verify-release.mjs",
+    "release:check": "npm run lint && npm run type-check && npm test && npm run build:vercel && npm run verify:release"
   },
   "dependencies": {
     "react": "^19.2.7",
