@@ -4,7 +4,7 @@ All notable changes to OpenBucket are documented here. The project follows Seman
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-07-16
+The changes below are prepared for `0.1.0`. They remain unreleased until the owner-authorized tag workflow publishes every registry artifact and creates the GitHub release.
 
 ### Added
 
@@ -13,7 +13,6 @@ All notable changes to OpenBucket are documented here. The project follows Seman
 - Local, Docker, Compose, Cloudflare Quick Tunnel, Sites, and Vercel dashboard deployment targets.
 - Live dashboard without mock storage data.
 - npm, PyPI, GHCR, GitHub release, CI, security scanning, and trusted-publishing automation.
-- Typed Python management client published separately as `openbucket-client`.
+- Typed Python management client packaged separately as `openbucket-client`.
 
-[Unreleased]: https://github.com/Razin-developer/openbucket/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/Razin-developer/openbucket/releases/tag/v0.1.0
+[Unreleased]: https://github.com/Razin-developer/openbucket/commits/main

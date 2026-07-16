@@ -1,125 +1,58 @@
-name: Vercel deployment
+name: Vercel production verification
 
 on:
   push:
     branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-    inputs:
-      environment:
-        description: Deployment environment
-        required: true
-        default: preview
-        type: choice
-        options:
-          - preview
-          - production
 
 permissions:
   contents: read
 
 concurrency:
-  group: vercel-${{ github.event.pull_request.number || github.ref }}
+  group: vercel-production-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  deploy:
-    name: Deploy prebuilt output
+  verify:
+    name: Verify Git-connected production deployment
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     environment:
-      name: ${{ ((github.event_name == 'push' && github.ref == 'refs/heads/main') || (github.event_name == 'workflow_dispatch' && inputs.environment == 'production')) && 'production' || 'preview' }}
-      url: ${{ steps.deployment.outputs.url }}
+      name: production
+      url: ${{ vars.VERCEL_PRODUCTION_URL || 'https://openbucket-eight.vercel.app' }}
+    env:
+      PRODUCTION_URL: ${{ vars.VERCEL_PRODUCTION_URL || 'https://openbucket-eight.vercel.app' }}
 
     steps:
-      - name: Check deployment configuration
-        id: config
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      - name: Wait for the production alias to serve this commit
         shell: bash
         run: |
-          if [[ -n "${VERCEL_TOKEN}" && -n "${VERCEL_ORG_ID}" && -n "${VERCEL_PROJECT_ID}" ]]; then
-            echo "configured=true" >> "${GITHUB_OUTPUT}"
-          else
-            echo "configured=false" >> "${GITHUB_OUTPUT}"
-            echo "Vercel deployment skipped: configure VERCEL_TOKEN, VERCEL_ORG_ID, and VERCEL_PROJECT_ID." >> "${GITHUB_STEP_SUMMARY}"
-          fi
+          set -euo pipefail
+          base_url="${PRODUCTION_URL%/}"
+          echo "Waiting for ${base_url} to serve ${GITHUB_SHA}."
 
-      - name: Select deployment target
-        if: steps.config.outputs.configured == 'true'
-        id: target
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REQUESTED_ENVIRONMENT: ${{ inputs.environment }}
-          REF_NAME: ${{ github.ref }}
-        shell: bash
-        run: |
-          if [[ "${EVENT_NAME}" == "push" && "${REF_NAME}" == "refs/heads/main" ]] || [[ "${EVENT_NAME}" == "workflow_dispatch" && "${REQUESTED_ENVIRONMENT}" == "production" ]]; then
-            echo "environment=production" >> "${GITHUB_OUTPUT}"
-            echo "production_flag=--prod" >> "${GITHUB_OUTPUT}"
-          else
-            echo "environment=preview" >> "${GITHUB_OUTPUT}"
-            echo "production_flag=" >> "${GITHUB_OUTPUT}"
-          fi
+          for attempt in {1..60}; do
+            response=""
+            if response="$(curl \
+              --silent --show-error --fail --location \
+              --connect-timeout 5 --max-time 5 \
+              --header 'Cache-Control: no-cache' \
+              --header 'Pragma: no-cache' \
+              --url "${base_url}/deployment.json?expected=${GITHUB_SHA}&attempt=${attempt}")"; then
+              deployed_sha="$(jq -r 'if type == "object" and (.commitSha | type == "string") then .commitSha else "" end' <<<"${response}" 2>/dev/null || true)"
+              if [[ "${deployed_sha}" == "${GITHUB_SHA}" ]]; then
+                echo "Production is serving ${deployed_sha}."
+                {
+                  echo "### Vercel production verified"
+                  echo "${base_url} is serving commit ${deployed_sha}."
+                } >> "${GITHUB_STEP_SUMMARY}"
+                exit 0
+              fi
+              echo "Attempt ${attempt}/60: production reports ${deployed_sha:-no commit yet}."
+            else
+              echo "Attempt ${attempt}/60: deployment metadata is not available yet."
+            fi
+            sleep 10
+          done
 
-      - name: Check out source
-        if: steps.config.outputs.configured == 'true'
-        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
-        with:
-          persist-credentials: false
-
-      - name: Set up Node.js
-        if: steps.config.outputs.configured == 'true'
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
-        with:
-          node-version: 24
-          cache: npm
-
-      # Pin the CLI so deployments remain reproducible. Dependabot does not
-      # update CLI versions embedded in commands; review this pin periodically.
-      - name: Install dependencies and Vercel CLI
-        if: steps.config.outputs.configured == 'true'
-        run: |
-          npm ci
-          npm install --global vercel@56.2.1
-
-      - name: Pull Vercel project settings
-        if: steps.config.outputs.configured == 'true'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-        run: vercel pull --yes --environment="${{ steps.target.outputs.environment }}" --token="${VERCEL_TOKEN}"
-
-      - name: Build Vercel output
-        if: steps.config.outputs.configured == 'true'
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          PRODUCTION_FLAG: ${{ steps.target.outputs.production_flag }}
-        shell: bash
-        run: |
-          args=()
-          if [[ -n "${PRODUCTION_FLAG}" ]]; then args+=("${PRODUCTION_FLAG}"); fi
-          vercel build "${args[@]}" --token="${VERCEL_TOKEN}"
-
-      - name: Deploy prebuilt output
-        if: steps.config.outputs.configured == 'true'
-        id: deployment
-        env:
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          PRODUCTION_FLAG: ${{ steps.target.outputs.production_flag }}
-        shell: bash
-        run: |
-          args=(--prebuilt)
-          if [[ -n "${PRODUCTION_FLAG}" ]]; then args+=("${PRODUCTION_FLAG}"); fi
-          deployment_url="$(vercel deploy "${args[@]}" --token="${VERCEL_TOKEN}")"
-          echo "url=${deployment_url}" >> "${GITHUB_OUTPUT}"
-          echo "### Vercel ${{ steps.target.outputs.environment }} deployment" >> "${GITHUB_STEP_SUMMARY}"
-          echo "${deployment_url}" >> "${GITHUB_STEP_SUMMARY}"
+          echo "::error::${base_url} did not serve ${GITHUB_SHA} before the verification deadline."
+          exit 1

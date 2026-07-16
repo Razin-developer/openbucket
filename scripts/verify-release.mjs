@@ -65,6 +65,7 @@ const requiredPackageFiles = [
   "dist/server",
   "docs",
   "examples",
+  ".env.example",
   "README.md",
   "LICENSE",
 ];
@@ -77,6 +78,7 @@ if (vercelConfig.outputDirectory !== "vercel-dist") failures.push("Vercel output
 if (vercelConfig.buildCommand !== "npm run build:vercel") failures.push("Vercel buildCommand must use build:vercel.");
 
 await Promise.all([
+  requireFile(".env.example"),
   requireFile("LICENSE"),
   requireFile("README.md"),
   requireFile("dist/cli/main.js"),

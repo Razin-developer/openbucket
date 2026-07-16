@@ -62,7 +62,7 @@ function xmlTag(xml, tag) {
 
 test("S3 API supports signed CRUD, copy, ranges, multipart, public reads, and key policy", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "openbucket-s3-"));
-  const daemon = await startDaemon({ storageRoot: root, managementPort: 0, s3Port: 0, adminToken: "s3-management-token" });
+  const daemon = await startDaemon({ storageRoot: root, managementPort: 0, s3Port: 0, adminToken: "s3-management-token-0123456789abcdef" });
   t.after(async () => {
     await daemon.stop();
     await rm(root, { recursive: true, force: true });
@@ -131,6 +131,20 @@ test("S3 API supports signed CRUD, copy, ranges, multipart, public reads, and ke
   assert.equal(complete.status, 200, await complete.clone().text());
   assert.equal(await (await signedFetch(`${s3}/sdk-bucket/combined.bin`, "GET", credential)).text(), "first-second");
 
+  const awsCliObjectUrl = s3 + "/sdk-bucket/aws-cli-order.bin";
+  const awsCliInitiate = await signedFetch(awsCliObjectUrl + "?uploads", "POST", credential);
+  assert.equal(awsCliInitiate.status, 200, await awsCliInitiate.clone().text());
+  const awsCliUploadId = xmlTag(await awsCliInitiate.text(), "UploadId");
+  const awsCliUploadQuery = "uploadId=" + encodeURIComponent(awsCliUploadId);
+  const awsCliPart1 = await signedFetch(awsCliObjectUrl + "?partNumber=1&" + awsCliUploadQuery, "PUT", credential, "aws-");
+  const awsCliPart2 = await signedFetch(awsCliObjectUrl + "?partNumber=2&" + awsCliUploadQuery, "PUT", credential, "cli");
+  assert.equal(awsCliPart1.status, 200, await awsCliPart1.clone().text());
+  assert.equal(awsCliPart2.status, 200, await awsCliPart2.clone().text());
+  const awsCliCompletionBody = "<CompleteMultipartUpload xmlns=\"http://s3.amazonaws.com/doc/2006-03-01/\"><Part><ETag>" + awsCliPart1.headers.get("etag") + "</ETag><PartNumber>1</PartNumber></Part><Part><ETag>" + awsCliPart2.headers.get("etag") + "</ETag><PartNumber>2</PartNumber></Part></CompleteMultipartUpload>";
+  const awsCliComplete = await signedFetch(awsCliObjectUrl + "?" + awsCliUploadQuery, "POST", credential, awsCliCompletionBody);
+  assert.equal(awsCliComplete.status, 200, await awsCliComplete.clone().text());
+  assert.equal(await (await signedFetch(awsCliObjectUrl, "GET", credential)).text(), "aws-cli");
+
   const abortInitiate = await signedFetch(`${s3}/sdk-bucket/aborted.bin?uploads`, "POST", credential);
   const abortedUploadId = xmlTag(await abortInitiate.text(), "UploadId");
   const abort = await signedFetch(`${s3}/sdk-bucket/aborted.bin?uploadId=${encodeURIComponent(abortedUploadId)}`, "DELETE", credential);
@@ -141,7 +155,7 @@ test("S3 API supports signed CRUD, copy, ranges, multipart, public reads, and ke
 
   const publicUpdate = await fetch(`${management}/v1/buckets/sdk-bucket`, {
     method: "PATCH",
-    headers: { authorization: "Bearer s3-management-token", "content-type": "application/json" },
+    headers: { authorization: "Bearer s3-management-token-0123456789abcdef", "content-type": "application/json" },
     body: JSON.stringify({ public: true }),
   });
   assert.equal(publicUpdate.status, 200);
@@ -150,12 +164,12 @@ test("S3 API supports signed CRUD, copy, ranges, multipart, public reads, and ke
 
   assert.equal((await fetch(`${management}/v1/buckets`, {
     method: "POST",
-    headers: { authorization: "Bearer s3-management-token", "content-type": "application/json" },
+    headers: { authorization: "Bearer s3-management-token-0123456789abcdef", "content-type": "application/json" },
     body: JSON.stringify({ name: "other-bucket" }),
   })).status, 201);
   const keyResponse = await fetch(`${management}/v1/keys`, {
     method: "POST",
-    headers: { authorization: "Bearer s3-management-token", "content-type": "application/json" },
+    headers: { authorization: "Bearer s3-management-token-0123456789abcdef", "content-type": "application/json" },
     body: JSON.stringify({ name: "read only", readOnly: true, bucket: "sdk-bucket" }),
   });
   const scopedCredential = (await keyResponse.json()).key;
@@ -164,7 +178,7 @@ test("S3 API supports signed CRUD, copy, ranges, multipart, public reads, and ke
   assert.match(await deniedWrite.text(), /<Code>AccessDenied<\/Code>/);
   assert.equal((await signedFetch(`${s3}/other-bucket/anything`, "GET", scopedCredential)).status, 403);
 
-  for (const key of ["greeting.txt", "copied.txt", "combined.bin"]) {
+  for (const key of ["greeting.txt", "copied.txt", "combined.bin", "aws-cli-order.bin"]) {
     assert.equal((await signedFetch(`${s3}/sdk-bucket/${key}`, "DELETE", credential)).status, 204);
   }
   assert.equal((await signedFetch(`${s3}/sdk-bucket`, "DELETE", credential)).status, 204);

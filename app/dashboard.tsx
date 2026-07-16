@@ -294,7 +294,7 @@ export function Dashboard() {
 
   const capacityPercent = status?.capacityBytes ? Math.min(100, (status.filesystemUsedBytes / status.capacityBytes) * 100) : 0;
   const endpoint = clientConfig.publicBaseUrl ?? status?.endpoints.public ?? clientConfig.s3Url ?? status?.endpoints.s3 ?? "http://127.0.0.1:8333";
-  const docsUrl = process.env.NEXT_PUBLIC_DOCS_URL ?? "https://openbucket.dev/docs";
+  const docsUrl = process.env.NEXT_PUBLIC_DOCS_URL ?? "https://github.com/Razin-developer/openbucket/tree/main/docs";
   const accessKey = keys[0]?.accessKeyId ?? "YOUR_ACCESS_KEY";
   const navItems: Array<{ id: View; label: string; glyph: string }> = [
     { id: "overview", label: "Overview", glyph: "⌂" }, { id: "buckets", label: "Buckets", glyph: "□" }, { id: "keys", label: "API keys", glyph: "⌁" }, { id: "connections", label: "Connections", glyph: "↔" }, { id: "logs", label: "Logs & analytics", glyph: "≡" },

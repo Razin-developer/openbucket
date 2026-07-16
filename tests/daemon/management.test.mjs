@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -22,7 +22,7 @@ test("management API persists real buckets, objects, keys, shares, logs, and sta
     nodeName: "integration-node",
     managementPort: 0,
     s3Port: 0,
-    adminToken: "test-management-token",
+    adminToken: "test-management-token-0123456789abcdef",
     allowedOrigins: ["https://dashboard.example"],
   });
   assert.ok(daemon.initialCredentials?.secretAccessKey);
@@ -31,7 +31,7 @@ test("management API persists real buckets, objects, keys, shares, logs, and sta
     (error) => error?.code === "StorageRootInUse",
   );
   const base = daemon.config.managementUrl;
-  const auth = { authorization: "Bearer test-management-token" };
+  const auth = { authorization: "Bearer test-management-token-0123456789abcdef" };
 
   const health = await fetch(`${base}/healthz`);
   assert.equal(health.status, 200);
@@ -163,6 +163,21 @@ test("management API persists real buckets, objects, keys, shares, logs, and sta
   assert.equal(daemon.config.nodeId, state.nodeId);
 });
 
+test("rejects short admin tokens before opening storage", async (t) => {
+  const parent = await mkdtemp(join(tmpdir(), "openbucket-short-admin-token-"));
+  const root = join(parent, "storage");
+  t.after(async () => {
+    await rm(parent, { recursive: true, force: true });
+  });
+
+  await assert.rejects(
+    startDaemon({ storageRoot: root, managementPort: 0, s3Port: 0, adminToken: `  ${"x".repeat(31)}  ` }),
+    (error) => error?.code === "InvalidConfiguration"
+      && error.message === "adminToken must contain at least 32 UTF-8 bytes.",
+  );
+  await assert.rejects(access(root), { code: "ENOENT" });
+});
+
 test("wildcard bind hosts advertise connectable loopback endpoints", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "openbucket-wildcard-host-"));
   const daemon = await startDaemon({
@@ -171,7 +186,7 @@ test("wildcard bind hosts advertise connectable loopback endpoints", async (t) =
     s3Host: "0.0.0.0",
     managementPort: 0,
     s3Port: 0,
-    adminToken: "wildcard-test-token",
+    adminToken: "wildcard-test-token-0123456789abcdef",
   });
   t.after(async () => {
     await daemon.stop();
@@ -180,7 +195,7 @@ test("wildcard bind hosts advertise connectable loopback endpoints", async (t) =
   assert.match(daemon.config.managementUrl, /^http:\/\/127\.0\.0\.1:/);
   assert.match(daemon.config.s3Url, /^http:\/\/127\.0\.0\.1:/);
   const status = await fetch(`${daemon.config.managementUrl}/v1/status`, {
-    headers: { authorization: "Bearer wildcard-test-token" },
+    headers: { authorization: "Bearer wildcard-test-token-0123456789abcdef" },
   });
   const payload = await json(status);
   assert.match(payload.endpoints.management, /^http:\/\/127\.0\.0\.1:/);

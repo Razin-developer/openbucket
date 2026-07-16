@@ -37,6 +37,28 @@ const CONTENT_TYPES: Record<string, string> = {
   ".webp": "image/webp",
   ".woff2": "font/woff2",
 };
+const DASHBOARD_SECURITY_HEADERS: Readonly<Record<string, string>> = {
+  "Content-Security-Policy": [
+    "default-src 'self'",
+    "base-uri 'self'",
+    "connect-src 'self' http: https:",
+    "font-src 'self' data:",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+    "frame-src 'none'",
+    "img-src 'self' data: blob:",
+    "object-src 'none'",
+    "script-src 'self' 'unsafe-inline'",
+    "style-src 'self' 'unsafe-inline'",
+    "worker-src 'none'",
+  ].join("; "),
+  "Cross-Origin-Opener-Policy": "same-origin",
+  "Cross-Origin-Resource-Policy": "same-origin",
+  "Permissions-Policy": "camera=(), geolocation=(), microphone=(), payment=(), usb=()",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+};
 
 function isWithin(root: string, candidate: string): boolean {
   const path = relative(root, candidate);
@@ -110,8 +132,14 @@ async function writeResponse(response: Response, res: ServerResponse): Promise<v
   res.statusCode = response.status;
   res.statusMessage = response.statusText;
   response.headers.forEach((value, name) => res.setHeader(name, value));
+  setDashboardSecurityHeaders(res);
   if (!response.body) { res.end(); return; }
   await pipeline(Readable.fromWeb(response.body as never), res);
+}
+function setDashboardSecurityHeaders(res: ServerResponse): void {
+  for (const [name, value] of Object.entries(DASHBOARD_SECURITY_HEADERS)) {
+    if (!res.hasHeader(name)) res.setHeader(name, value);
+  }
 }
 
 function closeServer(server: Server): Promise<void> {
@@ -178,6 +206,7 @@ export async function startDashboardServer(options: DashboardServerOptions = {})
           if (res.headersSent) { res.destroy(error instanceof Error ? error : undefined); return; }
           res.statusCode = 500;
           res.setHeader("content-type", "text/plain; charset=utf-8");
+          setDashboardSecurityHeaders(res);
           res.end("OpenBucket dashboard failed to render.");
         }
       })();

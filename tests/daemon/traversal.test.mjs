@@ -31,7 +31,7 @@ test("bucket and object validation rejects traversal and reserved metadata paths
 test("disk and HTTP operations cannot escape the selected root, including through symlinks", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "openbucket-traversal-"));
   const outside = await mkdtemp(join(tmpdir(), "openbucket-outside-"));
-  const daemon = await startDaemon({ storageRoot: root, managementPort: 0, s3Port: 0, adminToken: "traversal-management-token" });
+  const daemon = await startDaemon({ storageRoot: root, managementPort: 0, s3Port: 0, adminToken: "traversal-management-token-0123456789abcdef" });
   t.after(async () => {
     await daemon.stop();
     await Promise.all([rm(root, { recursive: true, force: true }), rm(outside, { recursive: true, force: true })]);
@@ -40,7 +40,7 @@ test("disk and HTTP operations cannot escape the selected root, including throug
   const base = daemon.config.managementUrl;
   assert.equal((await fetch(`${base}/v1/buckets`, {
     method: "POST",
-    headers: { authorization: "Bearer traversal-management-token", "content-type": "application/json" },
+    headers: { authorization: "Bearer traversal-management-token-0123456789abcdef", "content-type": "application/json" },
     body: JSON.stringify({ name: "safe-bucket" }),
   })).status, 201);
 
@@ -51,7 +51,7 @@ test("disk and HTTP operations cannot escape the selected root, including throug
     ".openbucket/state.json",
   ];
   for (const attack of attacks) {
-    const response = await fetch(`${base}/v1/buckets/safe-bucket/objects/${attack}`, { method: "PUT", headers: { authorization: "Bearer traversal-management-token" }, body: "attack" });
+    const response = await fetch(`${base}/v1/buckets/safe-bucket/objects/${attack}`, { method: "PUT", headers: { authorization: "Bearer traversal-management-token-0123456789abcdef" }, body: "attack" });
     assert.ok(response.status >= 400, `${attack} returned ${response.status}`);
   }
   const rawTraversalStatus = await new Promise((resolve, reject) => {
@@ -61,7 +61,7 @@ test("disk and HTTP operations cannot escape the selected root, including throug
       port: target.port,
       method: "PUT",
       path: "/v1/buckets/safe-bucket/objects/nested/%2e%2e/escaped.txt",
-      headers: { authorization: "Bearer traversal-management-token" },
+      headers: { authorization: "Bearer traversal-management-token-0123456789abcdef" },
     }, (response) => {
       response.resume();
       response.on("end", () => resolve(response.statusCode ?? 0));
@@ -75,7 +75,7 @@ test("disk and HTTP operations cannot escape the selected root, including throug
 
   try {
     await symlink(outside, join(root, "safe-bucket", "link"), "dir");
-    const response = await fetch(`${base}/v1/buckets/safe-bucket/objects/link/escaped.txt`, { method: "PUT", headers: { authorization: "Bearer traversal-management-token" }, body: "attack" });
+    const response = await fetch(`${base}/v1/buckets/safe-bucket/objects/link/escaped.txt`, { method: "PUT", headers: { authorization: "Bearer traversal-management-token-0123456789abcdef" }, body: "attack" });
     assert.equal(response.status, 403);
     assert.equal(await exists(join(outside, "escaped.txt")), false);
   } catch (error) {

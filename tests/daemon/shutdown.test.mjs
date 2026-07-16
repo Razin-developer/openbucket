@@ -14,7 +14,7 @@ test("shutdown aborts a stalled request within the grace deadline and releases t
     storageRoot: root,
     managementPort: 0,
     s3Port: 0,
-    adminToken: "shutdown-test-token",
+    adminToken: "shutdown-test-token-0123456789abcdef",
   });
   let stopped = false;
   t.after(async () => {
@@ -22,7 +22,7 @@ test("shutdown aborts a stalled request within the grace deadline and releases t
     await rm(root, { recursive: true, force: true });
   });
 
-  const auth = { authorization: "Bearer shutdown-test-token", "content-type": "application/json" };
+  const auth = { authorization: "Bearer shutdown-test-token-0123456789abcdef", "content-type": "application/json" };
   const create = await fetch(`${daemon.config.managementUrl}/v1/buckets`, {
     method: "POST",
     headers: auth,
@@ -33,7 +33,7 @@ test("shutdown aborts a stalled request within the grace deadline and releases t
   const stalled = request(`${daemon.config.managementUrl}/v1/buckets/stalled-upload/objects/large.bin`, {
     method: "PUT",
     headers: {
-      authorization: "Bearer shutdown-test-token",
+      authorization: "Bearer shutdown-test-token-0123456789abcdef",
       "content-length": "1000000",
     },
   });

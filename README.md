@@ -250,7 +250,7 @@ If the dashboard and daemon have different origins, set `OPENBUCKET_DASHBOARD_UR
 
 ### Vercel
 
-`npm run build:vercel` validates a static dashboard in `vercel-dist`. Deploy the repository with `npx vercel@latest deploy --prod`; Vercel runs the configured build and assigns the project a `*.vercel.app` production domain. Later domain changes require only environment/DNS updates. Vercel hosts the dashboard, not the disk-backed daemon. Follow [the Vercel deployment guide](docs/VERCEL.md) for environment variables, CORS, GitHub Actions secrets, and the later `openbucket.dev` cutover.
+`npm run build:vercel` validates a static dashboard in `vercel-dist`. The Git-connected Vercel project deploys pull-request previews and promotes `main` to `https://openbucket-eight.vercel.app`; GitHub Actions verifies the exact production commit without storing Vercel credentials. Later domain changes require only environment/DNS updates. Vercel hosts the dashboard, not the disk-backed daemon. Follow [the Vercel deployment guide](docs/VERCEL.md) for environment variables, CORS, production verification, and the later `openbucket.dev` cutover.
 
 ## Docker Compose
 
@@ -340,7 +340,7 @@ Flags take precedence over environment variables. Specific variables take preced
 | `OPENBUCKET_VERSION` | package version | CLI version override, intended for packaging/tests. |
 | `NEXT_PUBLIC_OPENBUCKET_API_URL` | `http://127.0.0.1:7272` | Dashboard's initial management URL. |
 | `NEXT_PUBLIC_APP_URL` | `https://app.openbucket.dev` | Dashboard metadata origin fallback; a valid request forwarded-host/host takes precedence. |
-| `NEXT_PUBLIC_DOCS_URL` | `https://openbucket.dev/docs` | Dashboard documentation link. |
+| `NEXT_PUBLIC_DOCS_URL` | `https://github.com/Razin-developer/openbucket/tree/main/docs` | Dashboard documentation link. |
 
 Legacy aliases remain available for compatibility but may be removed after a deprecation cycle. The annotated [`.env.example`](.env.example) includes application, client-example, and Compose-only values.
 

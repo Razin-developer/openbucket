@@ -51,6 +51,30 @@ AWS_DEFAULT_REGION=auto aws \
 
 Examples in this repository read credentials from the environment and upload real local files.
 
+## Cloudflare R2 distinction
+
+OpenBucket is a self-hosted S3-compatible endpoint, not a Cloudflare R2 storage backend or mirroring service. Clients use the same custom-endpoint and path-style configuration pattern, but this does not imply full behavioral parity with R2 or AWS S3. See [Cloudflare's R2 S3 API documentation](https://developers.cloudflare.com/r2/api/s3/) for R2's supported behavior.
+
+The local conformance job tests clients against an OpenBucket daemon. It does not test a live R2 account; that requires operator-supplied Cloudflare credentials.
+
+## AWS CLI conformance verification
+
+CI pins **awscli 1.45.49** (Botocore 1.43.49) and runs **scripts/test-aws-cli-sync.mjs** against a real ephemeral OpenBucket daemon on Ubuntu. The acceptance covers:
+
+- path-style SigV4 authentication and **aws s3 mb**;
+- local-to-S3 and S3-to-local **aws s3 sync**;
+- **sync --delete** removal behavior;
+- a greater-than-8-MiB object that must use multipart upload and complete successfully;
+- byte-for-byte SHA-256 comparison after each download; and
+- recursive **aws s3 rm** followed by **aws s3 rb**.
+
+The test uses temporary local storage and OpenBucket-issued credentials; it does not require an AWS account or contact an AWS bucket. The pinned version is a reproducible compatibility claim, not a claim that every past or future AWS CLI release is supported. Update the pin only after the same acceptance passes.
+
+To run the check locally after installing that AWS CLI version:
+
+    npm run build:cli
+    node scripts/test-aws-cli-sync.mjs
+
 ## Authentication
 
 | Capability | Status | Notes |

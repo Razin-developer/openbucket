@@ -12,7 +12,7 @@ https://github.com/Razin-developer/openbucket
 
 The npm trusted publisher checks `package.json.repository.url`; update that field and every workflow publisher setting before using a different owner or repository name.
 
-Protect `main`, require the CI and security checks, require pull-request review, block force pushes, and restrict creation of `v*` tags. Create GitHub environments named `npm`, `pypi`, `preview`, and `production`. Leave `preview` unprotected for pull-request deployments; add required reviewers to registry and production environments where appropriate.
+Protect `main`, require the CI and security checks, require pull-request review, block force pushes, and restrict creation of `v*` tags. Create GitHub environments named `npm`, `pypi`, and `production`. Add required reviewers to registry environments where appropriate; Vercel previews are managed by its direct Git integration rather than a GitHub deployment environment.
 
 ## npm trusted publishing
 
@@ -51,9 +51,11 @@ The Python distribution is `openbucket-client`; its import package is `openbucke
 
 Use TestPyPI for a dry run when changing package metadata. A TestPyPI publisher is separate from the production PyPI publisher.
 
-## Vercel deployment credentials
+## Vercel Git deployment
 
-Follow [Hosting the dashboard on Vercel](VERCEL.md), then configure the three repository secrets listed there. Vercel build variables belong in the Vercel project settings; registry or daemon credentials never belong in dashboard build variables.
+The Vercel project is connected directly to this GitHub repository. Pull requests receive previews and `main` deploys to production without Vercel credentials in GitHub. Keep `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` out of repository secrets.
+
+The GitHub workflow verifies deployment rather than creating it: `/deployment.json` must report the exact triggering commit before the production check passes. Its default alias is `https://openbucket-eight.vercel.app`; set the non-secret repository variable `VERCEL_PRODUCTION_URL` when that alias changes. Vercel build variables belong in the Vercel project settings, and registry or daemon credentials never belong in dashboard build variables. See [Hosting the dashboard on Vercel](VERCEL.md).
 
 ## Prepare a version
 

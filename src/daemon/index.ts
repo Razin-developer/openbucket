@@ -363,6 +363,11 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   const s3Host = options.s3Host?.trim() || "127.0.0.1";
   const managementPort = validatePort(options.managementPort ?? 7272, "managementPort");
   const s3Port = validatePort(options.s3Port ?? 8333, "s3Port");
+  const configuredAdminToken = options.adminToken?.trim();
+  if (configuredAdminToken !== undefined && Buffer.byteLength(configuredAdminToken, "utf8") < 32) {
+    throw new StoreError("InvalidConfiguration", "adminToken must contain at least 32 UTF-8 bytes.");
+  }
+  const adminToken = configuredAdminToken ?? randomBytes(32).toString("base64url");
   const opened = await DiskStore.open(options.storageRoot, options.nodeName);
   const store = opened.store;
   const startedAt = Date.now();
@@ -383,7 +388,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     filesUrl: `${hostUrl(s3Host, s3Port)}/files`,
     publicBaseUrl: cleanBaseUrl(options.publicBaseUrl),
     allowedOrigins: [...new Set(options.allowedOrigins ?? [])],
-    adminToken: options.adminToken?.trim() || randomBytes(32).toString("base64url"),
+    adminToken,
     dashboardUrl: cleanBaseUrl(options.dashboardUrl),
   };
 
@@ -777,13 +782,14 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
       verifyBufferedS3Payload(req, url, rawBody);
       const body = rawBody.toString("utf8");
       const parts: Array<{ partNumber: number; etag?: string }> = [];
-      for (const match of body.matchAll(/<Part>\s*<PartNumber>(\d+)<\/PartNumber>\s*<ETag>\s*&quot;?\"?([^<&\"]+)\"?\s*<\/ETag>\s*<\/Part>/gi)) {
-        parts.push({ partNumber: Number(match[1]), etag: match[2] });
-      }
-      if (!parts.length) {
-        for (const match of body.matchAll(/<Part>[\s\S]*?<PartNumber>(\d+)<\/PartNumber>[\s\S]*?<ETag>(?:&quot;|\")?([^<&\"]+)(?:&quot;|\")?<\/ETag>[\s\S]*?<\/Part>/gi)) {
-          parts.push({ partNumber: Number(match[1]), etag: match[2]?.trim() });
-        }
+      for (const match of body.matchAll(/<Part\b[^>]*>([\s\S]*?)<\/Part\s*>/gi)) {
+        const partBody = match[1] ?? "";
+        const partNumber = /<PartNumber\b[^>]*>\s*(\d+)\s*<\/PartNumber\s*>/i.exec(partBody)?.[1];
+        const rawEtag = /<ETag\b[^>]*>\s*([\s\S]*?)\s*<\/ETag\s*>/i.exec(partBody)?.[1]?.trim();
+        if (!partNumber || !rawEtag) throw new StoreError("InvalidPart", "Each completed part must include PartNumber and ETag.");
+        const etag = rawEtag.replace(/^(?:&quot;|&#34;|&#x22;|")/i, "").replace(/(?:&quot;|&#34;|&#x22;|")$/i, "").trim();
+        if (!etag) throw new StoreError("InvalidPart", "Each completed part must include a non-empty ETag.");
+        parts.push({ partNumber: Number(partNumber), etag });
       }
       const object = await store.completeMultipart(uploadId, bucket, key, parts);
       sendXml(res, ctx, 200, `<?xml version="1.0" encoding="UTF-8"?><CompleteMultipartUploadResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Location>${xmlEscape(`${config.s3Url}/${bucket}/${encodePath(key)}`)}</Location><Bucket>${xmlEscape(bucket)}</Bucket><Key>${xmlEscape(key)}</Key><ETag>&quot;${object.etag}&quot;</ETag></CompleteMultipartUploadResult>`);

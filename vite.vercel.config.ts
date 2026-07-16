@@ -5,6 +5,7 @@ import { defineConfig, loadEnv } from "vite";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 const vercelRoot = path.join(projectRoot, "vercel");
+const defaultAppUrl = "https://openbucket-eight.vercel.app";
 
 const publicUrlNames = [
   "NEXT_PUBLIC_OPENBUCKET_API_URL",
@@ -31,6 +32,15 @@ function validatedPublicUrl(name: (typeof publicUrlNames)[number], raw: string |
   return parsed.toString().replace(/\/$/, "");
 }
 
+function xmlEscape(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
 export default defineConfig(({ mode }) => {
   // loadEnv reads local .env variants, while process.env supplies values configured
   // in Vercel. Only this explicit public allowlist is emitted into browser code.
@@ -47,7 +57,10 @@ export default defineConfig(({ mode }) => {
     ]),
   ) as Record<(typeof publicUrlNames)[number], string | undefined>;
 
-  const canonicalUrl = publicEnv.NEXT_PUBLIC_APP_URL ?? "https://openbucket.vercel.app";
+  const canonicalUrl = publicEnv.NEXT_PUBLIC_APP_URL ?? defaultAppUrl;
+  const canonicalRoot = `${canonicalUrl.replace(/\/+$/, "")}/`;
+  const sitemapUrl = new URL("sitemap.xml", canonicalRoot).toString();
+  const commitSha = process.env.VERCEL_GIT_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim() || "unknown";
 
   return {
     root: vercelRoot,
@@ -58,7 +71,24 @@ export default defineConfig(({ mode }) => {
       {
         name: "openbucket-vercel-metadata",
         transformIndexHtml(html) {
-          return html.replaceAll("https://openbucket.vercel.app", canonicalUrl);
+          return html.replaceAll(defaultAppUrl, canonicalUrl);
+        },
+        generateBundle() {
+          this.emitFile({
+            type: "asset",
+            fileName: "deployment.json",
+            source: `${JSON.stringify({ schemaVersion: 1, commitSha }, null, 2)}\n`,
+          });
+          this.emitFile({
+            type: "asset",
+            fileName: "robots.txt",
+            source: `User-agent: *\nAllow: /\nSitemap: ${sitemapUrl}\n`,
+          });
+          this.emitFile({
+            type: "asset",
+            fileName: "sitemap.xml",
+            source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${xmlEscape(canonicalRoot)}</loc></url>\n</urlset>\n`,
+          });
         },
       },
     ],
