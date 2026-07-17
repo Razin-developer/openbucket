@@ -7,7 +7,7 @@ export const config = {
 
 export default async function middleware(request: Request): Promise<Response> {
   try {
-    const { authenticateRequest } = await import("./server/auth/service");
+    const { authenticateRequest } = await import("./server/auth/service.js");
     const user = await authenticateRequest(request);
     if (user) {
       return next({

@@ -1,5 +1,5 @@
 import { MongoClient, ObjectId, type Collection, type Db } from "mongodb";
-import { getAuthConfig } from "./config";
+import { getAuthConfig } from "./config.js";
 
 export type UserDocument = {
   _id: ObjectId;

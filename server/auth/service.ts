@@ -1,7 +1,7 @@
 import { ObjectId } from "mongodb";
-import { getAuthConfig } from "./config";
-import { createSessionToken, hashPassword, keyedHash, secretMatches, verifyPassword } from "./crypto";
-import { getAuthCollections, type AuthCollections, type UserDocument } from "./database";
+import { getAuthConfig } from "./config.js";
+import { createSessionToken, hashPassword, keyedHash, secretMatches, verifyPassword } from "./crypto.js";
+import { getAuthCollections, type AuthCollections, type UserDocument } from "./database.js";
 import {
   ApiError,
   assertMethod,
@@ -13,7 +13,7 @@ import {
   readJsonObject,
   requestIp,
   sessionCookie,
-} from "./http";
+} from "./http.js";
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_IP_LIMIT = 20;
