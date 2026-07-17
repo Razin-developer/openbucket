@@ -112,10 +112,18 @@ function error(code: string, message: string, status: number, headers?: HeadersI
   return jsonResponse({ error: { code, message } }, status, headers);
 }
 
+function routedPath(request: Request): string {
+  const url = new URL(request.url);
+  const forwardedPath = url.searchParams.get("__openbucket_path");
+  if (forwardedPath === null) return url.pathname;
+  const normalized = forwardedPath.replace(/^\/+|\/+$/g, "");
+  return normalized ? `/api/${normalized}` : "/api";
+}
+
 export async function dispatchApiRequest(request: Request): Promise<Response> {
   let route: ApiRouteMatch | null;
   try {
-    route = matchApiRoute(new URL(request.url).pathname);
+    route = matchApiRoute(routedPath(request));
   } catch {
     route = null;
   }

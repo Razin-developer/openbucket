@@ -76,6 +76,10 @@ for (const required of requiredPackageFiles) {
 const vercelConfig = await readJson("vercel.json");
 if (vercelConfig.outputDirectory !== "vercel-dist") failures.push("Vercel outputDirectory must be vercel-dist.");
 if (vercelConfig.buildCommand !== "npm run build:vercel") failures.push("Vercel buildCommand must use build:vercel.");
+const apiRouter = vercelConfig.rewrites?.find((rewrite) => rewrite.source === "/api/:path*");
+if (apiRouter?.destination !== "/api/router?__openbucket_path=:path*") {
+  failures.push("Vercel API rewrite must target the consolidated router.");
+}
 const spaFallback = vercelConfig.rewrites?.find((rewrite) => rewrite.destination === "/index.html");
 if (spaFallback?.source !== "/((?!api(?:/|$)).*)") {
   failures.push("Vercel SPA fallback must exclude /api routes.");
