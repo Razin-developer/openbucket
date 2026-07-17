@@ -30,6 +30,18 @@ function requireValue(name: string): string {
   return value;
 }
 
+function readMongoUri(): string {
+  const configured = requireValue("MONGODB_URI");
+  const withoutAssignment = configured.startsWith("MONGODB_URI=")
+    ? configured.slice("MONGODB_URI=".length).trim()
+    : configured;
+  const quote = withoutAssignment[0];
+  if ((quote === "\"" || quote === "'") && withoutAssignment.endsWith(quote)) {
+    return withoutAssignment.slice(1, -1).trim();
+  }
+  return withoutAssignment;
+}
+
 function isProduction(): boolean {
   return process.env.NODE_ENV === "production" || process.env.VERCEL_ENV === "production";
 }
@@ -57,7 +69,7 @@ function usesTls(uri: string): boolean {
 }
 
 export function getAuthConfig(): AuthConfig {
-  const mongodbUri = requireValue("MONGODB_URI");
+  const mongodbUri = readMongoUri();
   if (!mongodbUri.startsWith("mongodb://") && !mongodbUri.startsWith("mongodb+srv://")) {
     configurationError("AUTH_CONFIG_MONGODB_URI_SCHEME", "MONGODB_URI must use the mongodb:// or mongodb+srv:// scheme.");
   }

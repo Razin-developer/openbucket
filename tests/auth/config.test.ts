@@ -69,6 +69,13 @@ describe("hosted authentication configuration", () => {
     });
   });
 
+  test("accepts common environment assignment wrappers around a MongoDB URI", () => {
+    baseline();
+    process.env.MONGODB_URI = 'MONGODB_URI="mongodb+srv://example.test/openbucket"';
+
+    assert.equal(getAuthConfig().mongodbUri, "mongodb+srv://example.test/openbucket");
+  });
+
   test("requires TLS for non-loopback production MongoDB servers", () => {
     baseline();
     mutableEnvironment.NODE_ENV = "production";
