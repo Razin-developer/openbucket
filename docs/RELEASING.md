@@ -16,48 +16,46 @@ Protect `main`, require the CI and security checks, require pull-request review,
 
 ## npm trusted publishing
 
-1. Sign in with `npm login`. npm requires the package to exist before its trusted-publisher settings are available, so reserve the name with a disposable manual `openbucket@0.0.0` bootstrap package, then deprecate that placeholder after the real release. **Do not manually publish `0.1.0`**; registry versions are immutable and that would make the automated `v0.1.0` release fail.
-2. In the package's **Trusted Publisher** settings choose GitHub Actions.
-3. Set organization/user to `Razin-developer`, repository to `openbucket`, workflow filename to `release.yml`, and environment to `npm`.
-4. Allow `npm publish` and keep the workflow's `id-token: write` permission.
-5. After a green `v0.1.0` release, run `npm deprecate openbucket@0.0.0 "Bootstrap placeholder; install 0.1.0 or newer."`.
-6. Do not create an `NPM_TOKEN` for GitHub; the release workflow uses short-lived OIDC credentials and publishes provenance automatically for a public repository/package.
+`openbucket@0.1.0` was published manually on July 16, 2026 from commit `822e01397c2cd53ec98c33a1bb4343c468834a34`. It is immutable and has no trusted-publishing provenance attestation. The npm trusted publisher was configured afterward, so it applies only to future versions.
 
-Trusted publishing requires an OIDC-capable npm CLI and supported Node.js release. The workflow deliberately uses Node.js 24 and npm 12.0.1; keep both current when npm raises its minimum versions.
+For `0.1.1` and later, confirm the package's **Trusted Publisher** settings use:
 
-The unscoped `openbucket` name was available when this release configuration was written, but registry names are first-come-first-served. If it is claimed before the first publish, change the package name and installer documentation together.
+- provider: GitHub Actions;
+- organization/user: `Razin-developer`;
+- repository: `openbucket`;
+- workflow filename: `release.yml`;
+- environment: `npm`;
+- allowed action: `npm publish`.
 
-Create the bootstrap package in a disposable directory outside this checkout:
+Keep the workflow's `id-token: write` permission and do not create an `NPM_TOKEN`. An OIDC-capable npm CLI publishes with short-lived credentials and automatically creates provenance for a public repository/package. The workflow uses Node.js 24 and npm 12.0.1.
 
-```bash
-mkdir openbucket-npm-bootstrap
-cd openbucket-npm-bootstrap
-npm init --yes
-npm pkg set name=openbucket version=0.0.0 license=Apache-2.0 description="OpenBucket package-name bootstrap"
-npm pkg delete scripts
-npm publish --access public
-```
-
-Delete that disposable directory after publishing. Configure the trusted publisher immediately, then create the real release from this repository through the tag workflow.
+Never push `v0.1.0`: the npm publish would fail because that version already exists, and the dependent GitHub release job would not complete. The next unified tag must be `v0.1.1` after every synchronized package version is updated.
 
 ## PyPI trusted publishing
 
-The Python distribution is `openbucket-client`; its import package is `openbucket`.
+The Python distribution is `openbucket-client`; its import package is `openbucket`. The project does not yet exist on PyPI.
 
-1. Create a pending publisher on PyPI, or add a publisher to the existing project.
-2. Set owner to `Razin-developer`, repository to `openbucket`, workflow to `release.yml`, environment to `pypi`, and project name to `openbucket-client`.
-3. Keep the publish job's `id-token: write` permission.
-4. Do not store a PyPI password or long-lived API token in GitHub.
+1. Sign in to PyPI and open **Your account > Publishing**.
+2. Under **Add a new pending publisher**, choose GitHub Actions.
+3. Set PyPI project name to `openbucket-client`, owner to `Razin-developer`, repository to `openbucket`, workflow name to `release.yml`, and environment name to `pypi`.
+4. Confirm the GitHub repository has an environment named `pypi`; add a required reviewer and tag deployment protection when the account plan supports them.
+5. Keep the publish job's `id-token: write` permission and do not add a PyPI password or API token.
+6. Publish through the protected `v0.1.1` tag workflow. On first successful use, PyPI creates the project and converts the pending publisher into a normal trusted publisher.
 
-Use TestPyPI for a dry run when changing package metadata. A TestPyPI publisher is separate from the production PyPI publisher.
+A pending publisher does not reserve the project name. Configure it immediately before the release, verify every field exactly, and use the official [pending-publisher guide](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/) and [publishing guide](https://docs.pypi.org/trusted-publishers/using-a-publisher/). TestPyPI uses a separate publisher configuration.
 
 ## Vercel Git deployment
 
 The Vercel project is connected directly to this GitHub repository. Pull requests receive previews and `main` deploys to production without Vercel credentials in GitHub. Keep `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` out of repository secrets.
 
-The GitHub workflow verifies deployment rather than creating it: `/deployment.json` must report the exact triggering commit before the production check passes. Its default alias is `https://openbucket-eight.vercel.app`; set the non-secret repository variable `VERCEL_PRODUCTION_URL` when that alias changes. Vercel build variables belong in the Vercel project settings, and registry or daemon credentials never belong in dashboard build variables. See [Hosting the dashboard on Vercel](VERCEL.md).
+The GitHub workflow verifies deployment rather than creating it: `/deployment.json` must report the exact triggering commit before the production check passes. Its default alias is `https://openbucket-eight.vercel.app`; set the non-secret repository variable `VERCEL_PRODUCTION_URL` when that alias changes. Vercel build variables belong in the Vercel project settings, and registry or daemon credentials never belong in dashboard build variables. See [Hosting the web application on Vercel](VERCEL.md).
+
+Hosted authentication uses the server-only Vercel variables `MONGODB_URI`, `MONGODB_DATABASE`, `OPENBUCKET_AUTH_SECRET`, and `OPENBUCKET_ALLOW_SIGNUP`. They are unrelated to registry publishing and must never be copied into `NEXT_PUBLIC_*` values or GitHub release secrets.
+One-time owner bootstrap additionally requires a distinct `OPENBUCKET_SIGNUP_TOKEN`; MongoDB consumes it atomically, and the raw token is never stored.
 
 ## Prepare a version
+
+The next unified version is `0.1.1`; `0.1.0` already exists on npm and cannot be republished.
 
 Update every synchronized version location:
 
@@ -98,8 +96,8 @@ Commit the version change through a reviewed pull request.
 Create an annotated tag from the protected, green `main` commit and push it:
 
 ```bash
-git tag -a v0.1.0 -m "OpenBucket v0.1.0"
-git push origin v0.1.0
+git tag -a v0.1.1 -m "OpenBucket v0.1.1"
+git push origin v0.1.1
 ```
 
 The release workflow verifies that the tag and every package version match, then:
@@ -115,9 +113,9 @@ Do not rerun only one registry job after changing source. Fix forward with a new
 ## Verify and rollback
 
 ```bash
-npm view openbucket@0.1.0 version dist.integrity
+npm view openbucket@0.1.1 version dist.integrity dist.attestations
 python -m pip index versions openbucket-client
-docker buildx imagetools inspect ghcr.io/razin-developer/openbucket:0.1.0
+docker buildx imagetools inspect ghcr.io/razin-developer/openbucket:0.1.1
 ```
 
 Install into clean temporary environments and run `openbucket version` plus a real daemon health check. Confirm the Vercel production deployment separately.

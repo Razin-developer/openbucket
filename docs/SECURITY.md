@@ -111,6 +111,15 @@ Therefore:
 
 The dashboard saves the normalized management URL in local storage. Admin tokens are kept in session storage under a key scoped to that API URL. The page consumes and removes both launch values from the visible URL.
 
+### Hosted account boundary
+
+The Vercel `/dashboard` route additionally requires a hosted account session backed by MongoDB. That session controls access to the hosted route only; it is not a daemon credential and does not authorize management or S3 operations. The browser must still pair with a real daemon bearer token.
+
+MongoDB stores hosted users, password verifiers, opaque sessions, and rate-limit records. It must never store object bytes, `OPENBUCKET_ADMIN_TOKEN`, S3 access/secret keys, share tokens, or local node state. Those remain within the browser/daemon boundary. The locally served dashboard remains account-free so OpenBucket can operate offline without Vercel or MongoDB.
+
+Keep `MONGODB_URI` and `OPENBUCKET_AUTH_SECRET` server-only, rotate any disclosed URI immediately, use a unique production database user, and disable public signup after creating the intended owner account.
+Owner bootstrap requires a separate high-entropy `OPENBUCKET_SIGNUP_TOKEN`. The first successful registration atomically consumes a MongoDB bootstrap record, preventing concurrent or historical-deployment reuse; remove the token and disable signup afterward.
+
 ## S3 authentication and authorization
 
 The S3 server verifies AWS Signature Version 4:

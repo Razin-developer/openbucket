@@ -20,7 +20,7 @@ Defaults come from OPENBUCKET_NPM_PACKAGE, OPENBUCKET_INSTALL_VERSION, and
 OPENBUCKET_NPM_PREFIX. The package name otherwise defaults to openbucket.
 
 The script does not elevate, install an OS service, change PATH, open ports, or
-modify firewall rules. Publication is a separate release action.
+modify firewall rules. It installs the selected package through npm only.
 "@
   exit 0
 }

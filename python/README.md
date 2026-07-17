@@ -1,7 +1,7 @@
 # OpenBucket Python client
 
 `openbucket-client` is the typed, dependency-free Python client for a running
-[OpenBucket](https://openbucket.dev) management API. It supports Python 3.10+
+[OpenBucket](https://github.com/Razin-developer/openbucket) management API. It supports Python 3.10+
 and uses only the standard library at runtime.
 
 This package is a client, not a Python implementation of the OpenBucket daemon.
@@ -10,24 +10,19 @@ URL. Object data is stored and served by that daemon.
 
 ## Install
 
-After the package has been published to PyPI:
-
-```bash
-python -m pip install openbucket-client
-```
-
-For the isolated command-line tool:
-
-```bash
-pipx install openbucket-client
-# or
-uv tool install openbucket-client
-```
-
-From a checked-out OpenBucket repository:
+`openbucket-client` is not on PyPI yet. Install it from a checked-out OpenBucket repository:
 
 ```bash
 python -m pip install ./python
+```
+
+After the first unified `0.1.1` release is visible on PyPI:
+
+```bash
+python -m pip install openbucket-client==0.1.1
+pipx install openbucket-client==0.1.1
+# or
+uv tool install openbucket-client==0.1.1
 ```
 
 The distribution is named `openbucket-client`; the import package is

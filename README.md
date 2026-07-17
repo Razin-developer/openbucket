@@ -6,7 +6,7 @@ OpenBucket writes real object bytes to the directory you choose. There is no fak
 
 > OpenBucket is currently a single-node, self-hosted v0.1 product. It is useful for development, homelabs, local backup targets, and trusted private networks. Read [Security](#security) and [Current limitations](#current-limitations) before exposing it outside a machine you control.
 
-The source is release-ready for npm, PyPI, GitHub Container Registry, GitHub Releases, and Vercel. Registry publication and the first `*.vercel.app` allocation require the owner's npm, PyPI, GitHub, and Vercel accounts; see [Releasing](docs/RELEASING.md).
+The Node daemon and CLI are published as [`openbucket@0.1.0`](https://www.npmjs.com/package/openbucket/v/0.1.0), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). The first unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases is planned as `0.1.1`; see [Releasing](docs/RELEASING.md).
 
 ## What is included
 
@@ -85,28 +85,31 @@ npm install --global ./openbucket-0.1.0.tgz
 
 ### From npm
 
-After the first trusted release is published to the npm registry:
+Version `0.1.0` is live on the npm registry:
 
 ```bash
-npm install --global openbucket
+npm install --global openbucket@0.1.0
+openbucket version
 openbucket serve /path/to/storage
 ```
 
-The unscoped package name was available when the release configuration was prepared. Package names are first-come-first-served, and this README does not imply that a registry release or the `openbucket.dev` hosted URLs already exist. See [all installation methods](docs/INSTALLATION.md) for pinned npm, `npx`, GitHub release, Docker/GHCR, source, and Python options.
+Use the explicit version in unattended production and review [all installation methods](docs/INSTALLATION.md). The Python client, GHCR images, and GitHub release assets are not published yet; those begin with the next unified release.
 
 ### Installer scripts
 
-The installers are thin, auditable npm wrappers. They never add a service or change firewall rules.
+The installers are thin, auditable npm wrappers served by the current Vercel deployment. They never add a service, open ports, or change firewall rules. Download and review a script before running it in production:
 
 ```bash
-curl -fsSL https://openbucket.dev/install.sh | sh
+curl -fsSLo openbucket-install.sh https://openbucket-eight.vercel.app/install.sh
+OPENBUCKET_INSTALL_VERSION=0.1.0 sh ./openbucket-install.sh
 ```
 
 ```powershell
-irm https://openbucket.dev/install.ps1 | iex
+Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile openbucket-install.ps1
+& ./openbucket-install.ps1 -Version 0.1.0
 ```
 
-Until those URLs are published, run the checked-in scripts directly:
+From a source checkout, the same installers are available directly:
 
 ```bash
 sh scripts/install.sh
@@ -198,10 +201,10 @@ Then verify real bytes on disk at `./openbucket-data/photos/sample.txt`.
 
 ### Python management SDK
 
-The separately published `openbucket-client` package controls the management API; it does not install the Node daemon:
+The optional `openbucket-client` package controls the management API; it does not install the Node daemon. It is not on PyPI yet, so install it from this checkout until the first unified release:
 
 ```bash
-python -m pip install openbucket-client
+python -m pip install ./python
 openbucket-client --url http://127.0.0.1:7272 --token "$OPENBUCKET_ADMIN_TOKEN" status
 ```
 
@@ -250,7 +253,18 @@ If the dashboard and daemon have different origins, set `OPENBUCKET_DASHBOARD_UR
 
 ### Vercel
 
-`npm run build:vercel` validates a static dashboard in `vercel-dist`. The Git-connected Vercel project deploys pull-request previews and promotes `main` to `https://openbucket-eight.vercel.app`; GitHub Actions verifies the exact production commit without storing Vercel credentials. Later domain changes require only environment/DNS updates. Vercel hosts the dashboard, not the disk-backed daemon. Follow [the Vercel deployment guide](docs/VERCEL.md) for environment variables, CORS, production verification, and the later `openbucket.dev` cutover.
+`npm run build:vercel` validates the Vercel application in `vercel-dist`. The Git-connected project deploys pull-request previews and promotes `main` to [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app):
+
+- `/` is the public product landing page;
+- `/docs` is the public documentation page;
+- `/login` and `/register` establish a hosted web session;
+  Registration is a one-time owner bootstrap protected by an independent setup token and an atomic MongoDB claim;
+- `/dashboard` requires that hosted session and then connects from the browser to a real OpenBucket daemon.
+
+MongoDB stores only hosted users, password verifiers, sessions, and rate-limit records. Object bytes remain on the daemon's disk, while daemon management tokens and S3 credentials remain in the browser/daemon boundary and are never persisted to MongoDB. The locally embedded dashboard remains account-free and works without MongoDB through `openbucket dashboard`.
+The bootstrap record is retained after success and the raw setup token is never stored, so older immutable deployment URLs cannot register another owner.
+
+GitHub Actions verifies the exact production commit without storing Vercel credentials. Later domain changes require only environment and DNS updates. Follow [the Vercel deployment guide](docs/VERCEL.md) for server-only authentication variables, CORS, production verification, and the later `openbucket.dev` cutover.
 
 ## Docker Compose
 
@@ -363,7 +377,7 @@ OpenBucket can discover safe, S3-valid directories already present directly unde
 
 ## Security
 
-The safe default is loopback-only operation. OpenBucket has no built-in TLS, encryption at rest, rate limiting, multi-user RBAC, immutable audit log, or hosted identity layer.
+The safe daemon default is loopback-only operation. The daemon has no built-in TLS, encryption at rest, request rate limiting, multi-user RBAC, or immutable audit log. The optional hosted site adds a MongoDB-backed owner-account gate and authentication rate limits, but it does not replace the daemon's separate management token or S3 credentials.
 
 Important facts:
 
@@ -431,7 +445,7 @@ Tests use temporary directories and ephemeral ports for real management/S3 I/O. 
 - S3 compatibility is deliberately partial; test each client/workload against the matrix.
 - Object content type and custom S3 metadata are not persisted; downloads are `application/octet-stream`.
 - No quotas, lifecycle cleanup, checksummed background scrub, garbage collection UI, or multipart resume/list APIs.
-- Release automation and deployable dashboard/container artifacts are included, but claiming registry names, allocating a `vercel.app` project, `openbucket.dev` ownership/DNS, stable named-tunnel provisioning, and a managed relay require operator accounts or infrastructure outside this source tree.
+- npm `openbucket@0.1.0` and the `openbucket-eight.vercel.app` web deployment are live. PyPI, GHCR, GitHub release assets, `openbucket.dev` ownership/DNS, stable named-tunnel provisioning, and a managed relay still require their documented owner-controlled release or infrastructure steps.
 - The desktop application is planned after the daemon/CLI/web foundation, not included in v0.1.
 
 ## Roadmap
@@ -440,7 +454,7 @@ Priorities are durability and compatibility before expansion:
 
 1. State migrations, crash recovery, log rotation, multipart housekeeping, integrity scan, and backup/restore verification.
 2. S3 metadata, conditional operations, delimiter/common-prefix listing, multipart list/resume, broader SDK conformance.
-3. TLS/proxy deployment profiles, stronger dashboard authentication, rate limits, quotas, and security audit.
+3. TLS/proxy deployment profiles, optional MFA and multi-user hosted roles, daemon request limits, quotas, and security audit.
 4. Remote node registry/relay as an optional separate service, metrics export, notifications, and multi-node replication research.
 5. Signed desktop application only after the headless product is stable.
 

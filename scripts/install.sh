@@ -18,7 +18,7 @@ Usage: install.sh [--package SPEC] [--version VERSION] [--prefix DIRECTORY]
   -h, --help       show this help
 
 The script does not use sudo, install an OS service, change PATH, open ports, or
-modify firewall rules. Publication at openbucket.dev/npm is a separate release.
+modify firewall rules. It installs the selected package through npm only.
 EOF
 }
 

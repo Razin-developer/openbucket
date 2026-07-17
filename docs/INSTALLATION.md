@@ -7,12 +7,14 @@ OpenBucket has two separately versioned deliverables that share the same release
 
 Use Node.js 22.13 or newer for the daemon. Production releases are built and tested on Node.js 22 and 24.
 
+Publication status: `openbucket@0.1.0` is live on npm. PyPI, GHCR, and GitHub release assets were not published for `0.1.0`; the first unified trusted release is planned as `0.1.1`.
+
 ## npm
 
 The normal installation is a global npm package:
 
 ```bash
-npm install --global openbucket
+npm install --global openbucket@0.1.0
 openbucket version
 openbucket serve /path/to/storage
 ```
@@ -31,103 +33,125 @@ npx --yes openbucket@0.1.0 version
 
 Use a global, version-pinned install for a long-running daemon so an npm cache cleanup cannot affect process restarts.
 
+## Run the daemon and local dashboard
+
+For an interactive or workstation installation:
+
+```bash
+openbucket serve /absolute/path/to/storage --detach --no-open
+openbucket dashboard
+openbucket status
+```
+
+The npm package contains the production local dashboard. `openbucket dashboard` opens and pairs it with the daemon; MongoDB and a hosted OpenBucket account are not required.
+
+For a long-running production host, run foreground mode under an OS service manager or container restart policy:
+
+```bash
+export OPENBUCKET_ADMIN_TOKEN="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")"
+export OPENBUCKET_HOME=/var/lib/openbucket/state
+openbucket doctor /srv/openbucket
+openbucket serve /srv/openbucket --no-open
+```
+
+Use a dedicated non-root account, protect the token/environment file, configure graceful `SIGTERM`, rotate logs externally, and back up the entire storage root including `.openbucket`. Detached mode is convenient process detachment, not boot-time service registration. See [Operating OpenBucket](OPERATIONS.md).
+
 ## GitHub release tarball
 
-Every tagged release workflow produces the same npm tarball, a Python wheel/source archive, and `SHA256SUMS`. After the first GitHub release exists:
+No GitHub release assets exist for `v0.1.0`; use npm for that version. Beginning with the first successful unified release, the tag workflow publishes the npm tarball, Python wheel/source archive, and `SHA256SUMS`. After `v0.1.1` is published:
 
 ```bash
 npm install --global \
-  https://github.com/Razin-developer/openbucket/releases/download/v0.1.0/openbucket-0.1.0.tgz
+  https://github.com/Razin-developer/openbucket/releases/download/v0.1.1/openbucket-0.1.1.tgz
 ```
 
 Verify a downloaded file before installation:
 
 ```bash
-grep ' openbucket-0.1.0.tgz$' SHA256SUMS | sha256sum --check -
-npm install --global ./openbucket-0.1.0.tgz
+grep ' openbucket-0.1.1.tgz$' SHA256SUMS | sha256sum --check -
+npm install --global ./openbucket-0.1.1.tgz
 ```
-
-Run `sha256sum --check SHA256SUMS` without filtering only when every release asset named in that file is present.
 
 On PowerShell:
 
 ```powershell
-Get-FileHash .\openbucket-0.1.0.tgz -Algorithm SHA256
-npm install --global .\openbucket-0.1.0.tgz
+Get-FileHash .\openbucket-0.1.1.tgz -Algorithm SHA256
+npm install --global .\openbucket-0.1.1.tgz
 ```
 
-Compare the printed digest with the corresponding `SHA256SUMS` entry.
+Compare the printed digest with the corresponding `SHA256SUMS` entry. Run `sha256sum --check SHA256SUMS` without filtering only when every asset named in that file is present.
 
 ## Installer scripts
 
-The checked-in installers are small wrappers around npm and accept a version/package override. Review them before piping a remote script into a shell.
+The published installers are small wrappers around npm and accept a version/package override. Download and review the script before running it:
 
 ```bash
-OPENBUCKET_INSTALL_VERSION=0.1.0 sh scripts/install.sh
+curl -fsSLo openbucket-install.sh https://openbucket-eight.vercel.app/install.sh
+OPENBUCKET_INSTALL_VERSION=0.1.0 sh ./openbucket-install.sh
 ```
 
 ```powershell
-& .\scripts\install.ps1 -Version 0.1.0
+Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile openbucket-install.ps1
+& .\openbucket-install.ps1 -Version 0.1.0
 ```
 
-Once `openbucket.dev` hosts the checksummed release assets, the documented short URLs can point to these same scripts without changing their behavior.
+From a source checkout, run `sh scripts/install.sh --version 0.1.0` or `& .\scripts\install.ps1 -Version 0.1.0`. Both scripts install the npm package only; they do not register a service, modify the firewall, or expose the daemon.
 
 ## Docker and Docker Compose
 
-Tagged releases publish two multi-platform OCI images to GitHub Container Registry:
-
-```bash
-docker pull ghcr.io/razin-developer/openbucket:0.1.0
-docker pull ghcr.io/razin-developer/openbucket-dashboard:0.1.0
-```
-
-Run the daemon with persistent data and state:
-
-```bash
-docker run --name openbucket --restart unless-stopped \
-  -p 127.0.0.1:7272:7272 \
-  -p 127.0.0.1:8333:8333 \
-  -e OPENBUCKET_ADMIN_TOKEN='replace-with-at-least-32-random-bytes' \
-  -v openbucket-data:/data \
-  -v openbucket-state:/state \
-  ghcr.io/razin-developer/openbucket:0.1.0
-```
-
-For the daemon and dashboard together, clone the repository, copy `.env.example` to `.env`, set a strong `OPENBUCKET_ADMIN_TOKEN`, and run:
-
-```bash
-docker compose up --build -d
-```
-
-Do not use floating `latest` tags in unattended production. Pin a semantic version or image digest.
-
-## Build from source
+No GHCR images were published for `0.1.0`. Build the real daemon and dashboard images from a reviewed source commit today:
 
 ```bash
 git clone https://github.com/Razin-developer/openbucket.git
 cd openbucket
-git checkout v0.1.0
+cp .env.example .env
+# Set a random OPENBUCKET_ADMIN_TOKEN with at least 32 bytes in .env.
+docker compose up --build -d
+docker compose ps
+```
+
+Compose keeps object data and CLI state in named volumes by default, binds host ports to loopback, and runs separate daemon and dashboard services. Set `OPENBUCKET_STORAGE_MOUNT` in `.env` to use a host directory.
+
+The first successful unified release is expected to publish:
+
+```bash
+docker pull ghcr.io/razin-developer/openbucket:0.1.1
+docker pull ghcr.io/razin-developer/openbucket-dashboard:0.1.1
+```
+
+Use those commands only after the release exists. Do not use floating tags in unattended production; pin a semantic version or image digest.
+
+## Build from source
+
+Clone and pin the reviewed commit you intend to operate. Commit `822e01397c2cd53ec98c33a1bb4343c468834a34` is the source recorded in the npm `0.1.0` metadata:
+
+```bash
+git clone https://github.com/Razin-developer/openbucket.git
+cd openbucket
+git checkout 822e01397c2cd53ec98c33a1bb4343c468834a34
 npm ci
 npm run release:check
 npm link
 openbucket version
 ```
 
-`npm ci` verifies the committed lockfile. Do not replace it with an unconstrained install in reproducible builds.
+`npm ci` verifies the committed lockfile. Do not replace it with an unconstrained install in reproducible builds. Use a newer reviewed commit when you need the hosted landing/auth/docs work added after the npm `0.1.0` snapshot.
 
 ## Python management client
 
-Install the management SDK from PyPI:
+`openbucket-client` is not on PyPI yet. Install it from a source checkout:
 
 ```bash
-python -m pip install openbucket-client
+python -m pip install ./python
 ```
 
-For an isolated command installation, use either:
+After the first unified release is visible on PyPI, use a pinned registry install or an isolated tool installation:
 
 ```bash
-pipx install openbucket-client
-uv tool install openbucket-client
+python -m pip install openbucket-client==0.1.1
+pipx install openbucket-client==0.1.1
+# or
+uv tool install openbucket-client==0.1.1
 ```
 
 Use the console client against an already running daemon:

@@ -99,10 +99,27 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
     readFile(new URL("../.github/workflows/vercel.yml", import.meta.url), "utf8"),
   ]);
   const deployment = JSON.parse(deploymentSource);
+  const [installSh, installPs1, checkedInInstallSh, checkedInInstallPs1, hostedApp, hostedAuth, landing] = await Promise.all([
+    readFile(new URL("../vercel-dist/install.sh", import.meta.url), "utf8"),
+    readFile(new URL("../vercel-dist/install.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/install.sh", import.meta.url), "utf8"),
+    readFile(new URL("../scripts/install.ps1", import.meta.url), "utf8"),
+    readFile(new URL("../vercel/app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../vercel/auth.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../vercel/landing.tsx", import.meta.url), "utf8"),
+  ]);
 
   assert.deepEqual(deployment, { schemaVersion: 1, commitSha });
-  assert.equal(robots, `User-agent: *\nAllow: /\nSitemap: ${appUrl}/sitemap.xml\n`);
+  assert.equal(robots, `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /dashboard\nDisallow: /login\nDisallow: /register\nSitemap: ${appUrl}/sitemap.xml\n`);
   assert.match(sitemap, new RegExp(`<loc>${appUrl}/<\\/loc>`));
+  assert.match(sitemap, new RegExp(`<loc>${appUrl}/docs<\\/loc>`));
+  assert.doesNotMatch(sitemap, /\/(?:login|register|dashboard)<\/loc>/);
+  assert.equal(installSh, checkedInInstallSh);
+  assert.equal(installPs1, checkedInInstallPs1);
+  for (const route of ["docs", "login", "register", "dashboard"]) assert.match(hostedApp, new RegExp(`normalized === "\\/${route}"`));
+  assert.match(hostedAuth, /fetch\("\/api\/auth\/session"/);
+  assert.match(hostedAuth, /<Dashboard \/>/);
+  assert.match(landing, /src="\/og\.png"/);
   assert.match(index, new RegExp(`<link rel="canonical" href="${appUrl}"`));
   assert.match(index, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml"/);
   assert.match(favicon, /^<svg\b/);

@@ -18,6 +18,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 35
 
+    services:
+      mongodb:
+        image: mongo:8.0@sha256:3ce3de7f40e914034b03b7dec654005ab54f7dc8306937e44ec6760d9e9409a1
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' mongodb://127.0.0.1:27017/admin"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
     steps:
       - name: Check out source
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -46,6 +57,9 @@ jobs:
         run: npm run type-check
 
       - name: Test
+        env:
+          MONGODB_TEST_URI: mongodb://127.0.0.1:27017
+          OPENBUCKET_REQUIRE_MONGODB_TEST: "true"
         run: npm test
 
       - name: Build Vercel artifacts

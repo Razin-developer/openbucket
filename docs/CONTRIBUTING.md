@@ -254,4 +254,4 @@ It should also be manually smoke-tested for:
 - upgrade from the previous supported version;
 - secret redaction in artifacts/logs/support output.
 
-The tagged [release workflow](RELEASING.md) publishes npm/PyPI packages, images, checksums, SBOMs, provenance, and GitHub release assets through protected environments. Domain allocation and every registry publish remain separate authorized external actions; repository readiness does not imply they have happened.
+The tagged [release workflow](RELEASING.md) publishes npm/PyPI packages, images, checksums, SBOMs, provenance, and GitHub release assets through protected environments. npm `0.1.0` was published manually; PyPI, GHCR, and the first unified trusted release remain separate authorized external actions. Keep documentation aligned with the verified release matrix rather than inferring publication from workflow readiness.

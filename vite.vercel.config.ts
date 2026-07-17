@@ -1,4 +1,5 @@
 import react from "@vitejs/plugin-react";
+import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { defineConfig, loadEnv } from "vite";
@@ -59,6 +60,7 @@ export default defineConfig(({ mode }) => {
 
   const canonicalUrl = publicEnv.NEXT_PUBLIC_APP_URL ?? defaultAppUrl;
   const canonicalRoot = `${canonicalUrl.replace(/\/+$/, "")}/`;
+  const docsUrl = new URL("docs", canonicalRoot).toString();
   const sitemapUrl = new URL("sitemap.xml", canonicalRoot).toString();
   const commitSha = process.env.VERCEL_GIT_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim() || "unknown";
 
@@ -73,7 +75,11 @@ export default defineConfig(({ mode }) => {
         transformIndexHtml(html) {
           return html.replaceAll(defaultAppUrl, canonicalUrl);
         },
-        generateBundle() {
+        async generateBundle() {
+          const [installSh, installPs1] = await Promise.all([
+            readFile(path.join(projectRoot, "scripts", "install.sh"), "utf8"),
+            readFile(path.join(projectRoot, "scripts", "install.ps1"), "utf8"),
+          ]);
           this.emitFile({
             type: "asset",
             fileName: "deployment.json",
@@ -82,13 +88,15 @@ export default defineConfig(({ mode }) => {
           this.emitFile({
             type: "asset",
             fileName: "robots.txt",
-            source: `User-agent: *\nAllow: /\nSitemap: ${sitemapUrl}\n`,
+            source: `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /dashboard\nDisallow: /login\nDisallow: /register\nSitemap: ${sitemapUrl}\n`,
           });
           this.emitFile({
             type: "asset",
             fileName: "sitemap.xml",
-            source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${xmlEscape(canonicalRoot)}</loc></url>\n</urlset>\n`,
+            source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${xmlEscape(canonicalRoot)}</loc></url>\n  <url><loc>${xmlEscape(docsUrl)}</loc></url>\n</urlset>\n`,
           });
+          this.emitFile({ type: "asset", fileName: "install.sh", source: installSh });
+          this.emitFile({ type: "asset", fileName: "install.ps1", source: installPs1 });
         },
       },
     ],

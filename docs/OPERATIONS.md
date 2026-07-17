@@ -38,10 +38,10 @@ npm install --global ./openbucket-0.1.0.tgz
 openbucket version
 ```
 
-Registry installation is available only after the package has actually been published:
+The npm `0.1.0` package is live. Pin the version on production hosts:
 
 ```bash
-npm install --global openbucket
+npm install --global openbucket@0.1.0
 ```
 
 ## Start modes
@@ -98,7 +98,7 @@ Set `OPENBUCKET_DASHBOARD_URL` to the origin users actually open so the daemon c
 
 ### Vercel-hosted dashboard
 
-The static Vercel target is an independent browser client; it never moves object data or daemon state into Vercel. Configure the exact `*.vercel.app` origin in `OPENBUCKET_DASHBOARD_URL`/`OPENBUCKET_ALLOWED_ORIGINS`, expose the management API through an authenticated HTTPS access layer, and enter the bearer token in the connection dialog. Never compile that token into a dashboard environment variable. See [Hosting the dashboard on Vercel](VERCEL.md).
+The Vercel `/dashboard` route requires a hosted MongoDB-backed account session, then acts as an independent browser client; it never moves object data or daemon state into Vercel or MongoDB. Configure the exact `*.vercel.app` origin in `OPENBUCKET_DASHBOARD_URL`/`OPENBUCKET_ALLOWED_ORIGINS`, expose the management API through an authenticated HTTPS access layer, and enter the daemon bearer token in the connection dialog. The hosted account session and daemon bearer are separate security boundaries. Never compile that token into a dashboard environment variable. The local `openbucket dashboard` flow remains account-free. See [Hosting the web application](VERCEL.md).
 
 ## Docker Compose
 

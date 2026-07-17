@@ -1,7 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { Dashboard } from "../app/dashboard";
 import "../app/globals.css";
+import { HostedApp, routeForPath, routeMetadata } from "./app";
+import "./site.css";
 
 function configuredAppUrl(): URL {
   const configured = process.env.NEXT_PUBLIC_APP_URL;
@@ -16,27 +17,40 @@ function configuredAppUrl(): URL {
   return new URL(window.location.origin);
 }
 
-function setAbsoluteMetadata() {
+function setMetaContent(selector: string, value: string) {
+  const element = document.querySelector<HTMLMetaElement>(selector);
+  if (element) element.content = value;
+}
+
+function setAbsoluteMetadata(route: ReturnType<typeof routeForPath>) {
   const base = configuredAppUrl();
-  const canonical = new URL(base.pathname || "/", base.origin).toString();
+  const metadata = routeMetadata[route];
+  const canonical = new URL(metadata.path, `${base.origin}/`).toString();
   const socialImage = new URL("/og.png", base.origin).toString();
+  document.title = metadata.title;
+  document.documentElement.dataset.route = route;
   const canonicalElement = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
   if (canonicalElement) canonicalElement.href = canonical;
-  const openGraphUrl = document.querySelector<HTMLMetaElement>('meta[property="og:url"]');
-  if (openGraphUrl) openGraphUrl.content = canonical;
+  setMetaContent('meta[name="description"]', metadata.description);
+  setMetaContent('meta[name="robots"]', metadata.robots);
+  setMetaContent('meta[property="og:url"]', canonical);
+  setMetaContent('meta[property="og:title"]', metadata.title);
+  setMetaContent('meta[property="og:description"]', metadata.description);
+  setMetaContent('meta[name="twitter:title"]', metadata.title);
+  setMetaContent('meta[name="twitter:description"]', metadata.description);
   for (const selector of ['meta[property="og:image"]', 'meta[name="twitter:image"]']) {
-    const element = document.querySelector<HTMLMetaElement>(selector);
-    if (element) element.content = socialImage;
+    setMetaContent(selector, socialImage);
   }
 }
 
-setAbsoluteMetadata();
+const route = routeForPath(window.location.pathname);
+setAbsoluteMetadata(route);
 
 const root = document.getElementById("root");
-if (!root) throw new Error("OpenBucket dashboard root element is missing.");
+if (!root) throw new Error("OpenBucket web root element is missing.");
 
 createRoot(root).render(
   <StrictMode>
-    <Dashboard />
+    <HostedApp route={route} />
   </StrictMode>,
 );
