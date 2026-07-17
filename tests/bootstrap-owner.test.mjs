@@ -9,11 +9,23 @@ import {
   normalizeBootstrapUrl,
   parseBootstrapArguments,
   runSpawned,
+  vercelInvocation,
 } from "../scripts/bootstrap-owner.mjs";
 
 const password = "correct horse battery staple";
 const random = () => Buffer.alloc(48, 7);
 const expectedToken = Buffer.alloc(48, 7).toString("base64url");
+
+test("uses the Windows npx command shim for Vercel", () => {
+  assert.deepEqual(vercelInvocation({}, "win32"), {
+    command: "npx.cmd",
+    prefix: ["--yes", "vercel@latest"],
+  });
+  assert.deepEqual(vercelInvocation({}, "linux"), {
+    command: "npx",
+    prefix: ["--yes", "vercel@latest"],
+  });
+});
 
 test("parses only non-secret bootstrap arguments", () => {
   assert.deepEqual(
