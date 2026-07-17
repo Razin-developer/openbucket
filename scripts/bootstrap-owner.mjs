@@ -14,11 +14,13 @@ Options:
   --email EMAIL  Owner email address (required)
   --name NAME    Owner display name (optional)
   --url URL      Exact production OpenBucket origin (required, HTTPS)
+  --signup-token-stdin  Read an existing one-time signup token from a hidden prompt
+  --manage-vercel       Create, deploy, close, and remove the temporary Vercel signup window
   -h, --help     Show this help
 
 The password is requested twice in a hidden interactive prompt. This helper
-requires a linked Vercel project and never accepts a password on the command
-line or in an environment variable.`;
+never accepts a password or signup token on the command line or in an
+environment variable. Vercel deployment management is off by default.`;
 
 const OUTPUT_LIMIT_BYTES = 1024 * 1024;
 const PROJECT_ROOT = resolve(import.meta.dirname, "..");
@@ -35,27 +37,54 @@ function optionValue(argv, index, option) {
 }
 
 export function parseBootstrapArguments(argv) {
-  const result = { email: undefined, name: undefined, url: undefined, help: false };
+  const result = {
+    email: undefined,
+    name: undefined,
+    url: undefined,
+    manageVercel: false,
+    signupTokenStdin: false,
+    help: false,
+  };
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === "-h" || argument === "--help") {
       result.help = true;
       continue;
     }
+    if (argument === "--manage-vercel") {
+      if (result.manageVercel) throw new Error("--manage-vercel may be supplied only once.");
+      result.manageVercel = true;
+      continue;
+    }
+    if (argument === "--signup-token-stdin") {
+      if (result.signupTokenStdin) throw new Error("--signup-token-stdin may be supplied only once.");
+      result.signupTokenStdin = true;
+      continue;
+    }
     if (argument === "--password" || argument.startsWith("--password=")) {
-      throw new Error("Passwords are accepted only through the hidden interactive prompt.");
+      throw new Error(
+        "Passwords are accepted only through the hidden interactive prompt.",
+      );
     }
     let matched = false;
-    for (const [option, key] of [["--email", "email"], ["--name", "name"], ["--url", "url"]]) {
+    for (const [option, key] of [
+      ["--email", "email"],
+      ["--name", "name"],
+      ["--url", "url"],
+    ]) {
       const parsed = optionValue(argv, index, option);
       if (!parsed) continue;
-      if (result[key] !== undefined) throw new Error(`${option} may be supplied only once.`);
+      if (result[key] !== undefined)
+        throw new Error(`${option} may be supplied only once.`);
       result[key] = parsed.value;
       index += parsed.consumed;
       matched = true;
       break;
     }
     if (!matched) throw new Error(`Unknown option: ${argument}`);
+  }
+  if (result.manageVercel && result.signupTokenStdin) {
+    throw new Error("Use either --manage-vercel or --signup-token-stdin, not both.");
   }
   return result;
 }
@@ -77,37 +106,77 @@ function normalizeEmail(value) {
 function normalizeName(value) {
   if (value === undefined) return null;
   const name = String(value).normalize("NFKC").trim().replace(/\s+/g, " ");
-  if (!name || Array.from(name).length > 80 || Buffer.byteLength(name, "utf8") > 320 || /[\u0000-\u001f\u007f]/.test(name)) {
+  if (
+    !name ||
+    Array.from(name).length > 80 ||
+    Buffer.byteLength(name, "utf8") > 320 ||
+    /[\u0000-\u001f\u007f]/.test(name)
+  ) {
     throw new Error("--name must contain 1-80 printable characters.");
   }
   return name;
 }
 
+function normalizeSignupToken(value) {
+  if (value === undefined || value === null) return null;
+  const token = String(value).trim();
+  if (!token || Buffer.byteLength(token, "utf8") < 32 || Buffer.byteLength(token, "utf8") > 1024 || /[\u0000-\u001f\u007f]/.test(token)) {
+    throw new Error("The one-time signup token is invalid.");
+  }
+  return token;
+}
+
 export function normalizeBootstrapUrl(value) {
-  if (typeof value !== "string" || !value.trim()) throw new Error("--url is required.");
+  if (typeof value !== "string" || !value.trim())
+    throw new Error("--url is required.");
   let parsed;
   try {
     parsed = new URL(value.trim());
   } catch {
     throw new Error("--url must be a valid HTTPS origin.");
   }
-  if (parsed.protocol !== "https:" || parsed.username || parsed.password || parsed.pathname !== "/" || parsed.search || parsed.hash) {
-    throw new Error("--url must be an HTTPS origin without credentials, a path, query, or fragment.");
+  if (
+    parsed.protocol !== "https:" ||
+    parsed.username ||
+    parsed.password ||
+    parsed.pathname !== "/" ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error(
+      "--url must be an HTTPS origin without credentials, a path, query, or fragment.",
+    );
   }
   return parsed.origin;
 }
 
 export function validateBootstrapOptions(options) {
   const password = options.password;
-  const passwordCharacters = typeof password === "string" ? Array.from(password).length : 0;
-  if (passwordCharacters < 12 || passwordCharacters > 128 || Buffer.byteLength(password || "", "utf8") > 1024 || password?.includes("\0")) {
+  const passwordCharacters =
+    typeof password === "string" ? Array.from(password).length : 0;
+  if (
+    passwordCharacters < 12 ||
+    passwordCharacters > 128 ||
+    Buffer.byteLength(password || "", "utf8") > 1024 ||
+    password?.includes("\0")
+  ) {
     throw new Error("The owner password must contain 12-128 characters.");
+  }
+  const manageVercel = options.manageVercel === true;
+  const signupToken = normalizeSignupToken(options.signupToken);
+  if (manageVercel && signupToken) {
+    throw new Error("--manage-vercel creates its own one-time signup token.");
+  }
+  if (!manageVercel && !signupToken) {
+    throw new Error("Vercel deployment management is off. Use --signup-token-stdin for an existing registration window or --manage-vercel to create one.");
   }
   return {
     email: normalizeEmail(options.email),
     name: normalizeName(options.name),
     url: normalizeBootstrapUrl(options.url),
     password,
+    manageVercel,
+    signupToken,
   };
 }
 
@@ -138,26 +207,40 @@ function errorMessage(error) {
   return error instanceof Error ? error.message : String(error);
 }
 
-export function vercelInvocation(env = process.env, platform = process.platform) {
+export function vercelInvocation(
+  env = process.env,
+  platform = process.platform,
+) {
   const explicit = env.OPENBUCKET_VERCEL_CLI?.trim();
   if (explicit) {
-    if (explicit.includes("\0") || /[\r\n]/.test(explicit)) throw new Error("OPENBUCKET_VERCEL_CLI contains invalid characters.");
+    if (explicit.includes("\0") || /[\r\n]/.test(explicit))
+      throw new Error("OPENBUCKET_VERCEL_CLI contains invalid characters.");
     return { command: explicit, prefix: [] };
   }
+  if (platform === "win32") {
+    return {
+      command: "cmd.exe",
+      prefix: ["/d", "/s", "/c", "npx.cmd --yes vercel@latest"],
+    };
+  }
   return {
-    command: platform === "win32" ? "npx.cmd" : "npx",
+    command: "npx",
     prefix: ["--yes", "vercel@latest"],
   };
 }
 
-export function runSpawned(command, args, {
-  input = "",
-  cwd = PROJECT_ROOT,
-  env = process.env,
-  secrets = [],
-  spawnImpl = nodeSpawn,
-  maximumOutputBytes = OUTPUT_LIMIT_BYTES,
-} = {}) {
+export function runSpawned(
+  command,
+  args,
+  {
+    input = "",
+    cwd = PROJECT_ROOT,
+    env = process.env,
+    secrets = [],
+    spawnImpl = nodeSpawn,
+    maximumOutputBytes = OUTPUT_LIMIT_BYTES,
+  } = {},
+) {
   return new Promise((resolvePromise, rejectPromise) => {
     let child;
     try {
@@ -273,12 +356,15 @@ async function registerOwner(options, signupToken, fetchImpl) {
 
 export async function bootstrapOwner(rawOptions, dependencies = {}) {
   const options = validateBootstrapOptions(rawOptions);
-  const signupToken = generateSignupToken(dependencies.randomBytes || nodeRandomBytes);
+  const signupToken = options.signupToken || generateSignupToken(dependencies.randomBytes || nodeRandomBytes);
   const secrets = [options.password, signupToken];
-  const runVercel = dependencies.runVercel || createVercelRunner(dependencies.vercel);
+  const runVercel = options.manageVercel
+    ? dependencies.runVercel || createVercelRunner(dependencies.vercel)
+    : null;
   const fetchImpl = dependencies.fetchImpl || globalThis.fetch;
   const log = dependencies.log || console.log;
   const runStep = async (label, args, input = "") => {
+    if (!runVercel) throw new Error("Vercel deployment management is disabled.");
     log(label);
     await runVercel(args, { input, secrets });
   };
@@ -286,10 +372,31 @@ export async function bootstrapOwner(rawOptions, dependencies = {}) {
   let user;
   let primaryError = null;
   try {
-    await runStep("Setting the temporary sensitive signup token…", ["env", "add", "OPENBUCKET_SIGNUP_TOKEN", "production", "--sensitive", "--force"], `${signupToken}\n`);
-    await runStep("Opening the one-time production signup window…", ["env", "add", "OPENBUCKET_ALLOW_SIGNUP", "production", "--force"], "true\n");
-    await runStep("Deploying the temporary owner-registration window…", ["deploy", "--prod", "--yes"]);
-    log("Creating the owner through the production same-origin API…");
+    if (options.manageVercel) {
+      await runStep(
+        "Setting the temporary sensitive signup token…",
+        [
+          "env",
+          "add",
+          "OPENBUCKET_SIGNUP_TOKEN",
+          "production",
+          "--sensitive",
+          "--force",
+        ],
+        `${signupToken}\n`,
+      );
+      await runStep(
+        "Opening the one-time production signup window…",
+        ["env", "add", "OPENBUCKET_ALLOW_SIGNUP", "production", "--force"],
+        "true\n",
+      );
+      await runStep("Deploying the temporary owner-registration window…", [
+        "deploy",
+        "--prod",
+        "--yes",
+      ]);
+    }
+    log(options.manageVercel ? "Creating the owner through the production same-origin API…" : "Creating the owner through the existing production registration window…");
     user = await registerOwner(options, signupToken, fetchImpl);
   } catch (error) {
     primaryError = new Error(redactSecrets(errorMessage(error), secrets));
@@ -298,18 +405,38 @@ export async function bootstrapOwner(rawOptions, dependencies = {}) {
   const cleanupErrors = [];
   let signupDisabled = false;
   let closedDeployment = false;
+  if (options.manageVercel) {
   const cleanupSteps = [
-    ["Closing production signup…", ["env", "add", "OPENBUCKET_ALLOW_SIGNUP", "production", "--force"], "false\n"],
-    ["Removing the temporary signup token…", ["env", "rm", "OPENBUCKET_SIGNUP_TOKEN", "production", "--yes"], ""],
-    ["Deploying the closed registration state…", ["deploy", "--prod", "--yes"], ""],
+    [
+      "Closing production signup…",
+      ["env", "add", "OPENBUCKET_ALLOW_SIGNUP", "production", "--force"],
+      "false\n",
+    ],
+    [
+      "Removing the temporary signup token…",
+      ["env", "rm", "OPENBUCKET_SIGNUP_TOKEN", "production", "--yes"],
+      "",
+    ],
+    [
+      "Deploying the closed registration state…",
+      ["deploy", "--prod", "--yes"],
+      "",
+    ],
   ];
   for (const [label, args, input] of cleanupSteps) {
-    const removesToken = args[0] === "env" && args[1] === "rm" && args[2] === "OPENBUCKET_SIGNUP_TOKEN";
+    const removesToken =
+      args[0] === "env" &&
+      args[1] === "rm" &&
+      args[2] === "OPENBUCKET_SIGNUP_TOKEN";
     const deploys = args[0] === "deploy";
     if (removesToken || (deploys && !signupDisabled)) continue;
     try {
       await runStep(label, args, input);
-      if (args[0] === "env" && args[1] === "add" && args[2] === "OPENBUCKET_ALLOW_SIGNUP") {
+      if (
+        args[0] === "env" &&
+        args[1] === "add" &&
+        args[2] === "OPENBUCKET_ALLOW_SIGNUP"
+      ) {
         signupDisabled = true;
       }
       if (deploys) closedDeployment = true;
@@ -321,35 +448,52 @@ export async function bootstrapOwner(rawOptions, dependencies = {}) {
   if (closedDeployment) {
     let tokenRemoved = false;
     try {
-      await runStep(
-        "Removing the temporary signup token...",
-        ["env", "rm", "OPENBUCKET_SIGNUP_TOKEN", "production", "--yes"],
-      );
+      await runStep("Removing the temporary signup token...", [
+        "env",
+        "rm",
+        "OPENBUCKET_SIGNUP_TOKEN",
+        "production",
+        "--yes",
+      ]);
       tokenRemoved = true;
     } catch (error) {
       cleanupErrors.push(redactSecrets(errorMessage(error), secrets));
     }
     if (tokenRemoved) {
       try {
-        await runStep("Deploying the token-free closed state...", ["deploy", "--prod", "--yes"]);
+        await runStep("Deploying the token-free closed state...", [
+          "deploy",
+          "--prod",
+          "--yes",
+        ]);
       } catch (error) {
         cleanupErrors.push(redactSecrets(errorMessage(error), secrets));
       }
     }
   }
+  }
 
   if (primaryError || cleanupErrors.length) {
     const parts = [];
-    if (primaryError) parts.push(`Owner bootstrap failed: ${primaryError.message}`);
-    if (cleanupErrors.length) parts.push(`Registration cleanup requires attention: ${cleanupErrors.join(" | ")}`);
+    if (primaryError)
+      parts.push(`Owner bootstrap failed: ${primaryError.message}`);
+    if (cleanupErrors.length)
+      parts.push(
+        `Registration cleanup requires attention: ${cleanupErrors.join(" | ")}`,
+      );
     throw new Error(parts.join(" "));
   }
 
-  log(`Owner account created for ${user.email}. Production signup is closed.`);
+  log(options.manageVercel
+    ? `Owner account created for ${user.email}. Production signup is closed.`
+    : `Owner account created for ${user.email}. Close the existing Vercel signup window and remove its token.`);
   return { user };
 }
 
-export function readHiddenLine(prompt, { input = process.stdin, output = process.stderr } = {}) {
+export function readHiddenLine(
+  prompt,
+  { input = process.stdin, output = process.stderr } = {},
+) {
   if (!input.isTTY || !output.isTTY || typeof input.setRawMode !== "function") {
     throw new Error("A TTY is required for the hidden password prompt.");
   }
@@ -420,8 +564,16 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     (dependencies.output || process.stdout).write(`${BOOTSTRAP_USAGE}\n`);
     return;
   }
-  const password = await (dependencies.readPassword || readConfirmedPassword)(dependencies.io);
-  await bootstrapOwner({ ...parsed, password }, dependencies);
+  if (!parsed.manageVercel && !parsed.signupTokenStdin) {
+    throw new Error("Vercel deployment management is off. Use --signup-token-stdin for an existing registration window or --manage-vercel to create one.");
+  }
+  const password = await (dependencies.readPassword || readConfirmedPassword)(
+    dependencies.io,
+  );
+  const signupToken = parsed.signupTokenStdin
+    ? await readHiddenLine("Existing signup token: ", dependencies.io)
+    : undefined;
+  await bootstrapOwner({ ...parsed, password, signupToken }, dependencies);
 }
 
 if (isDirectExecution()) {
