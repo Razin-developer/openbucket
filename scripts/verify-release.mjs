@@ -21,6 +21,7 @@ async function requireFile(relativePath) {
 const packageJson = await readJson("package.json");
 const packageLock = await readJson("package-lock.json");
 const daemonSource = await readFile(resolve(root, "src/daemon/index.ts"), "utf8");
+const releaseWorkflow = await readFile(resolve(root, ".github/workflows/release.yml"), "utf8");
 
 if (packageJson.name !== "openbucket") failures.push("package.json name must be openbucket.");
 if (packageJson.private !== false) failures.push("package.json private must be false.");
@@ -37,6 +38,9 @@ if (packageLock.version !== packageJson.version || packageLock.packages?.[""]?.v
 
 const daemonVersion = /OPENBUCKET_VERSION\s*=\s*"([^"]+)"/.exec(daemonSource)?.[1];
 if (daemonVersion !== packageJson.version) failures.push("Daemon version does not match package.json.");
+if (!releaseWorkflow.includes("npm publish ./npm-dist/*.tgz --access public")) {
+  failures.push("npm publishing must use an explicit relative tarball path.");
+}
 
 try {
   const pythonProject = await readFile(resolve(root, "python/pyproject.toml"), "utf8");
