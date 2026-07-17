@@ -38,6 +38,8 @@ flowchart TB
 
 The management and S3 listeners are independent Node HTTP servers. A slow or failed dashboard does not replace either API. They share a `DiskStore` instance, state, request logger, and shutdown lifecycle.
 
+In the normal account-connected flow, the CLI separately authenticates to the hosted control plane, registers a DNS-safe node name, stores a permission-restricted node credential, and sends periodic heartbeat/storage/request-counter deltas. MongoDB stores those summaries and usage events, never object bytes or daemon/S3 secrets. `--offline` skips that entire path for local development.
+
 ## Source ownership
 
 | Component | Source | Responsibility |
@@ -50,6 +52,8 @@ The management and S3 listeners are independent Node HTTP servers. A slow or fai
 | Embedded dashboard server | `src/dashboard/server.ts` | Load built vinext worker/assets and serve a local HTTP URL from the daemon process |
 | Dashboard client | `app/dashboard.tsx` | Live management API UI, connection storage, user actions, display normalization |
 | Web build/runtime | vinext build output in `dist/client` and `dist/server` | Production dashboard rendering and assets |
+| Hosted account API | `server/auth/*`, `api/auth/*` | Owner bootstrap, password verification, opaque sessions, account rate limits |
+| Hosted control plane | `server/control-plane/*`, `api/nodes/*`, `api/node/*`, `api/usage.ts`, `api/admin/*` | Node credentials, heartbeat/usage, discovery, account/admin reads |
 
 ## Startup flow
 
@@ -84,7 +88,7 @@ The launch URL adds an `api` query parameter containing the connectable manageme
 
 Detached mode starts the same CLI as a child with `--internal-foreground --no-open`, redirects ordinary stdout/stderr to the detached log, and polls `/healthz`. On first start, the child places the initial S3 credential temporarily in `active.json` but suppresses it from its own log banner. The parent prints the credential in the invoking terminal and atomically scrubs it from active state. A parent crash in that short handoff window can leave the temporary field, so the state directory remains a secret boundary.
 
-With `--tunnel`, listener and dashboard startup happen first. The CLI then starts S3 and management Quick Tunnels concurrently and adds a dashboard tunnel only when the dashboard URL is local. It mutates the live advertised/share URL and exact CORS origins only after every required tunnel publishes a canonical HTTPS `trycloudflare.com` origin. Partial startup stops all published tunnels and the daemon. Active state retains local management/S3 URLs for CLI control plus the remote dashboard API/public S3 URLs for display and secure dashboard pairing.
+Account-connected `serve` first verifies the saved hosted session and registers/loads a node credential. With no managed public base URL it defaults to an S3-only Quick Tunnel, then reports the endpoint and counters through periodic heartbeats. Offline explicit-tunnel mode also publishes management and a local dashboard. Partial tunnel startup stops published tunnels and the daemon.
 
 ## Listen addresses and advertised addresses
 
@@ -93,8 +97,8 @@ With `--tunnel`, listener and dashboard startup happen first. The CLI then start
 - The embedded dashboard defaults to `http://localhost:3000` and accepts only local HTTP hostnames (`localhost`, `127.0.0.1`, or `::1`).
 - `0.0.0.0`/`::` listener addresses are converted to loopback in returned/CLI connection URLs; wildcard addresses are listen targets, not connectable destinations.
 - Port `0` asks the OS for an ephemeral API port.
-- Outside Quick Tunnel mode, `OPENBUCKET_PUBLIC_BASE_URL` is advertised and used as the `/files` share-link root. It does not bind an interface or create a proxy.
-- `--tunnel` keeps listeners on their configured local addresses and publishes separate temporary HTTPS origins through supervised `cloudflared` children. These origins are development endpoints, not a stable control plane.
+- `OPENBUCKET_PUBLIC_BASE_URL` advertises the `/files` root, disables the automatic Quick Tunnel, and reports a managed route. It does not bind an interface or create a proxy.
+- Account-connected Quick Tunnel mode publishes a temporary S3 HTTPS origin through supervised `cloudflared`; it is development/preview metadata, not stable production infrastructure.
 
 The Docker deployment disables the embedded dashboard and runs a separate dashboard server so it can bind `0.0.0.0` inside its container.
 

@@ -85,7 +85,8 @@ fi
 
 if command -v openbucket >/dev/null 2>&1; then
   openbucket version
-  echo "Installed successfully. Run: openbucket serve /path/to/storage"
+  echo "Installed successfully. Run: openbucket login --email you@example.com"
+  echo "Then serve a disk: openbucket serve /path/to/storage --name my-node"
 else
   echo "npm completed, but openbucket is not on PATH." >&2
   if [ -n "$prefix" ]; then

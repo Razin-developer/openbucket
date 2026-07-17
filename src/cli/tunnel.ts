@@ -123,7 +123,7 @@ export async function startQuickTunnel(
         stdio: ["ignore", "pipe", "pipe"],
         windowsHide: true,
         shell: false,
-        env: options.env ?? process.env,
+        env: options.env ?? sanitizeQuickTunnelEnvironment(),
       },
     );
   } catch (error) {
@@ -211,4 +211,45 @@ export async function startQuickTunnel(
   };
 
   return { origin, url: publicUrl, process: child, closed, stop };
+}
+
+const QUICK_TUNNEL_ENVIRONMENT_KEYS = new Set([
+  "ALL_PROXY",
+  "APPDATA",
+  "COMSPEC",
+  "HOME",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "LANG",
+  "LANGUAGE",
+  "LC_ALL",
+  "LC_CTYPE",
+  "LOCALAPPDATA",
+  "NO_PROXY",
+  "PATH",
+  "PATHEXT",
+  "PROGRAMDATA",
+  "SSL_CERT_DIR",
+  "SSL_CERT_FILE",
+  "SYSTEMROOT",
+  "TEMP",
+  "TERM",
+  "TMP",
+  "TMPDIR",
+  "TZ",
+  "USERPROFILE",
+  "WINDIR",
+]);
+
+/** Keep the tunnel child functional without leaking application credentials. */
+export function sanitizeQuickTunnelEnvironment(
+  environment: NodeJS.ProcessEnv = process.env,
+): NodeJS.ProcessEnv {
+  const sanitized: NodeJS.ProcessEnv = {};
+  for (const [name, value] of Object.entries(environment)) {
+    if (value !== undefined && QUICK_TUNNEL_ENVIRONMENT_KEYS.has(name.toUpperCase())) {
+      sanitized[name] = value;
+    }
+  }
+  return sanitized;
 }

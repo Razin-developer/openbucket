@@ -7,6 +7,7 @@ export type UserDocument = {
   emailNormalized: string;
   name: string | null;
   passwordHash: string;
+  role?: "admin" | "member";
   status: "active" | "disabled";
   createdAt: Date;
   updatedAt: Date;
@@ -119,11 +120,16 @@ async function ensureIndexes(database: Db): Promise<void> {
   await pending;
 }
 
-export async function getAuthCollections(): Promise<AuthCollections> {
+export async function getAuthDatabaseContext(): Promise<{ client: MongoClient; database: Db }> {
   const config = getAuthConfig();
   const client = await getClient();
   const database = client.db(config.database);
   await ensureIndexes(database);
+  return { client, database };
+}
+
+export async function getAuthCollections(): Promise<AuthCollections> {
+  const { database } = await getAuthDatabaseContext();
   return {
     users: database.collection<UserDocument>("users"),
     sessions: database.collection<SessionDocument>("sessions"),

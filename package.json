@@ -1,6 +1,6 @@
 {
   "name": "openbucket",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Turn any local disk or folder into S3-compatible object storage.",
   "author": "Razin",
   "license": "Apache-2.0",
@@ -36,7 +36,9 @@
     ".env.example",
     "README.md",
     "CHANGELOG.md",
-    "LICENSE"
+    "LICENSE",
+    "!**/*.rej",
+    "!**/.tmp-*.patch"
   ],
   "engines": {
     "node": ">=22.13.0"
@@ -47,7 +49,8 @@
   "scripts": {
     "dev": "vinext dev",
     "dev:vercel": "vite --config vite.vercel.config.ts",
-    "dev:daemon": "tsx src/cli/main.ts serve ./.openbucket-data --no-open",
+    "dev:daemon": "tsx src/cli/main.ts serve ./.openbucket-data --offline --no-tunnel --no-open",
+    "bootstrap:owner": "node scripts/bootstrap-owner.mjs",
     "openbucket": "tsx src/cli/main.ts",
     "build": "npm run build:web && npm run build:cli",
     "build:cli": "tsc -p tsconfig.node.json",
@@ -57,10 +60,12 @@
     "prepublishOnly": "npm run release:check",
     "start": "vinext start",
     "type-check": "tsc --noEmit && tsc -p tsconfig.node.json --noEmit",
-    "test": "npm run test:unit && npm run test:auth && npm run test:web && npm run test:docs",
+    "test": "npm run test:unit && npm run test:auth && npm run test:control-plane && npm run test:web && npm run test:docs",
     "test:unit": "npm run build:cli && node --test tests/daemon/*.test.mjs tests/cli/*.test.mjs",
     "test:auth": "tsx --test tests/auth/*.test.ts",
     "test:auth:integration": "tsx --test tests/auth/integration.test.ts",
+    "test:control-plane": "tsx --test tests/control-plane/*.test.ts",
+    "test:control-plane:integration": "tsx --test tests/control-plane/integration.test.ts",
     "test:web": "npm run build && node --test tests/rendered-html.test.mjs tests/dashboard-server.test.mjs",
     "test:docs": "node --test tests/docs-links.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern vercel-dist --ignore-pattern .next --ignore-pattern .vinext --ignore-pattern node_modules --ignore-pattern python/.venv --ignore-pattern python/dist --ignore-pattern python/build",

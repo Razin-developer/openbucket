@@ -113,12 +113,12 @@ The dashboard saves the normalized management URL in local storage. Admin tokens
 
 ### Hosted account boundary
 
-The Vercel `/dashboard` route additionally requires a hosted account session backed by MongoDB. That session controls access to the hosted route only; it is not a daemon credential and does not authorize management or S3 operations. The browser must still pair with a real daemon bearer token.
+The Vercel `/dashboard` requires a MongoDB-backed account session. It authorizes account-scoped node/usage reads and admin aggregates for admins, but it is not a daemon or S3 credential. The **Live node** browser still pairs with the separate daemon bearer.
 
-MongoDB stores hosted users, password verifiers, opaque sessions, and rate-limit records. It must never store object bytes, `OPENBUCKET_ADMIN_TOKEN`, S3 access/secret keys, share tokens, or local node state. Those remain within the browser/daemon boundary. The locally served dashboard remains account-free so OpenBucket can operate offline without Vercel or MongoDB.
+MongoDB stores users, password verifiers, sessions, bootstrap/rate-limit records, node registrations, hashed node credentials, endpoint/heartbeat/storage summaries, and aggregate usage events. It must never store object bytes, raw node credentials, management/S3 secrets, share tokens, or authoritative local state. Explicit `--offline` development sends no hosted node/usage/discovery state.
 
 Keep `MONGODB_URI` and `OPENBUCKET_AUTH_SECRET` server-only, rotate any disclosed URI immediately, use a unique production database user, and disable public signup after creating the intended owner account.
-Owner bootstrap requires a separate high-entropy `OPENBUCKET_SIGNUP_TOKEN`. The first successful registration atomically consumes a MongoDB bootstrap record, preventing concurrent or historical-deployment reuse; remove the token and disable signup afterward.
+Owner bootstrap requires a distinct high-entropy token and an atomic MongoDB claim. Prefer `node scripts/bootstrap-owner.mjs`; it uses a hidden prompt, sends Vercel values over stdin, and always attempts to close signup, remove the token, and redeploy.
 
 ## S3 authentication and authorization
 
@@ -155,9 +155,9 @@ The container image sets `OPENBUCKET_SHOW_INITIAL_CREDENTIALS=false` because con
 
 ## Quick Tunnel boundary
 
-`--tunnel` starts real `cloudflared` Quick Tunnel subprocesses for S3 and management and, when needed, the local dashboard. Local listeners remain loopback-bound, while the generated `*.trycloudflare.com` origins are internet reachable over HTTPS. OpenBucket validates the generated hostname shape, never invokes a shell, supervises the child processes, and stops them with the daemon.
+Account-connected Quick Tunnel mode starts a real S3-only `cloudflared` subprocess. Offline explicit-tunnel mode can additionally publish management and the local dashboard for a controlled demo. Local listeners remain loopback-bound; published `*.trycloudflare.com` origins are internet reachable. OpenBucket validates generated hostnames, never invokes a shell, supervises children, and stops them with the daemon.
 
-Quick Tunnel management requests still require the full-control bearer token, passed to the dashboard in a URL fragment and removed immediately. This is suitable for a controlled demo, not a production authorization boundary: anyone who obtains that token can create/delete buckets and objects, issue/revoke S3 keys, read logs, and stop the node. Quick Tunnel URLs are random, not access control. For production, use a named tunnel or proxy with an independent identity/access policy, rate limits, monitoring, and deliberate origin allow-listing.
+When offline demo mode tunnels management, requests still require the full-control bearer token, passed in a dashboard URL fragment and removed immediately. Anyone who obtains it can control the node. Quick Tunnel URLs are random and are not access control or production infrastructure. Use a named tunnel/proxy with independent identity, rate limits, monitoring, and deliberate origin allow-listing for production.
 
 Recommended controls:
 

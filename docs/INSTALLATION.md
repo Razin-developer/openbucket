@@ -16,8 +16,11 @@ The normal installation is a global npm package:
 ```bash
 npm install --global openbucket@0.1.0
 openbucket version
-openbucket serve /path/to/storage
+openbucket login --email you@example.com
+openbucket serve /path/to/storage --name my-node
 ```
+
+`login` uses a hidden password prompt. Override the hosted origin with `--control-plane-url` or `OPENBUCKET_CONTROL_PLANE_URL`.
 
 Pin a production deployment to an exact version:
 
@@ -33,28 +36,39 @@ npx --yes openbucket@0.1.0 version
 
 Use a global, version-pinned install for a long-running daemon so an npm cache cleanup cannot affect process restarts.
 
-## Run the daemon and local dashboard
+## Run the daemon and dashboards
 
-For an interactive or workstation installation:
+For an account-connected installation:
 
 ```bash
-openbucket serve /absolute/path/to/storage --detach --no-open
+openbucket login --email you@example.com
+openbucket serve /absolute/path/to/storage --name my-node --detach --no-open
 openbucket dashboard
 openbucket status
 ```
 
-The npm package contains the production local dashboard. `openbucket dashboard` opens and pairs it with the daemon; MongoDB and a hosted OpenBucket account are not required.
+`serve` registers the node and reports heartbeat, storage, and request counters. Without `OPENBUCKET_PUBLIC_BASE_URL`, it automatically starts an S3-only Quick Tunnel. That endpoint is development/preview only. The hosted `/dashboard` reads real MongoDB-backed node and usage state; `openbucket dashboard` opens the direct local daemon console.
+
+For standalone local development only:
+
+```bash
+openbucket serve /absolute/path/to/storage --name dev-node --offline
+```
+
+`--offline` (or `OPENBUCKET_OFFLINE=true`) disables account requirements, registration, metering, discovery, and automatic tunneling.
 
 For a long-running production host, run foreground mode under an OS service manager or container restart policy:
 
 ```bash
 export OPENBUCKET_ADMIN_TOKEN="$(node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))")"
 export OPENBUCKET_HOME=/var/lib/openbucket/state
+export OPENBUCKET_PUBLIC_BASE_URL=https://s3.example.com
 openbucket doctor /srv/openbucket
-openbucket serve /srv/openbucket --no-open
+openbucket login --email owner@example.com
+openbucket serve /srv/openbucket --name production-node --no-tunnel --no-open
 ```
 
-Use a dedicated non-root account, protect the token/environment file, configure graceful `SIGTERM`, rotate logs externally, and back up the entire storage root including `.openbucket`. Detached mode is convenient process detachment, not boot-time service registration. See [Operating OpenBucket](OPERATIONS.md).
+Route the stable origin to the S3 listener first; the variable does not provision DNS, TLS, or a proxy. Use a dedicated non-root account, protect token/environment and CLI credential files, configure graceful `SIGTERM`, rotate logs externally, and back up the entire storage root including `.openbucket`. See [Operating OpenBucket](OPERATIONS.md).
 
 ## GitHub release tarball
 
@@ -106,11 +120,14 @@ git clone https://github.com/Razin-developer/openbucket.git
 cd openbucket
 cp .env.example .env
 # Set a random OPENBUCKET_ADMIN_TOKEN with at least 32 bytes in .env.
+# Keep OPENBUCKET_TUNNEL=false unless this image deliberately includes cloudflared.
+docker compose build daemon
+docker compose run --rm daemon login --email owner@example.com
 docker compose up --build -d
 docker compose ps
 ```
 
-Compose keeps object data and CLI state in named volumes by default, binds host ports to loopback, and runs separate daemon and dashboard services. Set `OPENBUCKET_STORAGE_MOUNT` in `.env` to use a host directory.
+`docker compose run --rm` mounts the same declared `openbucket-state` volume at `/state`; the hidden-password login survives removal of the one-off container and the daemon later stores its node credential there. Compose keeps object bytes in `openbucket-data`, binds host ports to loopback, and runs separate daemon/dashboard services. Set `OPENBUCKET_STORAGE_MOUNT` for a host directory. Configure `OPENBUCKET_PUBLIC_BASE_URL` only after a managed route exists. The standard image does not include `cloudflared`, and Quick Tunnel is development-only even in a custom image that adds it.
 
 The first successful unified release is expected to publish:
 

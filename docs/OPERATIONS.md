@@ -98,7 +98,7 @@ Set `OPENBUCKET_DASHBOARD_URL` to the origin users actually open so the daemon c
 
 ### Vercel-hosted dashboard
 
-The Vercel `/dashboard` route requires a hosted MongoDB-backed account session, then acts as an independent browser client; it never moves object data or daemon state into Vercel or MongoDB. Configure the exact `*.vercel.app` origin in `OPENBUCKET_DASHBOARD_URL`/`OPENBUCKET_ALLOWED_ORIGINS`, expose the management API through an authenticated HTTPS access layer, and enter the daemon bearer token in the connection dialog. The hosted account session and daemon bearer are separate security boundaries. Never compile that token into a dashboard environment variable. The local `openbucket dashboard` flow remains account-free. See [Hosting the web application](VERCEL.md).
+The Vercel `/dashboard` requires a MongoDB-backed session and reads registered nodes, heartbeat/storage summaries, aggregate usage, and admin totals. Object bytes and daemon/S3 secrets never enter MongoDB. Its **Live node** view is a separate direct browser client: configure exact CORS, independently protect management, and enter its bearer in the dialog. Explicit `--offline` development remains local and unregistered. See [Hosting the web application](VERCEL.md).
 
 ## Docker Compose
 
@@ -108,10 +108,15 @@ Prepare configuration:
 cp .env.example .env
 node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"
 # Put that result in .env as OPENBUCKET_ADMIN_TOKEN.
+# Keep OPENBUCKET_TUNNEL=false unless the image deliberately includes cloudflared.
 docker compose config
+docker compose build daemon
+docker compose run --rm daemon login --email owner@example.com
 docker compose up --build -d
 docker compose ps
 ```
+
+The login command uses a hidden prompt and mounts `openbucket-state` at `/state`, so its account session persists after the one-off container is removed. The daemon stores its node credential in the same volume. Never replace it with an anonymous `/state` mount. Set `OPENBUCKET_PUBLIC_BASE_URL` only after provisioning a managed S3 route; the standard image has no `cloudflared`, and Quick Tunnel remains development-only in custom images.
 
 Open the dashboard and enter the exact `OPENBUCKET_ADMIN_TOKEN` from `.env` in Connection settings. The secret is intentionally not injected into the dashboard image/container; it stays in the browser's API-scoped session storage after entry.
 
@@ -128,7 +133,7 @@ Compose runs:
 - `daemon`: compiled CLI/daemon as unprivileged `node`, embedded dashboard disabled;
 - `dashboard`: production vinext server on container port 3000;
 - `openbucket-data`: default object/state-root named volume;
-- `openbucket-state`: CLI active-state and detached-log named volume.
+- `openbucket-state`: persistent account session, node credential, CLI active state, and detached log mounted at `/state`.
 
 Host ports bind to `127.0.0.1` by default. `OPENBUCKET_DOCKER_BIND_HOST=0.0.0.0` expands exposure and must be paired with network controls.
 
@@ -355,15 +360,16 @@ Individual share links cannot be revoked directly. Delete/rename the object, wai
 
 ### Supervised Quick Tunnel (development/demo)
 
-Install `cloudflared`, then run:
+Install `cloudflared`, log in, then run:
 
 ```bash
-openbucket serve /srv/openbucket --tunnel --detach
+openbucket login --email owner@example.com
+openbucket serve /srv/openbucket --name demo-node --detach
 ```
 
-`OPENBUCKET_TUNNEL=quick` is the environment equivalent. Set `OPENBUCKET_CLOUDFLARED_PATH` when the executable is not on `PATH`. OpenBucket starts separate S3 and management Quick Tunnels and, for a local dashboard, a third dashboard tunnel. It accepts only a canonical HTTPS `*.trycloudflare.com` URL from each child, advertises the remote S3/share root, adds the effective dashboard origin to CORS, stores local control URLs separately from remote dashboard pairing, and terminates every child during stop or failed startup.
+Authenticated `serve` defaults to an S3-only Quick Tunnel when no managed public URL exists. `OPENBUCKET_TUNNEL=quick`/`--tunnel` requests it explicitly; `false`/`--no-tunnel` disables it. Offline explicit-tunnel demos also publish management and a local dashboard. All supervised children stop with the daemon.
 
-Quick Tunnels have random restart-dependent URLs and are explicitly not production infrastructure. The tunneled management API is internet reachable and protected by the full-control bearer token; the URL itself is not a secret or an access policy. Keep the printed token private, use `openbucket dashboard` for fragment-based pairing, and stop the node after the demo. If `cloudflared` exits unexpectedly, OpenBucket keeps local storage online, writes a warning, and requires a daemon restart to establish new tunnel URLs.
+Quick Tunnels have random restart-dependent URLs and are not production infrastructure or an SLA endpoint. If `cloudflared` exits, local storage remains online and a restart is required for a new public URL.
 
 ### Stable production proxy or named tunnel
 
@@ -406,13 +412,19 @@ server {
 
 For Cloudflare Tunnel, create and operate a named tunnel in your Cloudflare account that maps a stable storage hostname to `http://127.0.0.1:8333`. Follow current Cloudflare documentation for authentication, DNS routing, ingress configuration, upload limits, and service operation. Protect any separately routed management hostname with both the OpenBucket bearer and an independent Cloudflare Access/network policy.
 
-After the route and TLS work, configure:
+After route/TLS provisioning, log in and advertise it:
 
-```dotenv
-OPENBUCKET_PUBLIC_BASE_URL=https://storage.example.com
+```bash
+openbucket login --email owner@example.com
+OPENBUCKET_PUBLIC_BASE_URL=https://s3.example.com \
+  openbucket serve /srv/openbucket --name production-node --no-tunnel
 ```
 
-This makes status and newly generated share links advertise that root. It does not verify the proxy. Test:
+This reports a managed endpoint in status/discovery and new share links. It does not verify or provision the proxy. `/<node-name>` is a locator only. Server-only `OPENBUCKET_NODE_DOMAIN` controls future hostnames but also provisions nothing.
+
+For standalone local development, `--offline` disables registration, metering, discovery, and automatic tunneling.
+
+Test:
 
 - signed list/put/get/delete using the public endpoint;
 - encoded keys and duplicate query values;

@@ -48,3 +48,37 @@ test("shutdown aborts a stalled request within the grace deadline and releases t
   assert.ok(Date.now() - startedAt < 3_500, "shutdown should force-close stalled HTTP connections");
   await assert.rejects(access(join(root, ".openbucket", "daemon.lock")), { code: "ENOENT" });
 });
+
+test("API-triggered shutdown awaits the beforeStop hook while management is live", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "openbucket-before-stop-"));
+  let daemon;
+  let hookCalls = 0;
+  let healthStatus = 0;
+  t.after(async () => {
+    await daemon?.stop().catch(() => undefined);
+    await rm(root, { recursive: true, force: true });
+  });
+
+  daemon = await startDaemon({
+    storageRoot: root,
+    managementPort: 0,
+    s3Port: 0,
+    adminToken: "before-stop-test-token-0123456789abcdef",
+    beforeStop: async () => {
+      hookCalls += 1;
+      healthStatus = (await fetch(`${daemon.config.managementUrl}/healthz`)).status;
+    },
+  });
+  const response = await fetch(`${daemon.config.managementUrl}/v1/stop`, {
+    method: "POST",
+    headers: {
+      authorization: "Bearer before-stop-test-token-0123456789abcdef",
+      "content-type": "application/json",
+    },
+    body: "{}",
+  });
+  assert.equal(response.status, 202, await response.text());
+  await daemon.stopped;
+  assert.equal(hookCalls, 1);
+  assert.equal(healthStatus, 200);
+});

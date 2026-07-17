@@ -1,9 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { Dashboard } from "../app/dashboard";
+import { HostedControlPlane, type AccountUser } from "./control-plane";
 import { SiteShell } from "./site-shell";
 
-type User = { id: string; email: string; name: string | null };
+type User = AccountUser;
 type AuthResponse = { user?: User; error?: { code?: string; message?: string } };
 type GateState = { kind: "loading" } | { kind: "ready"; user: User } | { kind: "error"; message: string };
 
@@ -77,30 +77,13 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
               {error ? <div className="auth-error" role="alert"><span aria-hidden="true">!</span>{error}</div> : null}
               <button className="site-button dark auth-submit" type="submit" disabled={busy}>{busy ? "Please wait…" : registering ? "Create account" : "Sign in"}</button>
             </form>
-            <p className="auth-switch">{registering ? "Already have an account?" : "New to OpenBucket?"} <a href={registering ? "/login" : "/register"}>{registering ? "Sign in" : "Create one"}</a></p>
+            {registering ? <p className="auth-switch">Already have an account? <a href="/login">Sign in</a></p>
+              : <p className="auth-switch">Need an owner account? <a href="/docs#dashboard">Owner setup guide</a></p>}
             <p className="auth-privacy">Web authentication protects the hosted route. Your local daemon still requires its own management token, kept in this tab&apos;s session storage.</p>
           </div>
         </section>
       </main>
     </SiteShell>
-  );
-}
-
-function AccountDock({ user }: { user: User }) {
-  const [busy, setBusy] = useState(false);
-  return (
-    <aside className="account-dock" aria-label="Signed-in account">
-      <span className="account-avatar" aria-hidden="true">{(user.name || user.email).slice(0, 1).toUpperCase()}</span>
-      <div><strong>{user.name || "OpenBucket user"}</strong><small>{user.email}</small></div>
-      <button type="button" disabled={busy} onClick={async () => {
-        setBusy(true);
-        try {
-          await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: "{}" });
-        } finally {
-          window.location.assign("/");
-        }
-      }}>{busy ? "…" : "Sign out"}</button>
-    </aside>
   );
 }
 
@@ -132,5 +115,5 @@ export function ProtectedDashboard() {
   if (state.kind === "error") {
     return <main className="auth-gate"><span className="auth-gate-mark error" aria-hidden="true">!</span><h1>Dashboard unavailable</h1><p>{state.message}</p><button className="site-button dark" type="button" onClick={() => { setState({ kind: "loading" }); void loadSession(); }}>Try again</button></main>;
   }
-  return <><Dashboard /><AccountDock user={state.user} /></>;
+  return <HostedControlPlane user={state.user} />;
 }

@@ -2,7 +2,7 @@
 
 **Your disk, now S3-compatible.** OpenBucket turns a local folder, disk, SSD, or mounted NAS path into object storage with a small Node.js daemon, an Ollama-style CLI, and a browser dashboard.
 
-OpenBucket writes real object bytes to the directory you choose. There is no fake dataset and no required hosted control plane. Existing S3 clients connect to the local S3 endpoint; the CLI and dashboard use a separate management API.
+OpenBucket writes real object bytes to the directory you choose. The normal production flow uses the hosted control plane for account login, node registration, heartbeat state, and aggregate usage; object bytes and S3/management credentials stay on the node. A deliberate `--offline` mode keeps standalone local development possible without an account.
 
 > OpenBucket is currently a single-node, self-hosted v0.1 product. It is useful for development, homelabs, local backup targets, and trusted private networks. Read [Security](#security) and [Current limitations](#current-limitations) before exposing it outside a machine you control.
 
@@ -16,7 +16,7 @@ The Node daemon and CLI are published as [`openbucket@0.1.0`](https://www.npmjs.
 - Path-style bucket/object CRUD, ranges, copy, basic ListObjectsV2 pagination, and multipart upload.
 - Read-only and bucket-scoped S3 access keys, anonymous reads for explicitly public buckets, and expiring share links.
 - A responsive dashboard for status, buckets, uploads/downloads, keys, connections, logs, and analytics.
-- Opt-in supervised Cloudflare Quick Tunnels that make the S3 API, authenticated management API, and local dashboard reachable over temporary HTTPS URLs for development/demo use.
+- Account-connected node registration, usage/heartbeat reporting, and an automatic S3-only Cloudflare Quick Tunnel when no managed public URL is configured; Quick Tunnels are development/preview infrastructure, not production routing.
 - A management REST API, request logs, health checks, Docker targets, Compose, examples, tests, and operations documentation.
 - A typed `openbucket-client` Python management SDK and console client.
 - A production Vercel dashboard target plus CI, security scanning, trusted publishing, SBOM/provenance-attested containers, and release workflows.
@@ -25,18 +25,29 @@ The desktop application is intentionally deferred. See [the product plan](docs/P
 
 ## 60-second local quickstart
 
-Requirements: Node.js 22.13 or newer and npm. `--tunnel` additionally requires an installed `cloudflared` executable.
+Requirements: Node.js 22.13 or newer and npm. The normal account-connected flow also requires `cloudflared` unless you configure a managed public URL or explicitly disable tunneling.
 
-From this repository:
+From this repository, log in with the hidden password prompt, then register and serve a DNS-safe node name:
 
 ```bash
 npm ci
 npm run build
-npm run openbucket -- serve ./openbucket-data --detach --no-open
+npm run openbucket -- login --email you@example.com
+npm run openbucket -- serve ./openbucket-data --name home-node --detach --no-open
 npm run openbucket -- dashboard
 npm run openbucket -- bucket create photos
 npm run openbucket -- status
 ```
+
+`serve` registers the node, stores its node credential in the permission-restricted CLI home, reports heartbeat/storage/request counters, and starts an S3-only Quick Tunnel when no `OPENBUCKET_PUBLIC_BASE_URL` exists. Quick Tunnel URLs change on restart and are suitable only for development or preview.
+
+For standalone local development with no hosted login, metering, discovery, or tunnel:
+
+```bash
+npm run openbucket -- serve ./openbucket-data --name dev-node --offline --detach --no-open
+```
+
+`--offline` (or `OPENBUCKET_OFFLINE=true`) is an explicit local-development escape hatch, not the recommended production mode.
 
 The first start prints an initial S3 access key and secret. Save them in a password manager; later key listings omit secrets. During detached first start, the credential passes briefly through the permission-restricted CLI active-state file until the parent prints and scrubs it. The daemon is now serving:
 
@@ -53,17 +64,18 @@ When finished:
 npm run openbucket -- stop
 ```
 
-## Public HTTPS demo in one command
+## Temporary public HTTPS
 
-After [installing `cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), run:
+After [installing `cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/), an authenticated `serve` automatically opens an S3-only Quick Tunnel when no managed public base URL is configured. `--tunnel` requests the same mode explicitly:
 
 ```bash
-openbucket serve /path/to/storage --tunnel --detach
+openbucket login --email you@example.com
+openbucket serve /path/to/storage --name demo-node --tunnel --detach
 ```
 
-OpenBucket starts and supervises separate temporary HTTPS tunnels for S3 and management. When the configured dashboard is local, it also tunnels the dashboard; when it is already an HTTPS deployment, that URL is paired with the tunneled management API. The banner prints the usable public endpoints, and `openbucket stop` terminates the daemon and every supervised tunnel.
+For an account-connected node, the supervised tunnel exposes S3 only; account and heartbeat traffic use the hosted control-plane API. Offline explicit-tunnel mode also exposes management and the local dashboard for a controlled demo. The banner prints the usable endpoints, and `openbucket stop` terminates the daemon and supervised tunnels.
 
-Quick Tunnel URLs change on restart and Cloudflare documents them as development/testing infrastructure with no uptime guarantee, a 200 in-flight request limit, and no SSE support. The remote management URL still requires the random bearer token, but possession of that token grants full node control. Use a named tunnel/reverse proxy with an independent access policy for production.
+Quick Tunnel URLs change on restart and Cloudflare documents them as development/testing infrastructure with no uptime guarantee, a 200 in-flight request limit, and no SSE support. Account-connected mode tunnels only S3. An offline explicit-tunnel demo may also expose management, which still requires the full-control bearer token. Use a named tunnel/reverse proxy with an independent access policy for production.
 
 ## Install the CLI
 
@@ -80,7 +92,7 @@ openbucket version
 
 ```bash
 npm pack
-npm install --global ./openbucket-0.1.0.tgz
+npm install --global ./openbucket-0.1.1.tgz
 ```
 
 ### From npm
@@ -90,8 +102,11 @@ Version `0.1.0` is live on the npm registry:
 ```bash
 npm install --global openbucket@0.1.0
 openbucket version
-openbucket serve /path/to/storage
+openbucket login --email you@example.com
+openbucket serve /path/to/storage --name my-node
 ```
+
+The password prompt is hidden. Use `OPENBUCKET_CONTROL_PLANE_URL` or `--control-plane-url` when the hosted API is not the default deployment.
 
 Use the explicit version in unattended production and review [all installation methods](docs/INSTALLATION.md). The Python client, GHCR images, and GitHub release assets are not published yet; those begin with the next unified release.
 
@@ -259,10 +274,19 @@ If the dashboard and daemon have different origins, set `OPENBUCKET_DASHBOARD_UR
 - `/docs` is the public documentation page;
 - `/login` and `/register` establish a hosted web session;
   Registration is a one-time owner bootstrap protected by an independent setup token and an atomic MongoDB claim;
-- `/dashboard` requires that hosted session and then connects from the browser to a real OpenBucket daemon.
+- `/dashboard` requires that hosted session and shows registered nodes, heartbeat/storage state, metered usage, and an admin-only aggregate overview; its **Live node** console still connects directly to a daemon management API;
+- `/<node-name>` is a public, rate-limited discovery document for a discoverable node's current S3 endpoint. It is metadata only: Vercel does not proxy or redirect S3 object traffic.
 
-MongoDB stores only hosted users, password verifiers, sessions, and rate-limit records. Object bytes remain on the daemon's disk, while daemon management tokens and S3 credentials remain in the browser/daemon boundary and are never persisted to MongoDB. The locally embedded dashboard remains account-free and works without MongoDB through `openbucket dashboard`.
+MongoDB stores hosted users, password verifiers, sessions, bootstrap/rate-limit records, node registrations, hashed node credentials, latest heartbeat/storage summaries, and aggregate usage events. Object bytes remain on the daemon's disk; raw node credentials, daemon management tokens, and S3 credentials are never persisted to MongoDB. The local dashboard can still be used in explicit `--offline` development mode.
 The bootstrap record is retained after success and the raw setup token is never stored, so older immutable deployment URLs cannot register another owner.
+
+After the permanent MongoDB/auth variables are configured and the Vercel project is linked, create the first owner with the guarded helper:
+
+```bash
+node scripts/bootstrap-owner.mjs --email owner@example.com --name "Owner" --url https://openbucket-eight.vercel.app
+```
+
+It prompts twice without echo, sends the temporary token to Vercel over stdin, deploys the registration window, registers against the same origin, and then disables signup, removes the token, and redeploys even when registration fails.
 
 GitHub Actions verifies the exact production commit without storing Vercel credentials. Later domain changes require only environment and DNS updates. Follow [the Vercel deployment guide](docs/VERCEL.md) for server-only authentication variables, CORS, production verification, and the later `openbucket.dev` cutover.
 
@@ -273,8 +297,13 @@ Compose starts two real services: the daemon and the production dashboard.
 ```bash
 cp .env.example .env
 # Replace OPENBUCKET_ADMIN_TOKEN in .env with a random value.
-docker compose up --build
+# Keep OPENBUCKET_TUNNEL=false: the standard image has no cloudflared.
+docker compose build daemon
+docker compose run --rm daemon login --email owner@example.com
+docker compose up --build -d
 ```
+
+The one-off login mounts the declared `openbucket-state` volume at `/state`, so the account session and later node credential survive removal of that temporary container. Do not use an anonymous `/state` volume. Configure `OPENBUCKET_PUBLIC_BASE_URL` only after a managed S3 route exists; Quick Tunnel needs a deliberately extended image containing `cloudflared` and remains development-only.
 
 Open `http://localhost:3000` and enter the same `OPENBUCKET_ADMIN_TOKEN` from `.env` in Connection settings. The dashboard service does not receive that secret as a build argument or container environment variable.
 
@@ -311,16 +340,22 @@ The host-side bind address defaults to `127.0.0.1`. Set `OPENBUCKET_DOCKER_BIND_
 
 ## Public access and `openbucket.dev` URLs
 
-For a zero-account development/demo endpoint, use `--tunnel` as described above. For a stable production hostname, configure a named tunnel or reverse proxy you operate, then advertise its real origins:
+For development, account-connected `serve` automatically selects a Quick Tunnel when no public URL is configured. That endpoint is temporary. For a stable production hostname, configure a named tunnel or reverse proxy you operate and advertise its real S3 origin:
 
 ```dotenv
-OPENBUCKET_PUBLIC_BASE_URL=https://storage.example.com
+OPENBUCKET_PUBLIC_BASE_URL=https://s3.example.com
 OPENBUCKET_DASHBOARD_URL=https://console.example.com
 NEXT_PUBLIC_OPENBUCKET_API_URL=https://api.example.com
 NEXT_PUBLIC_APP_URL=https://console.example.com
 ```
 
-Outside `--tunnel` mode, `OPENBUCKET_PUBLIC_BASE_URL` changes advertised/share URLs only. It does **not** create DNS, TLS, a Cloudflare account, or a managed relay. Route the stable public origin to `http://127.0.0.1:8333`. Avoid exposing the management listener; if you must, require its bearer token and an independent network access policy.
+Then start with `--no-tunnel` (the public base URL also disables the automatic Quick Tunnel):
+
+```bash
+openbucket serve /srv/openbucket --name home-node --no-tunnel
+```
+
+`OPENBUCKET_PUBLIC_BASE_URL` changes advertised/share URLs and marks the heartbeat route as managed. It does **not** create DNS, TLS, a Cloudflare account, or a relay. Route the stable public origin to `http://127.0.0.1:8333`. The server-only `OPENBUCKET_NODE_DOMAIN` controls future discovery hostnames such as `s3.home-node.openbucket.dev`; it does not provision those routes. Avoid exposing the management listener; if you must, require its bearer token and an independent network access policy.
 
 See [Operations](docs/OPERATIONS.md#reverse-proxy-or-cloudflare-tunnel).
 
@@ -341,8 +376,10 @@ Flags take precedence over environment variables. Specific variables take preced
 | `OPENBUCKET_DASHBOARD_URL` | `http://localhost:3000` | Printed dashboard URL and exact allowed CORS origin. |
 | `OPENBUCKET_SERVE_DASHBOARD` | `true` | Serve the built dashboard in the daemon for a local HTTP dashboard URL; disable for a separate server. |
 | `OPENBUCKET_SHOW_INITIAL_CREDENTIALS` | `true` (`false` in container image) | Print the first-run S3 secret once; disable anywhere stdout/stderr is retained. |
-| `OPENBUCKET_TUNNEL` | `false` | Set `quick`/`true` to supervise temporary Cloudflare HTTPS tunnels (same as `--tunnel`). |
+| `OPENBUCKET_TUNNEL` | automatic | Authenticated serve uses a Quick Tunnel when no managed public URL exists; set `false`/`--no-tunnel` to disable it. |
 | `OPENBUCKET_CLOUDFLARED_PATH` | `cloudflared` | Executable path used by Quick Tunnel mode. |
+| `OPENBUCKET_CONTROL_PLANE_URL` | hosted production origin | Account login, node registration, heartbeat, and usage API origin. |
+| `OPENBUCKET_OFFLINE` | `false` | Local-development escape hatch that disables hosted login requirements, registration, metering, and discovery. |
 | `OPENBUCKET_ALLOWED_ORIGINS` | dashboard origin | Extra exact origins, comma-separated. Never use `*` on an exposed management API. |
 | `OPENBUCKET_ADMIN_TOKEN` / `OPENBUCKET_TOKEN` | random per CLI start | Management bearer token, at least 32 UTF-8 bytes when supplied (`ADMIN_TOKEN` wins). |
 | `OPENBUCKET_DETACH` | `false` | Start detached (`true/false`, `1/0`, `yes/no`, `on/off`). |

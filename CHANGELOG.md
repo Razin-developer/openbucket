@@ -4,11 +4,25 @@ All notable changes to OpenBucket are documented here. Published artifacts follo
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-17
+
 ### Added
 
 - Branded public landing and documentation routes for the Vercel application.
-- MongoDB-backed hosted account sessions protecting `/dashboard`, without changing the account-free local dashboard.
+- CLI `login`, `logout`, and `whoami` commands with account-gated production `serve`.
+- MongoDB-backed account nodes, heartbeat/storage state, idempotent usage metering, and admin-only aggregates.
+- Public `/<node-name>` discovery metadata and future `s3.<node>.openbucket.dev` naming.
+- S3-only automatic Cloudflare Quick Tunnel mode for authenticated development/preview nodes.
+- Real-data hosted dashboard views for registered nodes, usage, account identity, and administrators.
+- A guarded one-command owner bootstrap helper that opens and closes the Vercel registration window.
 - Version-pinnable POSIX and PowerShell installer assets on the current Vercel domain.
+
+### Security
+
+- Owner creation, its initial session, and the consumed bootstrap claim commit in one MongoDB transaction.
+- Node credentials are returned once, HMAC-hashed in MongoDB, scoped to heartbeat reporting, and rotatable/revocable.
+- Stale or regressing daemon runs are rejected so usage totals cannot be inflated by alternating heartbeats.
+- Account-connected tunnels expose S3 only; management and S3 credentials remain on the node.
 
 ## [0.1.0] - 2026-07-16
 
@@ -23,5 +37,6 @@ All notable changes to OpenBucket are documented here. Published artifacts follo
 - npm, PyPI, GHCR, GitHub release, CI, security scanning, and trusted-publishing automation.
 - Typed Python management client packaged separately as `openbucket-client`.
 
-[Unreleased]: https://github.com/Razin-developer/openbucket/compare/822e01397c2cd53ec98c33a1bb4343c468834a34...HEAD
+[Unreleased]: https://github.com/Razin-developer/openbucket/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/Razin-developer/openbucket/compare/822e01397c2cd53ec98c33a1bb4343c468834a34...v0.1.1
 [0.1.0]: https://www.npmjs.com/package/openbucket/v/0.1.0

@@ -18,6 +18,23 @@ import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createConnection, createServer } from "node:net";
 import { randomBytes, randomUUID } from "node:crypto";
+import {
+  AuthenticatedControlPlane,
+  createNodeControlPlane,
+  findNodeCredential,
+  writeNodeCredential,
+  HostedAuthError,
+  defaultAuthPrompt,
+  loginHostedAccount,
+  readAuthStdin,
+  readHostedSession,
+  removeHostedSession,
+  rotateSavedNodeCredential,
+  resolveControlPlaneUrl,
+  writeHostedSession,
+  type HostedSession,
+  type NodeCredential,
+} from "./auth-session.js";
 import { startQuickTunnel, type QuickTunnelHandle } from "./tunnel.js";
 
 export const DEFAULT_MANAGEMENT_PORT = 7272;
@@ -38,6 +55,9 @@ type CLIOptionValue = string | boolean;
 export interface ParsedCLICommand {
   command:
     | "serve"
+    | "login"
+    | "logout"
+    | "whoami"
     | "stop"
     | "status"
     | "logs"
@@ -76,6 +96,7 @@ export interface ResolvedServeConfig {
   detach: boolean;
   openDashboard: boolean;
   internalForeground: boolean;
+  offlineDevelopment: boolean;
   managementUrl: string;
   s3Url: string;
 }
@@ -88,7 +109,7 @@ export interface ActiveDaemonState {
   dashboardUrl?: string;
   dashboardApiUrl?: string;
   publicUrl?: string;
-  tunnelMode?: "quick";
+  tunnelMode?: "quick" | "managed";
   root: string;
   node: string;
   token?: string;
@@ -116,12 +137,15 @@ export interface CLIIO {
   homedir: () => string;
   fetch: FetchLike;
   spawn: SpawnLike;
+  terminateProcessTree: (child: ChildProcess) => Promise<void>;
   sleep: (milliseconds: number) => Promise<void>;
   platform: NodeJS.Platform;
   execPath: string;
   execArgv: string[];
   pid: number;
   cliPath: string;
+  prompt: (message: string, secret?: boolean) => Promise<string>;
+  readStdin: () => Promise<string>;
 }
 
 export class CLIUsageError extends Error {
@@ -157,6 +181,91 @@ export class CLIApiError extends Error {
   }
 }
 
+function waitForChildClose(child: ChildProcess, timeoutMilliseconds: number): Promise<boolean> {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve(true);
+  return new Promise((resolveClose) => {
+    let settled = false;
+    const finish = (closed: boolean): void => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.removeListener("exit", onClose);
+      child.removeListener("close", onClose);
+      resolveClose(closed);
+    };
+    const onClose = (): void => finish(true);
+    const timer = setTimeout(() => finish(false), timeoutMilliseconds);
+    child.once("exit", onClose);
+    child.once("close", onClose);
+  });
+}
+
+async function terminateDetachedProcessTree(child: ChildProcess): Promise<void> {
+  const pid = child.pid;
+  const alreadyStopped = child.exitCode !== null || child.signalCode !== null;
+  if (!pid && alreadyStopped) return;
+  if (process.platform === "win32" && pid) {
+    await new Promise<void>((resolveTaskkill) => {
+      let taskkill: ChildProcess;
+      try {
+        taskkill = nodeSpawn(
+          "taskkill.exe",
+          ["/pid", String(pid), "/t", "/f"],
+          {
+            stdio: "ignore",
+            windowsHide: true,
+            shell: false,
+          },
+        );
+      } catch {
+        resolveTaskkill();
+        return;
+      }
+      let settled = false;
+      const finish = (): void => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolveTaskkill();
+      };
+      const timer = setTimeout(finish, 5_000);
+      taskkill.once("error", finish);
+      taskkill.once("close", finish);
+    });
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGKILL");
+      await waitForChildClose(child, 2_000);
+    }
+    return;
+  }
+
+  let groupSignalled = false;
+  if (pid) {
+    try {
+      process.kill(-pid, "SIGTERM");
+      groupSignalled = true;
+    } catch {
+      // The process group may have already gone away.
+    }
+  }
+  if (!groupSignalled && child.exitCode === null && child.signalCode === null) {
+    child.kill("SIGTERM");
+  }
+  const childClosed = await waitForChildClose(child, 2_000);
+  if (pid) {
+    try {
+      process.kill(-pid, "SIGKILL");
+    } catch {
+      if (!childClosed && child.exitCode === null && child.signalCode === null) {
+        child.kill("SIGKILL");
+      }
+    }
+  } else if (!childClosed && child.exitCode === null && child.signalCode === null) {
+    child.kill("SIGKILL");
+  }
+  await waitForChildClose(child, 2_000);
+}
+
 function defaultIO(overrides: Partial<CLIIO> = {}): CLIIO {
   return {
     stdout: process.stdout,
@@ -166,6 +275,7 @@ function defaultIO(overrides: Partial<CLIIO> = {}): CLIIO {
     homedir,
     fetch: globalThis.fetch.bind(globalThis),
     spawn: (command, args, options) => nodeSpawn(command, [...args], options),
+    terminateProcessTree: terminateDetachedProcessTree,
     sleep: (milliseconds) =>
       new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds)),
     platform: process.platform,
@@ -173,6 +283,8 @@ function defaultIO(overrides: Partial<CLIIO> = {}): CLIIO {
     execArgv: [...process.execArgv],
     pid: process.pid,
     cliPath: fileURLToPath(import.meta.url),
+    prompt: defaultAuthPrompt,
+    readStdin: readAuthStdin,
     ...overrides,
   };
 }
@@ -303,18 +415,34 @@ export function parseCLIArgs(argv: readonly string[]): ParsedCLICommand {
           "detach",
           "tunnel",
           "no-tunnel",
+          "offline",
           "no-open",
           "no-credentials",
           "internal-foreground",
         ],
       );
       assertPositionals(
-        `${enteredCommand} <directory> [--name N] [--management-port P] [--s3-port P] [--host H] [--public-url URL] [--dashboard-url URL] [--detach] [--tunnel] [--no-open] [--no-credentials]`,
+        `${enteredCommand} <directory> [--name N] [--management-port P] [--s3-port P] [--host H] [--public-url URL] [--dashboard-url URL] [--detach] [--tunnel|--no-tunnel] [--offline] [--no-open] [--no-credentials]`,
         parsed.positionals,
         0,
         1,
       );
       return { command: "serve", ...parsed, raw };
+    }
+    case "login": {
+      parsed = parseOptions(tail, ["email", "control-plane-url"], ["password-stdin"]);
+      assertPositionals("login [--email EMAIL] [--password-stdin] [--control-plane-url URL]", parsed.positionals, 0);
+      return { command: "login", ...parsed, raw };
+    }
+    case "logout": {
+      parsed = parseOptions(tail, [], []);
+      assertPositionals("logout", parsed.positionals, 0);
+      return { command: "logout", ...parsed, raw };
+    }
+    case "whoami": {
+      parsed = parseOptions(tail, [], ["json"]);
+      assertPositionals("whoami [--json]", parsed.positionals, 0);
+      return { command: "whoami", ...parsed, raw };
     }
     case "stop":
     case "dashboard":
@@ -449,8 +577,8 @@ function parseEnvironmentBoolean(
   throw new CLIUsageError(`${label} must be true or false.`);
 }
 
-function parseTunnelEnvironment(value: string | undefined): boolean {
-  if (value === undefined || value.trim() === "") return false;
+function parseTunnelEnvironment(value: string | undefined, fallback = false): boolean {
+  if (value === undefined || value.trim() === "") return fallback;
   const normalized = value.trim().toLowerCase();
   if (["1", "true", "yes", "on", "quick", "cloudflare"].includes(normalized)) return true;
   if (["0", "false", "no", "off", "none", "disabled"].includes(normalized)) return false;
@@ -467,6 +595,9 @@ function normalizeOptionalUrl(value: string | undefined, label: string): string 
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     throw new CLIUsageError(`${label} must use http:// or https://.`);
+  }
+  if (url.username || url.password || url.search || url.hash) {
+    throw new CLIUsageError(`${label} cannot contain credentials, a query, or a fragment.`);
   }
   return url.toString().replace(/\/$/, "");
 }
@@ -588,7 +719,17 @@ export function resolveServeConfig(
   );
   const showInitialCredentials =
     parsed.options.credentials === false ? false : showCredentialsFromEnvironment;
-  const tunnelFromEnvironment = parseTunnelEnvironment(env.OPENBUCKET_TUNNEL);
+  const offlineDevelopment =
+    parsed.options.offline === true ||
+    parseEnvironmentBoolean(
+      env.OPENBUCKET_OFFLINE,
+      false,
+      "OPENBUCKET_OFFLINE",
+    );
+  const tunnelFromEnvironment = parseTunnelEnvironment(
+    env.OPENBUCKET_TUNNEL,
+    !offlineDevelopment && !publicBaseUrl,
+  );
   const quickTunnel =
     parsed.options.tunnel === true
       ? true
@@ -627,6 +768,7 @@ export function resolveServeConfig(
     detach,
     openDashboard,
     internalForeground,
+    offlineDevelopment,
     managementUrl,
     s3Url,
   };
@@ -920,7 +1062,10 @@ function printBanner(
 function renderHelp(topic?: string): string {
   const commandHelp: Record<string, string> = {
     serve:
-      "Usage: openbucket serve <directory> [--name N] [--management-port P] [--s3-port P] [--host H] [--public-url URL] [--dashboard-url URL] [--detach] [--tunnel] [--no-open] [--no-credentials]",
+      "Usage: openbucket serve <directory> [--name N] [--management-port P] [--s3-port P] [--host H] [--public-url URL] [--dashboard-url URL] [--detach] [--tunnel|--no-tunnel] [--offline] [--no-open] [--no-credentials]",
+    login: "Usage: openbucket login [--email EMAIL] [--password-stdin] [--control-plane-url URL]",
+    logout: "Usage: openbucket logout",
+    whoami: "Usage: openbucket whoami [--json]",
     start: "Usage: openbucket start <directory> [serve options]",
     stop: "Usage: openbucket stop",
     status: "Usage: openbucket status [--json]",
@@ -945,6 +1090,11 @@ function renderHelp(topic?: string): string {
 
 Usage: openbucket <command> [options]
 
+Account
+  login                Authenticate this machine (password is hidden)
+  logout               Revoke and remove the local account session
+  whoami [--json]      Verify and show the active account
+
 Daemon
   serve <directory>    Start OpenBucket (foreground by default)
   start <directory>    Alias for serve
@@ -961,7 +1111,7 @@ Storage
   objects BUCKET       List objects [--prefix P]
   share BUCKET KEY     Create a share URL [--expires 1h]
 
-Credentials
+S3 credentials
   keys                 List access keys
   key create           Create a key [--name N] [--read-only] [--bucket B]
   key revoke ID        Revoke a key
@@ -971,10 +1121,12 @@ Other
   version              Show the OpenBucket version
   help [command]       Show help
 
-Environment: OPENBUCKET_HOME, OPENBUCKET_STORAGE_ROOT, OPENBUCKET_HOST,
-OPENBUCKET_MANAGEMENT_PORT, OPENBUCKET_S3_PORT, OPENBUCKET_PUBLIC_BASE_URL,
-OPENBUCKET_DASHBOARD_URL, OPENBUCKET_SERVE_DASHBOARD, OPENBUCKET_ALLOWED_ORIGINS,
-OPENBUCKET_TUNNEL, OPENBUCKET_CLOUDFLARED_PATH,
+Environment: OPENBUCKET_HOME, OPENBUCKET_CONTROL_PLANE_URL, OPENBUCKET_EMAIL,
+OPENBUCKET_PASSWORD (automation only; prefer --password-stdin), OPENBUCKET_OFFLINE,
+OPENBUCKET_STORAGE_ROOT, OPENBUCKET_HOST, OPENBUCKET_MANAGEMENT_PORT,
+OPENBUCKET_S3_PORT, OPENBUCKET_PUBLIC_BASE_URL, OPENBUCKET_DASHBOARD_URL,
+OPENBUCKET_SERVE_DASHBOARD, OPENBUCKET_ALLOWED_ORIGINS, OPENBUCKET_TUNNEL,
+OPENBUCKET_CLOUDFLARED_PATH, OPENBUCKET_HEARTBEAT_INTERVAL_MS,
 OPENBUCKET_SHOW_INITIAL_CREDENTIALS, OPENBUCKET_ADMIN_TOKEN.
 `;
 }
@@ -986,12 +1138,133 @@ async function getProductVersion(io: CLIIO): Promise<string> {
     const packageData = JSON.parse(await readFile(packageUrl, "utf8")) as {
       version?: unknown;
     };
-    return typeof packageData.version === "string" ? packageData.version : "0.1.0";
+    return typeof packageData.version === "string" ? packageData.version : "0.1.1";
   } catch {
-    return "0.1.0";
+    return "0.1.1";
   }
 }
 
+function passwordInput(value: string): string {
+  const withoutFinalLineEnding = value.replace(/\r?\n$/, "");
+  if (!withoutFinalLineEnding || /[\r\n]/.test(withoutFinalLineEnding)) {
+    throw new CLIUsageError("Password input must contain exactly one non-empty line.");
+  }
+  return withoutFinalLineEnding;
+}
+
+async function runLogin(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
+  const controlPlaneOption = parsed.options.controlPlaneUrl as string | undefined;
+  const controlPlaneUrl = resolveControlPlaneUrl(
+    controlPlaneOption
+      ? { ...io.env, OPENBUCKET_CONTROL_PLANE_URL: controlPlaneOption }
+      : io.env,
+  );
+  const email = (
+    (parsed.options.email as string | undefined) ??
+    io.env.OPENBUCKET_EMAIL ??
+    await io.prompt("Email: ")
+  ).trim();
+  if (!email) throw new CLIUsageError("Email is required.");
+
+  let password = "";
+  try {
+    password = passwordInput(
+      parsed.options.passwordStdin === true
+        ? await io.readStdin()
+        : io.env.OPENBUCKET_PASSWORD ?? await io.prompt("Password: ", true),
+    );
+    const session = await loginHostedAccount({
+      fetch: io.fetch,
+      email,
+      password,
+      controlPlaneUrl,
+    });
+    await writeHostedSession(session, io.env, io.homedir(), io.pid);
+    writeLine(io.stdout, `Logged in to ${session.controlPlaneUrl} as ${session.user.name || session.user.email} (${session.user.email}).`);
+    return EXIT_SUCCESS;
+  } finally {
+    password = "";
+  }
+}
+
+async function runLogout(io: CLIIO): Promise<number> {
+  const session = await readHostedSession(io.env, io.homedir());
+  if (!session) {
+    writeLine(io.stdout, "You are not logged in.");
+    return EXIT_SUCCESS;
+  }
+
+  let remoteWarning: string | undefined;
+  try {
+    await new AuthenticatedControlPlane(session, io.fetch).logout();
+  } catch (error) {
+    remoteWarning = error instanceof Error ? error.message : String(error);
+  }
+  await removeHostedSession(io.env, io.homedir());
+  writeLine(io.stdout, "Logged out. The local account session was removed.");
+  if (remoteWarning) {
+    writeLine(io.stderr, `Warning: the hosted session could not be revoked: ${remoteWarning}`);
+  }
+  return EXIT_SUCCESS;
+}
+
+async function runWhoAmI(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
+  const session = await readHostedSession(io.env, io.homedir());
+  if (!session) {
+    throw new HostedAuthError('Not logged in. Run "openbucket login" first.');
+  }
+  const result = await new AuthenticatedControlPlane(session, io.fetch).getCurrentUser();
+  session.user = result.user;
+  await writeHostedSession(session, io.env, io.homedir(), io.pid);
+  if (parsed.options.json === true) {
+    writeLine(io.stdout, stringifyJson({
+      user: result.user,
+      controlPlaneUrl: session.controlPlaneUrl,
+    }));
+  } else {
+    writeLine(io.stdout, `${result.user.name || result.user.email} <${result.user.email}>`);
+    writeLine(io.stdout, `Control plane: ${session.controlPlaneUrl}`);
+  }
+  return EXIT_SUCCESS;
+}
+
+async function requireHostedSession(
+  config: ResolvedServeConfig,
+  io: CLIIO,
+): Promise<HostedSession | undefined> {
+  if (config.offlineDevelopment) {
+    writeLine(
+      io.stderr,
+      "Warning: OPENBUCKET_OFFLINE/--offline is for local development only; hosted registration, usage reporting, and public discovery are disabled.",
+    );
+    return undefined;
+  }
+  const session = await readHostedSession(io.env, io.homedir());
+  if (!session) {
+    throw new HostedAuthError('OpenBucket serve requires an account. Run "openbucket login" first, or use --offline for local development.');
+  }
+  const expectedControlPlane = resolveControlPlaneUrl(io.env);
+  if (session.controlPlaneUrl !== expectedControlPlane) {
+    throw new HostedAuthError(
+      `The saved login belongs to ${session.controlPlaneUrl}. Run "openbucket login --control-plane-url ${expectedControlPlane}" first.`,
+    );
+  }
+  let current: { user: HostedSession["user"] };
+  try {
+    current = await new AuthenticatedControlPlane(session, io.fetch).getCurrentUser();
+  } catch (error) {
+    if (error instanceof HostedAuthError && error.status === 401) {
+      throw new HostedAuthError('Your OpenBucket session expired. Run "openbucket login" again.', {
+        status: error.status,
+        code: error.code,
+      });
+    }
+    throw error;
+  }
+  session.user = current.user;
+  await writeHostedSession(session, io.env, io.homedir(), io.pid);
+  return session;
+}
 interface DaemonHandle {
   config: {
     managementUrl?: string;
@@ -1135,10 +1408,304 @@ async function stopQuickTunnels(
   await Promise.allSettled([...tunnels.values()].map((tunnel) => tunnel.stop()));
 }
 
-async function serveForeground(config: ResolvedServeConfig, io: CLIIO): Promise<number> {
+interface HostedNodeRuntime {
+  session: HostedSession;
+  credential: NodeCredential;
+}
+
+function validHostedNode(value: unknown): value is { id: string; name: string } {
+  return Boolean(
+    value &&
+    typeof value === "object" &&
+    typeof (value as { id?: unknown }).id === "string" &&
+    typeof (value as { name?: unknown }).name === "string",
+  );
+}
+
+async function prepareHostedNode(
+  session: HostedSession,
+  config: ResolvedServeConfig,
+  io: CLIIO,
+): Promise<HostedNodeRuntime> {
+  const controlPlane = new AuthenticatedControlPlane(session, io.fetch);
+  const registration = await controlPlane.registerNode(config.nodeName);
+  if (!validHostedNode(registration.node)) {
+    throw new HostedAuthError("The control plane returned an invalid node registration.");
+  }
+  config.nodeName = registration.node.name;
+
+  let saved = await findNodeCredential(
+    session.controlPlaneUrl,
+    registration.node.name,
+    io.env,
+    io.homedir(),
+  );
+  const returned = registration.credential;
+  if (
+    returned &&
+    typeof returned.token === "string" &&
+    returned.token.length >= 20 &&
+    typeof returned.createdAt === "string"
+  ) {
+    saved = {
+      version: 1,
+      controlPlaneUrl: session.controlPlaneUrl,
+      nodeId: registration.node.id,
+      nodeName: registration.node.name,
+      token: returned.token,
+      createdAt: returned.createdAt,
+    };
+  } else if (!saved || saved.nodeId !== registration.node.id) {
+    const rotated = await controlPlane.rotateNodeToken(registration.node.id);
+    if (
+      !rotated.credential ||
+      typeof rotated.credential.token !== "string" ||
+      rotated.credential.token.length < 20 ||
+      typeof rotated.credential.createdAt !== "string"
+    ) {
+      throw new HostedAuthError("The control plane did not return a usable node credential.");
+    }
+    saved = {
+      version: 1,
+      controlPlaneUrl: session.controlPlaneUrl,
+      nodeId: registration.node.id,
+      nodeName: registration.node.name,
+      token: rotated.credential.token,
+      createdAt: rotated.credential.createdAt,
+    };
+  }
+  await writeNodeCredential(saved, io.env, io.homedir(), io.pid);
+  return { session, credential: saved };
+}
+interface HostedHeartbeatReporter {
+  publicEndpointUnavailable(): Promise<void>;
+  stop(): Promise<void>;
+}
+
+export function markQuickTunnelUnavailable(state: ActiveDaemonState): boolean {
+  const changed = Boolean(state.publicUrl) || state.tunnelMode === "quick";
+  delete state.publicUrl;
+  if (state.tunnelMode === "quick") delete state.tunnelMode;
+  return changed;
+}
+
+export function hostedTunnelAdvertisement(state: ActiveDaemonState): {
+  publicS3Url?: string;
+  tunnelMode: "none" | "quick" | "managed";
+  publicDiscoverable: boolean;
+} {
+  const publicS3Url = state.publicUrl;
+  const tunnelMode = publicS3Url
+    ? state.tunnelMode ?? "managed"
+    : "none";
+  return {
+    ...(publicS3Url ? { publicS3Url } : {}),
+    tunnelMode,
+    publicDiscoverable: tunnelMode !== "none" && Boolean(publicS3Url),
+  };
+}
+
+export function supervisePublicQuickTunnel(options: {
+  tunnel: Pick<QuickTunnelHandle, "closed">;
+  state: ActiveDaemonState;
+  isShuttingDown: () => boolean;
+  onUnavailable: () => void | Promise<void>;
+  onError?: (error: unknown) => void;
+}): void {
+  void options.tunnel.closed.then(() => {
+    if (options.isShuttingDown()) return;
+    markQuickTunnelUnavailable(options.state);
+    void Promise.resolve(options.onUnavailable()).catch((error: unknown) => {
+      options.onError?.(error);
+    });
+  }).catch((error: unknown) => {
+    options.onError?.(error);
+  });
+}
+
+interface LocalTelemetry {
+  storage: {
+    capacityBytes: number;
+    usedBytes: number;
+    availableBytes: number;
+    bucketCount: number;
+    objectCount: number;
+  };
+  counters: {
+    requests: number;
+    bytesIn: number;
+    bytesOut: number;
+    errors: number;
+  };
+}
+
+function telemetryNumber(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) && number >= 0 ? Math.floor(number) : 0;
+}
+
+async function collectLocalTelemetry(
+  state: ActiveDaemonState,
+  io: CLIIO,
+): Promise<LocalTelemetry> {
+  const target: ApiTarget = {
+    baseUrl: state.managementUrl,
+    token: state.token,
+    state,
+  };
+  const [status, analytics] = await Promise.all([
+    apiRequest<Record<string, unknown>>(io, target, "/v1/status"),
+    apiRequest<Record<string, unknown>>(io, target, "/v1/analytics"),
+  ]);
+  const storage = status.storage && typeof status.storage === "object"
+    ? status.storage as Record<string, unknown>
+    : {};
+  return {
+    storage: {
+      capacityBytes: telemetryNumber(status.capacityBytes ?? storage.totalBytes),
+      usedBytes: telemetryNumber(status.usedBytes ?? storage.managedBytes ?? storage.bytes),
+      availableBytes: telemetryNumber(status.availableBytes ?? storage.freeBytes),
+      bucketCount: telemetryNumber(status.bucketCount ?? storage.buckets),
+      objectCount: telemetryNumber(status.objectCount ?? storage.objects),
+    },
+    counters: {
+      requests: telemetryNumber(analytics.requests),
+      bytesIn: telemetryNumber(analytics.totalBytesIn),
+      bytesOut: telemetryNumber(analytics.totalBytesOut),
+      errors: telemetryNumber(analytics.errors),
+    },
+  };
+}
+
+function safeDashboardEndpoint(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    if (url.username || url.password || url.search || url.hash) return undefined;
+    return url.toString();
+  } catch {
+    return undefined;
+  }
+}
+
+async function startHostedHeartbeatReporter(
+  runtime: HostedNodeRuntime,
+  state: ActiveDaemonState,
+  version: string,
+  io: CLIIO,
+): Promise<HostedHeartbeatReporter> {
+  let remote = createNodeControlPlane({
+    controlPlaneUrl: runtime.session.controlPlaneUrl,
+    nodeToken: runtime.credential.token,
+    fetch: io.fetch,
+  });
+  const baseline = await collectLocalTelemetry(state, io);
+  let latest = baseline;
+  let stopped = false;
+  let active: Promise<void> | undefined;
+  let warningShown = false;
+
+  const payload = (online: boolean, telemetry: LocalTelemetry): Record<string, unknown> => ({
+    eventId: randomUUID(),
+    nodeId: runtime.credential.nodeId,
+    name: runtime.credential.nodeName,
+    version,
+    online,
+    startedAt: state.startedAt,
+    storage: telemetry.storage,
+    counters: {
+      requests: Math.max(0, telemetry.counters.requests - baseline.counters.requests),
+      bytesIn: Math.max(0, telemetry.counters.bytesIn - baseline.counters.bytesIn),
+      bytesOut: Math.max(0, telemetry.counters.bytesOut - baseline.counters.bytesOut),
+      errors: Math.max(0, telemetry.counters.errors - baseline.counters.errors),
+    },
+    ...hostedTunnelAdvertisement(state),
+    managementUrl: state.managementUrl,
+    ...(safeDashboardEndpoint(state.dashboardUrl)
+      ? { dashboardUrl: safeDashboardEndpoint(state.dashboardUrl) }
+      : {}),
+  });
+
+  try {
+    await remote.heartbeat(payload(true, baseline));
+  } catch (error) {
+    if (!(error instanceof HostedAuthError) || error.status !== 401) throw error;
+    runtime.credential = await rotateSavedNodeCredential({
+      session: runtime.session,
+      credential: runtime.credential,
+      fetch: io.fetch,
+      env: io.env,
+      homeDirectory: io.homedir(),
+      processId: io.pid,
+    });
+    remote = createNodeControlPlane({
+      controlPlaneUrl: runtime.session.controlPlaneUrl,
+      nodeToken: runtime.credential.token,
+      fetch: io.fetch,
+    });
+    await remote.heartbeat(payload(true, baseline));
+  }
+
+  const configuredInterval = Number(io.env.OPENBUCKET_HEARTBEAT_INTERVAL_MS ?? 30_000);
+  const intervalMilliseconds =
+    Number.isFinite(configuredInterval) && configuredInterval >= 5_000
+      ? configuredInterval
+      : 30_000;
+  const timer = setInterval(() => {
+    if (stopped || active) return;
+    active = (async () => {
+      try {
+        latest = await collectLocalTelemetry(state, io);
+        await remote.heartbeat(payload(true, latest));
+        warningShown = false;
+      } catch (error) {
+        if (!warningShown) {
+          writeLine(
+            io.stderr,
+            `Warning: hosted usage heartbeat failed: ${error instanceof Error ? error.message : String(error)}`,
+          );
+          warningShown = true;
+        }
+      } finally {
+        active = undefined;
+      }
+    })();
+  }, intervalMilliseconds);
+  timer.unref();
+
+  return {
+    async publicEndpointUnavailable(): Promise<void> {
+      if (stopped) return;
+      markQuickTunnelUnavailable(state);
+      await active?.catch(() => undefined);
+      await remote.heartbeat(payload(true, latest));
+    },
+    async stop(): Promise<void> {
+      if (stopped) return;
+      stopped = true;
+      clearInterval(timer);
+      await active?.catch(() => undefined);
+      try {
+        latest = await collectLocalTelemetry(state, io);
+      } catch {
+        // The daemon may already be unavailable after an unexpected stop.
+      }
+      await Promise.race([
+        remote.heartbeat(payload(false, latest)).then(() => undefined).catch(() => undefined),
+        io.sleep(2_000),
+      ]);
+    },
+  };
+}
+async function serveForeground(
+  config: ResolvedServeConfig,
+  io: CLIIO,
+  hostedNode?: HostedNodeRuntime,
+): Promise<number> {
   await ensureStorageDirectory(config.storageRoot);
   await ensureNoRunningDaemon(io);
 
+  let hostedHeartbeat: HostedHeartbeatReporter | undefined;
   let dashboardHandle: DashboardServerHandle | undefined;
   let effectiveDashboardUrl = config.dashboardUrl;
   if (config.serveDashboard && isLocalDashboardUrl(config.dashboardUrl)) {
@@ -1177,6 +1744,7 @@ async function serveForeground(config: ResolvedServeConfig, io: CLIIO): Promise<
       dashboardUrl?: string;
       allowedOrigins?: string[];
       adminToken?: string;
+      beforeStop?: () => void | Promise<void>;
     }) => Promise<DaemonHandle> | DaemonHandle;
   };
   if (typeof daemonModule.startDaemon !== "function") {
@@ -1197,6 +1765,7 @@ async function serveForeground(config: ResolvedServeConfig, io: CLIIO): Promise<
       dashboardUrl: effectiveDashboardUrl,
       allowedOrigins: [...effectiveOrigins],
       adminToken,
+      beforeStop: async () => { await hostedHeartbeat?.stop(); },
     });
   } catch (error) {
     await dashboardHandle?.stop().catch(() => undefined);
@@ -1215,10 +1784,12 @@ async function serveForeground(config: ResolvedServeConfig, io: CLIIO): Promise<
         surface: "s3",
         origin: connectableUrl(handle.config.s3Url ?? config.s3Url),
       },
-      { surface: "management", origin: managementUrl },
     ];
-    if (isLocalDashboardUrl(effectiveDashboardUrl)) {
-      surfaces.push({ surface: "dashboard", origin: effectiveDashboardUrl });
+    if (!hostedNode) {
+      surfaces.push({ surface: "management", origin: managementUrl });
+      if (isLocalDashboardUrl(effectiveDashboardUrl)) {
+        surfaces.push({ surface: "dashboard", origin: effectiveDashboardUrl });
+      }
     }
     try {
       quickTunnels = await startQuickTunnelSurfaces(surfaces, config.cloudflaredPath);
@@ -1233,16 +1804,7 @@ async function serveForeground(config: ResolvedServeConfig, io: CLIIO): Promise<
       if (effectiveDashboardUrl) effectiveOrigins.add(new URL(effectiveDashboardUrl).origin);
       handle.config.allowedOrigins = [...effectiveOrigins];
 
-      for (const [surface, tunnel] of quickTunnels) {
-        void tunnel.closed.then(() => {
-          if (!shutdownStarted) {
-            writeLine(
-              io.stderr,
-              `The ${surface} Quick Tunnel stopped; local OpenBucket service is still running.`,
-            );
-          }
-        });
-      }
+
     } catch (error) {
       shutdownStarted = true;
       await stopQuickTunnels(quickTunnels);
@@ -1275,12 +1837,71 @@ async function serveForeground(config: ResolvedServeConfig, io: CLIIO): Promise<
 
   try {
     await writeActiveState(state, io);
+    if (hostedNode) {
+      hostedHeartbeat = await startHostedHeartbeatReporter(
+        hostedNode,
+        state,
+        await getProductVersion(io),
+        io,
+      );
+    }
   } catch (error) {
     shutdownStarted = true;
     await stopQuickTunnels(quickTunnels);
     await handle.stop();
     await dashboardHandle?.stop().catch(() => undefined);
+    await removeActiveStateIfOwned(io.pid, io);
     throw error;
+  }
+
+  let tunnelClosureUpdate: Promise<void> | undefined;
+  for (const [surface, tunnel] of quickTunnels) {
+    if (surface !== "s3") {
+      void tunnel.closed.then(() => {
+        if (!shutdownStarted) {
+          writeLine(
+            io.stderr,
+            `The ${surface} Quick Tunnel stopped; local OpenBucket service is still running.`,
+          );
+        }
+      });
+      continue;
+    }
+    supervisePublicQuickTunnel({
+      tunnel,
+      state,
+      isShuttingDown: () => shutdownStarted,
+      onUnavailable: () => {
+        writeLine(
+          io.stderr,
+          "The S3 Quick Tunnel stopped; local OpenBucket service is still running.",
+        );
+        delete handle.config.publicBaseUrl;
+        handle.config.filesUrl = state.s3Url ? `${state.s3Url}/files` : undefined;
+        const persist = writeActiveState(state, io).catch((error: unknown) => {
+          writeLine(
+            io.stderr,
+            `Warning: could not persist the tunnel shutdown: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+        const deAdvertise = hostedHeartbeat
+          ? hostedHeartbeat.publicEndpointUnavailable().catch((error: unknown) => {
+              writeLine(
+                io.stderr,
+                `Warning: could not de-advertise the stopped tunnel: ${error instanceof Error ? error.message : String(error)}`,
+              );
+            })
+          : Promise.resolve();
+        tunnelClosureUpdate = Promise.all([persist, deAdvertise]).then(() => undefined);
+        return tunnelClosureUpdate;
+      },
+      onError: (error) => {
+        writeLine(
+          io.stderr,
+          `Warning: Quick Tunnel supervision failed: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      },
+    });
   }
 
   printBanner(
@@ -1316,6 +1937,8 @@ async function serveForeground(config: ResolvedServeConfig, io: CLIIO): Promise<
     shutdownStarted = true;
     process.removeListener("SIGINT", requestShutdown);
     process.removeListener("SIGTERM", requestShutdown);
+    await tunnelClosureUpdate?.catch(() => undefined);
+    await hostedHeartbeat?.stop();
     await removeActiveStateIfOwned(io.pid, io);
     await stopQuickTunnels(quickTunnels);
     await dashboardHandle?.stop().catch(() => undefined);
@@ -1346,6 +1969,9 @@ async function serveDetached(
     (argument) => !argument.startsWith("--inspect") && !argument.startsWith("--debug"),
   );
   let child: ChildProcess;
+  let spawnError: Error | undefined;
+  const daemonEnvironment = { ...io.env };
+  delete daemonEnvironment.OPENBUCKET_PASSWORD;
   try {
     child = io.spawn(
       io.execPath,
@@ -1355,17 +1981,32 @@ async function serveDetached(
         stdio: ["ignore", log.fd, log.fd],
         windowsHide: true,
         shell: false,
-        env: io.env,
+        env: daemonEnvironment,
         cwd: io.cwd(),
       },
     );
+    child.once("error", (error) => {
+      spawnError = error;
+    });
     child.unref();
   } finally {
     await log.close();
   }
 
+  const failDetachedStart = async (reason: string): Promise<never> => {
+    const pid = child.pid;
+    await io.terminateProcessTree(child).catch((error: unknown) => {
+      writeLine(
+        io.stderr,
+        `Warning: could not terminate the failed detached daemon: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    });
+    if (pid) await removeActiveStateIfOwned(pid, io);
+    throw new Error(`${reason} See ${paths.logFile}`);
+  };
+
   if (!child.pid) {
-    throw new Error(`Could not start the detached daemon. See ${paths.logFile}`);
+    return failDetachedStart("Could not start the detached daemon.");
   }
 
   const defaultStartTimeout = config.quickTunnel ? 60_000 : 15_000;
@@ -1391,7 +2032,7 @@ async function serveDetached(
       );
       if (healthy) break;
     }
-    if (child.exitCode !== null) break;
+    if (spawnError || child.exitCode !== null) break;
     await io.sleep(125);
   }
 
@@ -1400,15 +2041,15 @@ async function serveDetached(
     token: io.env.OPENBUCKET_ADMIN_TOKEN ?? io.env.OPENBUCKET_TOKEN ?? active.token,
     state: active,
   }))) {
-    const reason =
-      child.exitCode === null
+    const reason = spawnError
+      ? `could not start (${spawnError.message})`
+      : child.exitCode === null
         ? `did not become healthy within ${Math.ceil(timeout / 1_000)}s`
         : `exited before becoming healthy (exit code ${child.exitCode})`;
-    throw new Error(
-      `The daemon ${reason}. See ${paths.logFile}`,
-    );
+    return failDetachedStart(`The daemon ${reason}.`);
   }
 
+  child.removeAllListeners("error");
   printBanner(io, active, active.initialCredentials);
   if (active.initialCredentials) {
     const scrubbed: ActiveDaemonState = { ...active, initialCredentials: undefined };
@@ -1432,10 +2073,14 @@ async function serveDetached(
 
 async function runServe(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
   const config = resolveServeConfig(parsed, io.env, io.cwd());
+  const session = await requireHostedSession(config, io);
   if (config.detach && !config.internalForeground) {
     return serveDetached(parsed, config, io);
   }
-  return serveForeground(config, io);
+  const hostedNode = session
+    ? await prepareHostedNode(session, config, io)
+    : undefined;
+  return serveForeground(config, io, hostedNode);
 }
 
 interface StatusPayload {
@@ -2000,6 +2645,12 @@ async function executeCommand(parsed: ParsedCLICommand, io: CLIIO): Promise<numb
   switch (parsed.command) {
     case "serve":
       return runServe(parsed, io);
+    case "login":
+      return runLogin(parsed, io);
+    case "logout":
+      return runLogout(io);
+    case "whoami":
+      return runWhoAmI(parsed, io);
     case "stop":
       return runStop(io);
     case "status":
@@ -2040,6 +2691,11 @@ function formatError(error: unknown, io: CLIIO): number {
       writeLine(io.stderr, "Run \"openbucket help\" for usage.");
     }
     return error.exitCode;
+  }
+  if (error instanceof HostedAuthError) {
+    const code = error.code ? ` [${error.code}]` : "";
+    writeLine(io.stderr, `OpenBucket authentication error${code}: ${error.message}`);
+    return EXIT_API;
   }
   if (error instanceof CLIInactiveError) {
     writeLine(io.stderr, error.message);

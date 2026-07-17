@@ -31,6 +31,7 @@ ENV OPENBUCKET_DASHBOARD_URL=http://localhost:3000
 ENV OPENBUCKET_SERVE_DASHBOARD=false
 ENV OPENBUCKET_OPEN_DASHBOARD=false
 ENV OPENBUCKET_SHOW_INITIAL_CREDENTIALS=false
+ENV OPENBUCKET_TUNNEL=false
 COPY --from=build --chown=node:node /app/dist ./dist
 COPY --from=build --chown=node:node /app/package.json ./package.json
 COPY --from=build --chown=node:node /app/LICENSE ./LICENSE

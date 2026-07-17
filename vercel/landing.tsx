@@ -3,7 +3,8 @@ import { useState } from "react";
 import { SiteFooter, SiteHeader, githubUrl } from "./site-shell";
 
 const npmCommand = "npm install --global openbucket";
-const serveCommand = "openbucket serve /path/to/storage";
+const loginCommand = "openbucket login --email you@example.com";
+const serveCommand = "openbucket serve /path/to/storage --name home-node";
 
 function CopyCommand({ value }: { value: string }) {
   const [copied, setCopied] = useState(false);
@@ -55,7 +56,7 @@ export function LandingPage() {
           <strong>Your disk. Now S3-compatible.</strong>
         </div>
         <div className="landing-hero-actions">
-          <a className="site-button dark" href="/register">Open the dashboard</a>
+          <a className="site-button dark" href="/login">Open the dashboard</a>
           <a className="site-button light" href="/docs">Read the docs</a>
           <span>Open source · Apache-2.0</span>
         </div>
@@ -113,14 +114,16 @@ export function LandingPage() {
         <section className="landing-quickstart">
           <div className="quickstart-copy">
             <p className="section-kicker">RUN IT IN MINUTES</p>
-            <h2>Two commands.<br />Your own endpoint.</h2>
+            <h2>Three commands.<br />Your own endpoint.</h2>
             <p>Install the published CLI on the machine that owns the disk. The local dashboard opens alongside the daemon.</p>
             <a className="site-text-link" href="/docs#installation">All installation methods <span aria-hidden="true">→</span></a>
           </div>
           <div className="terminal-card" aria-label="OpenBucket installation commands">
             <div className="terminal-title"><span><i /><i /><i /></span><b>openbucket — terminal</b></div>
             <div className="terminal-line"><span>$</span><code>{npmCommand}</code><CopyCommand value={npmCommand} /></div>
-            <div className="terminal-output">added openbucket@0.1.0</div>
+            <div className="terminal-output">CLI installed</div>
+            <div className="terminal-line"><span>$</span><code>{loginCommand}</code><CopyCommand value={loginCommand} /></div>
+            <div className="terminal-output">Account authenticated</div>
             <div className="terminal-line"><span>$</span><code>{serveCommand}</code><CopyCommand value={serveCommand} /></div>
             <div className="terminal-output success">✓ Management  http://127.0.0.1:7272<br />✓ S3 endpoint http://127.0.0.1:8333<br />✓ Dashboard    http://localhost:3000</div>
           </div>
@@ -132,7 +135,7 @@ export function LandingPage() {
             <h2>Make local storage useful everywhere.</h2>
           </div>
           <div>
-            <a className="site-button light" href="/register">Create an account</a>
+            <a className="site-button light" href="/login">Sign in</a>
             <a className="site-button ghost" href={githubUrl}>View source</a>
           </div>
         </section>

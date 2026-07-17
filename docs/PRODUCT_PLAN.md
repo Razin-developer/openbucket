@@ -105,7 +105,7 @@ The repository currently implements:
 - path-style SigV4 S3 authentication, presigned query authentication, public object reads, ranges, copy, and basic multipart;
 - read-only and bucket-scoped credentials;
 - Docker daemon/dashboard targets and Compose deployment;
-- a Vercel landing/docs/account/dashboard target with server-only MongoDB authentication configuration;
+- a Vercel landing/docs/account/dashboard control plane with MongoDB authentication, node registration, heartbeat usage, discovery, and admin aggregates;
 - a typed, dependency-free Python management client and console command;
 - cross-platform CI, CodeQL, dependency review, trusted-publishing, GHCR, SBOM/provenance, and release workflows;
 - unit/integration/rendered-dashboard tests and user/operations documentation.
@@ -309,7 +309,7 @@ The desktop app does not fork storage logic. It remains a client/supervisor of t
 - Upgrade and rollback success across supported versions.
 - Security patch time and dependency age.
 
-No usage telemetry should leave a node by default. Product analytics require explicit opt-in, a published schema, retention controls, and an offline-safe product.
+Account-connected nodes send the documented heartbeat, storage summary, endpoint state, and aggregate request/byte/error counters required by the dashboard; object names and bytes never leave the node. `--offline` sends none of this. Any separate product analytics still require explicit opt-in, a published schema, retention controls, and an offline-safe product.
 
 ## Major risks and mitigations
 

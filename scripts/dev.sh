@@ -16,7 +16,7 @@ export OPENBUCKET_DASHBOARD_URL=${OPENBUCKET_DASHBOARD_URL:-http://localhost:300
 export OPENBUCKET_OPEN_DASHBOARD=false
 
 echo "Starting OpenBucket daemon on $storage_root..."
-npm run openbucket -- serve "$storage_root" --detach --no-open
+npm run openbucket -- serve "$storage_root" --offline --no-tunnel --detach --no-open
 started=1
 
 echo "Starting dashboard development server..."

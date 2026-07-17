@@ -80,7 +80,7 @@ jobs:
         run: npm run verify:release
 
   auth-mongodb:
-    name: MongoDB 8.0 authentication
+    name: MongoDB 8.0 authentication and control plane
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -89,6 +89,7 @@ jobs:
         image: mongo:8.0@sha256:3ce3de7f40e914034b03b7dec654005ab54f7dc8306937e44ec6760d9e9409a1
         ports:
           - 27017:27017
+          - 27018:27018
         options: >-
           --health-cmd "mongosh --quiet --eval 'db.runCommand({ ping: 1 }).ok' mongodb://127.0.0.1:27017/admin"
           --health-interval 5s
@@ -110,11 +111,29 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Run real MongoDB authentication acceptance
+
+      - name: Start transactional MongoDB replica set
+        shell: bash
+        run: |
+          container_id="${{ job.services.mongodb.id }}"
+          docker exec "${container_id}" mkdir -p /data/replica
+          docker exec "${container_id}" mongod --dbpath /data/replica --port 27018 --replSet rs0 --bind_ip_all --fork --logpath /data/replica/mongod.log
+          docker exec "${container_id}" mongosh --quiet --port 27018 --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27018'}]})"
+          for attempt in {1..20}; do
+            echo "Waiting for replica set primary (${attempt}/20)..."
+            if docker exec "${container_id}" mongosh --quiet --port 27018 --eval "quit(db.hello().isWritablePrimary ? 0 : 1)"; then
+              exit 0
+            fi
+            sleep 1
+          done
+          exit 1
+      - name: Run real MongoDB authentication and control-plane acceptance
         env:
-          MONGODB_TEST_URI: mongodb://127.0.0.1:27017
+          MONGODB_TEST_URI: mongodb://127.0.0.1:27018/?replicaSet=rs0&directConnection=true
           OPENBUCKET_REQUIRE_MONGODB_TEST: "true"
-        run: npm run test:auth:integration
+        run: |
+          npm run test:auth:integration
+          npm run test:control-plane:integration
 
   aws-cli-sync:
     name: AWS CLI 1.45.49 sync conformance

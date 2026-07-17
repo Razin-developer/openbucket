@@ -33,7 +33,7 @@ $env:OPENBUCKET_ADMIN_TOKEN = node -e "console.log(require('crypto').randomBytes
 $env:OPENBUCKET_OPEN_DASHBOARD = "false"
 $demoRoot = Join-Path $PWD "openbucket-demo-data"
 
-npm run openbucket -- serve $demoRoot --detach --no-open
+npm run openbucket -- serve $demoRoot --offline --no-tunnel --detach --no-open
 npm run openbucket -- dashboard
 npm run openbucket -- status
 ```
@@ -42,7 +42,7 @@ Save the initial S3 credential printed on first start. The detached child suppre
 
 The expected local services are management `7272`, S3 `8333`, and dashboard `3000`. If dashboard `3000` was occupied, the banner reports a later port.
 
-For a different-network hackathon demo, add `--tunnel` to the `serve` command. The banner then reports temporary public S3, remote management, and dashboard HTTPS URLs. Use the public S3 endpoint from the second machine and run the same physical-file verification on the storage host. Quick Tunnel mode is intentionally ephemeral and stops all tunnel subprocesses with `openbucket stop`; use a named tunnel and an independent management access policy outside a controlled demo.
+For a different-network hackathon demo, replace `--no-tunnel` with `--tunnel`. Offline demo mode then reports temporary public S3, remote management, and dashboard HTTPS URLs. Use the public S3 endpoint from the second machine and run the same physical-file verification on the storage host. Quick Tunnel mode is intentionally ephemeral and stops all tunnel subprocesses with `openbucket stop`; use a named tunnel and an independent management access policy outside a controlled demo.
 
 ### 2. Open the live dashboard
 
@@ -170,7 +170,7 @@ The request counts/bytes reflect the operations just performed.
 
 ```powershell
 npm run openbucket -- stop
-npm run openbucket -- serve $demoRoot --detach --no-open
+npm run openbucket -- serve $demoRoot --offline --no-tunnel --detach --no-open
 npm run openbucket -- status
 npm run openbucket -- objects demo-assets
 ```
@@ -201,7 +201,7 @@ export OPENBUCKET_OPEN_DASHBOARD=false
 export DEMO_ROOT="$PWD/openbucket-demo-data"
 export OPENBUCKET_API=http://127.0.0.1:7272
 
-npm run openbucket -- serve "$DEMO_ROOT" --detach --no-open
+npm run openbucket -- serve "$DEMO_ROOT" --offline --no-tunnel --detach --no-open
 npm run openbucket -- dashboard
 npm run openbucket -- status
 npm run openbucket -- bucket create demo-assets
@@ -283,7 +283,7 @@ curl -fsS "$OPENBUCKET_API/v1/analytics" \
   -H "Authorization: Bearer $OPENBUCKET_ADMIN_TOKEN"
 
 npm run openbucket -- stop
-npm run openbucket -- serve "$DEMO_ROOT" --detach --no-open
+npm run openbucket -- serve "$DEMO_ROOT" --offline --no-tunnel --detach --no-open
 npm run openbucket -- objects demo-assets
 ```
 
