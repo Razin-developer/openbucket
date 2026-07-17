@@ -10,9 +10,23 @@ export type AuthConfig = {
   sessionTtlSeconds: number;
 };
 
+class AuthConfigurationError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(message);
+    this.name = "AuthConfigurationError";
+    this.code = code;
+  }
+}
+
+function configurationError(code: string, message: string): never {
+  throw new AuthConfigurationError(code, message);
+}
+
 function requireValue(name: string): string {
   const value = process.env[name]?.trim();
-  if (!value) throw new Error(`${name} is required.`);
+  if (!value) configurationError(`AUTH_CONFIG_${name}_REQUIRED`, `${name} is required.`);
   return value;
 }
 
@@ -45,21 +59,21 @@ function usesTls(uri: string): boolean {
 export function getAuthConfig(): AuthConfig {
   const mongodbUri = requireValue("MONGODB_URI");
   if (!mongodbUri.startsWith("mongodb://") && !mongodbUri.startsWith("mongodb+srv://")) {
-    throw new Error("MONGODB_URI must use the mongodb:// or mongodb+srv:// scheme.");
+    configurationError("AUTH_CONFIG_MONGODB_URI_SCHEME", "MONGODB_URI must use the mongodb:// or mongodb+srv:// scheme.");
   }
 
   const database = process.env.MONGODB_DATABASE?.trim() || DEFAULT_DATABASE;
   if (!/^[A-Za-z0-9_-]{1,63}$/.test(database)) {
-    throw new Error("MONGODB_DATABASE must contain 1-63 letters, numbers, underscores, or hyphens.");
+    configurationError("AUTH_CONFIG_MONGODB_DATABASE_INVALID", "MONGODB_DATABASE must contain 1-63 letters, numbers, underscores, or hyphens.");
   }
   if (isProduction() && !isLoopbackMongoUri(mongodbUri) && !usesTls(mongodbUri)) {
-    throw new Error("Production MONGODB_URI must use TLS.");
+    configurationError("AUTH_CONFIG_MONGODB_URI_TLS_REQUIRED", "Production MONGODB_URI must use TLS.");
   }
 
   const authSecretValue = requireValue("OPENBUCKET_AUTH_SECRET");
   const authSecret = Buffer.from(authSecretValue, "utf8");
   if (authSecret.byteLength < 32) {
-    throw new Error("OPENBUCKET_AUTH_SECRET must contain at least 32 UTF-8 bytes.");
+    configurationError("AUTH_CONFIG_AUTH_SECRET_TOO_SHORT", "OPENBUCKET_AUTH_SECRET must contain at least 32 UTF-8 bytes.");
   }
 
   const allowSignup = process.env.OPENBUCKET_ALLOW_SIGNUP?.trim().toLowerCase() === "true";
@@ -67,10 +81,10 @@ export function getAuthConfig(): AuthConfig {
   if (allowSignup) {
     signupToken = Buffer.from(requireValue("OPENBUCKET_SIGNUP_TOKEN"), "utf8");
     if (signupToken.byteLength < 32) {
-      throw new Error("OPENBUCKET_SIGNUP_TOKEN must contain at least 32 UTF-8 bytes.");
+      configurationError("AUTH_CONFIG_SIGNUP_TOKEN_TOO_SHORT", "OPENBUCKET_SIGNUP_TOKEN must contain at least 32 UTF-8 bytes.");
     }
     if (signupToken.equals(authSecret)) {
-      throw new Error("OPENBUCKET_SIGNUP_TOKEN must differ from OPENBUCKET_AUTH_SECRET.");
+      configurationError("AUTH_CONFIG_SECRETS_MUST_DIFFER", "OPENBUCKET_SIGNUP_TOKEN must differ from OPENBUCKET_AUTH_SECRET.");
     }
   }
   return {

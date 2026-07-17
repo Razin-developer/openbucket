@@ -52,6 +52,23 @@ describe("hosted authentication configuration", () => {
     assert.equal(getAuthConfig().signupToken?.toString("utf8"), process.env.OPENBUCKET_SIGNUP_TOKEN);
   });
 
+  test("attaches non-sensitive diagnostic codes to invalid configuration", () => {
+    baseline();
+    process.env.OPENBUCKET_AUTH_SECRET = "too-short";
+    assert.throws(() => getAuthConfig(), (error: unknown) => {
+      assert.equal((error as { code?: string }).code, "AUTH_CONFIG_AUTH_SECRET_TOO_SHORT");
+      return true;
+    });
+
+    baseline();
+    process.env.OPENBUCKET_ALLOW_SIGNUP = "true";
+    process.env.OPENBUCKET_SIGNUP_TOKEN = "too-short";
+    assert.throws(() => getAuthConfig(), (error: unknown) => {
+      assert.equal((error as { code?: string }).code, "AUTH_CONFIG_SIGNUP_TOKEN_TOO_SHORT");
+      return true;
+    });
+  });
+
   test("requires TLS for non-loopback production MongoDB servers", () => {
     baseline();
     mutableEnvironment.NODE_ENV = "production";
