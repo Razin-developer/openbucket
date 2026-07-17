@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing v* tag to rebuild and recover on npm only
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -11,6 +17,9 @@ permissions:
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
 
 jobs:
   npm-build:
@@ -35,6 +44,7 @@ jobs:
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
         with:
           persist-credentials: false
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
@@ -43,8 +53,6 @@ jobs:
           cache: npm
 
       - name: Validate npm version against tag
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           node --input-type=module -e "import pkg from './package.json' with { type: 'json' }; const stable = /^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$/; const expected = 'v' + pkg.version; if (!stable.test(pkg.version)) { console.error('Release version ' + pkg.version + ' must be stable MAJOR.MINOR.PATCH; prereleases require a separate workflow and dist-tag policy.'); process.exit(1); } if (process.env.RELEASE_TAG !== expected) { console.error('Release tag ' + process.env.RELEASE_TAG + ' must equal ' + expected); process.exit(1); }"
 
@@ -101,6 +109,7 @@ jobs:
 
   python-build:
     name: Verify and build Python distribution
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -164,7 +173,7 @@ jobs:
 
   publish-npm:
     name: Publish to npm
-    needs: [npm-build, python-build]
+    needs: [npm-build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment: npm
@@ -190,10 +199,11 @@ jobs:
         run: npm install --global npm@12.0.1
 
       - name: Publish with npm trusted publishing
-        run: npm publish npm-dist/*.tgz --access public
+        run: npm publish ./npm-dist/*.tgz --access public
 
   publish-pypi:
     name: Publish to PyPI
+    if: github.event_name == 'push'
     needs: [npm-build, python-build]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -216,6 +226,7 @@ jobs:
 
   container:
     name: Publish multi-platform containers
+    if: github.event_name == 'push'
     needs: [npm-build, python-build]
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -328,6 +339,7 @@ jobs:
 
   github-release:
     name: Create GitHub Release
+    if: github.event_name == 'push'
     needs: [publish-npm, publish-pypi, container]
     runs-on: ubuntu-latest
     timeout-minutes: 10
