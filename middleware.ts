@@ -1,5 +1,4 @@
 import { next } from "@vercel/functions";
-import { authenticateRequest } from "./server/auth/service";
 
 export const config = {
   matcher: ["/dashboard", "/dashboard/:path*"],
@@ -8,6 +7,7 @@ export const config = {
 
 export default async function middleware(request: Request): Promise<Response> {
   try {
+    const { authenticateRequest } = await import("./server/auth/service");
     const user = await authenticateRequest(request);
     if (user) {
       return next({
