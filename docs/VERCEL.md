@@ -86,10 +86,15 @@ After the permanent variables are configured and the project is linked, bootstra
 node scripts/bootstrap-owner.mjs \
   --email owner@example.com \
   --name "Owner" \
-  --url https://openbucket-eight.vercel.app
+  --url https://openbucket-eight.vercel.app \
+  --manage-vercel
 ```
 
-The helper:
+Vercel deployment management is **off by default**. Use `--manage-vercel` only for the first setup or when the helper must open and close the short-lived window itself. On Windows it invokes Vercel through `cmd.exe` and the `npx.cmd` shim.
+
+When a trusted operator has already configured `OPENBUCKET_ALLOW_SIGNUP=true` and a distinct `OPENBUCKET_SIGNUP_TOKEN` in Vercel, omit `--manage-vercel` and pass `--signup-token-stdin`; the helper asks for that token in a hidden prompt and makes no Vercel CLI calls, deployments, or environment mutations.
+
+With `--manage-vercel`, the helper:
 
 1. prompts twice for a hidden 12-128 character password;
 2. generates a high-entropy one-time token in memory;

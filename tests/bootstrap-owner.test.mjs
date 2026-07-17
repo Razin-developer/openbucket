@@ -9,16 +9,39 @@ import {
   normalizeBootstrapUrl,
   parseBootstrapArguments,
   runSpawned,
+  vercelInvocation,
 } from "../scripts/bootstrap-owner.mjs";
 
 const password = "correct horse battery staple";
 const random = () => Buffer.alloc(48, 7);
 const expectedToken = Buffer.alloc(48, 7).toString("base64url");
 
+test("uses cmd.exe to launch the Windows npx command shim for Vercel", () => {
+  assert.deepEqual(vercelInvocation({}, "win32"), {
+    command: "cmd.exe",
+    prefix: ["/d", "/s", "/c", "npx.cmd --yes vercel@latest"],
+  });
+  assert.deepEqual(vercelInvocation({}, "linux"), {
+    command: "npx",
+    prefix: ["--yes", "vercel@latest"],
+  });
+});
+
 test("parses only non-secret bootstrap arguments", () => {
   assert.deepEqual(
     parseBootstrapArguments(["--email", "Owner@Example.com", "--name=Razin", "--url", "https://openbucket-eight.vercel.app"]),
-    { email: "Owner@Example.com", name: "Razin", url: "https://openbucket-eight.vercel.app", help: false },
+    {
+      email: "Owner@Example.com",
+      name: "Razin",
+      url: "https://openbucket-eight.vercel.app",
+      manageVercel: false,
+      signupTokenStdin: false,
+      help: false,
+    },
+  );
+  assert.throws(
+    () => parseBootstrapArguments(["--manage-vercel", "--signup-token-stdin"]),
+    /not both/,
   );
   assert.throws(() => parseBootstrapArguments(["--password", "secret"]), /hidden interactive prompt/);
   assert.throws(() => parseBootstrapArguments(["--email"]), /requires a value/);
@@ -37,6 +60,7 @@ test("successful bootstrap opens, registers, and always closes the window", asyn
     name: "Razin",
     url: "https://openbucket-eight.vercel.app",
     password,
+    manageVercel: true,
   }, {
     randomBytes: random,
     runVercel: async (args, options) => commands.push({ args: [...args], input: options.input }),
@@ -73,10 +97,31 @@ test("successful bootstrap opens, registers, and always closes the window", asyn
   assert.ok(logs.every((line) => !line.includes(expectedToken) && !line.includes(password)));
 });
 
+test("existing signup windows do not invoke Vercel automation", async () => {
+  let vercelCalled = false;
+  const result = await bootstrapOwner({
+    email: "owner@example.com",
+    url: "https://example.com",
+    password,
+    signupToken: expectedToken,
+  }, {
+    runVercel: async () => {
+      vercelCalled = true;
+      throw new Error("Vercel must not run in default mode");
+    },
+    fetchImpl: async () => new Response(JSON.stringify({
+      user: { id: "user-1", email: "owner@example.com", name: null, role: "admin" },
+    }), { status: 201, headers: { "content-type": "application/json" } }),
+    log() {},
+  });
+  assert.equal(result.user.email, "owner@example.com");
+  assert.equal(vercelCalled, false);
+});
+
 test("registration failure is redacted and still runs every cleanup step", async () => {
   const commands = [];
   await assert.rejects(
-    bootstrapOwner({ email: "owner@example.com", url: "https://example.com", password }, {
+    bootstrapOwner({ email: "owner@example.com", url: "https://example.com", password, manageVercel: true }, {
       randomBytes: random,
       runVercel: async (args, options) => commands.push({ args: [...args], input: options.input }),
       fetchImpl: async () => new Response(JSON.stringify({ error: { message: `rejected ${password} ${expectedToken}` } }), {
@@ -104,7 +149,7 @@ test("registration failure is redacted and still runs every cleanup step", async
 test("a failed signup close keeps the guard token and skips deployment", async () => {
   const commands = [];
   await assert.rejects(
-    bootstrapOwner({ email: "owner@example.com", url: "https://example.com", password }, {
+    bootstrapOwner({ email: "owner@example.com", url: "https://example.com", password, manageVercel: true }, {
       randomBytes: random,
       runVercel: async (args) => {
         commands.push([...args]);
@@ -126,7 +171,7 @@ test("a failed closed-state deploy keeps the guard token configured", async () =
   const commands = [];
   let deployments = 0;
   await assert.rejects(
-    bootstrapOwner({ email: "owner@example.com", url: "https://example.com", password }, {
+    bootstrapOwner({ email: "owner@example.com", url: "https://example.com", password, manageVercel: true }, {
       randomBytes: random,
       runVercel: async (args) => {
         commands.push([...args]);
