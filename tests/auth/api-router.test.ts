@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { dispatchApiRequest, matchApiRoute } from "../../api/[...path].js";
+import { dispatchApiRequest, matchApiRoute } from "../../api/router.js";
 
 test("the consolidated Vercel function preserves every public API route", () => {
   const nodeId = "0123456789abcdef01234567";
@@ -30,13 +30,17 @@ test("the consolidated Vercel function preserves every public API route", () => 
 });
 
 test("the consolidated Vercel function returns API-safe 404 and 405 responses", async () => {
-  const missing = await dispatchApiRequest(new Request("https://openbucket.test/api/unknown"));
+  const missing = await dispatchApiRequest(
+    new Request("https://openbucket.test/api/router?__openbucket_path=unknown"),
+  );
   assert.equal(missing.status, 404);
   assert.deepEqual(await missing.json(), {
     error: { code: "NOT_FOUND", message: "API route not found." },
   });
 
-  const wrongMethod = await dispatchApiRequest(new Request("https://openbucket.test/api/auth/login"));
+  const wrongMethod = await dispatchApiRequest(
+    new Request("https://openbucket.test/api/router?__openbucket_path=auth%2Flogin"),
+  );
   assert.equal(wrongMethod.status, 405);
   assert.equal(wrongMethod.headers.get("allow"), "POST");
   assert.deepEqual(await wrongMethod.json(), {
@@ -45,7 +49,9 @@ test("the consolidated Vercel function returns API-safe 404 and 405 responses", 
 });
 
 test("health remains available through the consolidated Vercel function", async () => {
-  const response = await dispatchApiRequest(new Request("https://openbucket.test/api/health"));
+  const response = await dispatchApiRequest(
+    new Request("https://openbucket.test/api/router?__openbucket_path=health"),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true, service: "openbucket-web" });
 });
