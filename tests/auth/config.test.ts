@@ -74,6 +74,9 @@ describe("hosted authentication configuration", () => {
     process.env.MONGODB_URI = 'MONGODB_URI="mongodb+srv://example.test/openbucket"';
 
     assert.equal(getAuthConfig().mongodbUri, "mongodb+srv://example.test/openbucket");
+
+    process.env.MONGODB_URI = "uri:mongodb://127.0.0.1:27017/openbucket";
+    assert.equal(getAuthConfig().mongodbUri, "mongodb://127.0.0.1:27017/openbucket");
   });
 
   test("requires TLS for non-loopback production MongoDB servers", () => {

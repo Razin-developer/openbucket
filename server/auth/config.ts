@@ -32,14 +32,16 @@ function requireValue(name: string): string {
 
 function readMongoUri(): string {
   const configured = requireValue("MONGODB_URI");
-  const withoutAssignment = configured.startsWith("MONGODB_URI=")
-    ? configured.slice("MONGODB_URI=".length).trim()
-    : configured;
-  const quote = withoutAssignment[0];
-  if ((quote === "\"" || quote === "'") && withoutAssignment.endsWith(quote)) {
-    return withoutAssignment.slice(1, -1).trim();
+  const standardIndex = configured.indexOf("mongodb://");
+  const srvIndex = configured.indexOf("mongodb+srv://");
+  const candidates = [standardIndex, srvIndex].filter((index) => index >= 0);
+  if (candidates.length === 0) return configured;
+
+  let normalized = configured.slice(Math.min(...candidates)).trim();
+  if (normalized.endsWith("\"") || normalized.endsWith("'")) {
+    normalized = normalized.slice(0, -1).trim();
   }
-  return withoutAssignment;
+  return normalized;
 }
 
 function isProduction(): boolean {
