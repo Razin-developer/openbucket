@@ -14,7 +14,7 @@ $started = $false
 
 try {
   Write-Host "Starting OpenBucket daemon on $StorageRoot..."
-  & npm run openbucket -- serve $StorageRoot --detach --no-open
+  & npm run openbucket -- serve $StorageRoot --offline --no-tunnel --detach --no-open
   if ($LASTEXITCODE -ne 0) { throw "OpenBucket daemon startup failed with exit code $LASTEXITCODE." }
   $started = $true
 

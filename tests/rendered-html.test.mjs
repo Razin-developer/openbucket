@@ -99,14 +99,18 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
     readFile(new URL("../.github/workflows/vercel.yml", import.meta.url), "utf8"),
   ]);
   const deployment = JSON.parse(deploymentSource);
-  const [installSh, installPs1, checkedInInstallSh, checkedInInstallPs1, hostedApp, hostedAuth, landing] = await Promise.all([
+  const [installSh, installPs1, checkedInInstallSh, checkedInInstallPs1, hostedApp, hostedAuth, hostedDocs, siteShell, landing, controlPlane, discovery] = await Promise.all([
     readFile(new URL("../vercel-dist/install.sh", import.meta.url), "utf8"),
     readFile(new URL("../vercel-dist/install.ps1", import.meta.url), "utf8"),
     readFile(new URL("../scripts/install.sh", import.meta.url), "utf8"),
     readFile(new URL("../scripts/install.ps1", import.meta.url), "utf8"),
     readFile(new URL("../vercel/app.tsx", import.meta.url), "utf8"),
     readFile(new URL("../vercel/auth.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../vercel/docs.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../vercel/site-shell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../vercel/landing.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../vercel/control-plane.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../vercel/node-discovery.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.deepEqual(deployment, { schemaVersion: 1, commitSha });
@@ -118,7 +122,20 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
   assert.equal(installPs1, checkedInInstallPs1);
   for (const route of ["docs", "login", "register", "dashboard"]) assert.match(hostedApp, new RegExp(`normalized === "\\/${route}"`));
   assert.match(hostedAuth, /fetch\("\/api\/auth\/session"/);
-  assert.match(hostedAuth, /<Dashboard \/>/);
+  assert.match(hostedAuth, /Owner setup guide/);
+  assert.doesNotMatch(hostedAuth, /Create one/);
+  assert.match(hostedDocs, /bootstrap:owner/);
+  assert.doesNotMatch(siteShell, /href="\/register"/);
+  assert.match(hostedAuth, /<HostedControlPlane user=\{state\.user\} \/>/);
+  assert.match(hostedApp, /nodeNameForPath/);
+  assert.match(hostedApp, /route === "node-discovery"/);
+  assert.match(controlPlane, /apiRequest<NodesResponse>\("\/api\/nodes"\)/);
+  assert.match(controlPlane, /apiRequest<UsageSummary>\("\/api\/usage"\)/);
+  assert.match(controlPlane, /apiRequest<AdminOverview>\("\/api\/admin\/overview"\)/);
+  assert.match(controlPlane, /user\.role === "admin"/);
+  assert.match(discovery, /\/api\/nodes\/resolve\?name=/);
+  assert.match(discovery, /does not proxy S3 requests/);
+  assert.doesNotMatch(controlPlane, /mock|fixture|fake data/i);
   assert.match(landing, /src="\/og\.png"/);
   assert.match(index, new RegExp(`<link rel="canonical" href="${appUrl}"`));
   assert.match(index, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml"/);

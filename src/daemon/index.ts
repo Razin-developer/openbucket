@@ -19,7 +19,7 @@ import {
   type RequestLog,
 } from "./store.js";
 
-export const OPENBUCKET_VERSION = "0.1.0";
+export const OPENBUCKET_VERSION = "0.1.1";
 
 export interface DaemonOptions {
   storageRoot: string;
@@ -32,6 +32,7 @@ export interface DaemonOptions {
   allowedOrigins?: string[];
   adminToken?: string;
   dashboardUrl?: string;
+  beforeStop?: () => void | Promise<void>;
 }
 
 export interface DaemonConfig {
@@ -395,6 +396,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
   const stop = async (): Promise<void> => {
     if (stopping) return stopping;
     stopping = (async () => {
+      await Promise.resolve(options.beforeStop?.()).catch(() => undefined);
       const results = await Promise.allSettled([closeServer(managementServer), closeServer(s3Server)]);
       await store.close();
       const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { EventEmitter } from "node:events";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -219,6 +220,23 @@ test("blank management tokens are treated as unset so serve generates a secure t
   );
 });
 
+test("serve endpoint URLs reject embedded secrets", () => {
+  for (const unsafeUrl of [
+    "https://user:password@storage.example.test",
+    "https://storage.example.test?token=secret",
+    "https://storage.example.test#secret",
+  ]) {
+    assert.throws(
+      () => resolveServeConfig(
+        parseCLIArgs(["serve", "storage", "--public-url", unsafeUrl]),
+        {},
+        "/workspace",
+      ),
+      /cannot contain credentials, a query, or a fragment/,
+    );
+  }
+});
+
 test("resolveStatePaths isolates state under OPENBUCKET_HOME", () => {
   const absoluteState = resolve("ob-state");
   const absoluteHome = resolve("home-dev");
@@ -391,6 +409,71 @@ test("dashboard command re-pairs through a fragment without printing the token",
     assert.match(stdout.value(), /one-time pairing fragment/i);
   } finally {
     await rm(temporaryHome, { recursive: true, force: true });
+  }
+});
+
+test("detached startup failures terminate the spawned process tree and leave no active state", async (context) => {
+  for (const scenario of [
+    { name: "missing child pid", pid: undefined, exitCode: null, expected: /Could not start the detached daemon/ },
+    { name: "health timeout", pid: 54_321, exitCode: null, expected: /did not become healthy/ },
+    { name: "early child exit", pid: 54_322, exitCode: 1, expected: /exited before becoming healthy/ },
+  ]) {
+    await context.test(scenario.name, async () => {
+      const temporaryHome = await mkdtemp(join(tmpdir(), "openbucket-detached-failure-"));
+      const storage = join(temporaryHome, "storage");
+      const stdout = captureWriter();
+      const stderr = captureWriter();
+      let terminated = 0;
+      class FakeDetachedChild extends EventEmitter {
+        constructor() {
+          super();
+          this.pid = scenario.pid;
+          this.exitCode = scenario.exitCode;
+          this.signalCode = null;
+        }
+        unref() {}
+        kill(signal = "SIGTERM") {
+          this.signalCode = signal;
+          return true;
+        }
+      }
+      const child = new FakeDetachedChild();
+      try {
+        const exitCode = await runCLI([
+          "serve",
+          storage,
+          "--offline",
+          "--no-tunnel",
+          "--detach",
+          "--no-open",
+        ], {
+          stdout: stdout.writer,
+          stderr: stderr.writer,
+          env: {
+            OPENBUCKET_HOME: "state",
+            OPENBUCKET_START_TIMEOUT_MS: "1",
+          },
+          homedir: () => temporaryHome,
+          cwd: () => temporaryHome,
+          spawn: () => child,
+          fetch: async () => Response.json({ ok: false }),
+          sleep: async () => undefined,
+          terminateProcessTree: async (spawned) => {
+            assert.equal(spawned, child);
+            terminated += 1;
+            child.signalCode = "SIGKILL";
+            child.emit("close", null, "SIGKILL");
+          },
+        });
+        assert.equal(exitCode, 1);
+        assert.equal(terminated, 1);
+        assert.match(stderr.value(), scenario.expected);
+        const { activeFile } = resolveStatePaths({ OPENBUCKET_HOME: "state" }, temporaryHome);
+        await assert.rejects(readFile(activeFile), { code: "ENOENT" });
+      } finally {
+        await rm(temporaryHome, { recursive: true, force: true });
+      }
+    });
   }
 });
 

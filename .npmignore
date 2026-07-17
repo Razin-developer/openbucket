@@ -1,0 +1,4 @@
+# Never publish patch/reject artifacts from interrupted local edits.
+*.rej
+.tmp-*.patch
+*.orig

@@ -1,7 +1,7 @@
-import { ObjectId } from "mongodb";
+import { ObjectId, type ClientSession } from "mongodb";
 import { getAuthConfig } from "./config.js";
 import { createSessionToken, hashPassword, keyedHash, secretMatches, verifyPassword } from "./crypto.js";
-import { getAuthCollections, type AuthCollections, type UserDocument } from "./database.js";
+import { getAuthCollections, getAuthDatabaseContext, type AuthCollections, type UserDocument } from "./database.js";
 import {
   ApiError,
   assertMethod,
@@ -23,14 +23,33 @@ const SIGNUP_IP_LIMIT = 5;
 const SIGNUP_EMAIL_LIMIT = 3;
 const SESSION_TOUCH_INTERVAL_MS = 15 * 60 * 1000;
 const OWNER_BOOTSTRAP_CONTROL_ID = "owner-bootstrap";
+const OWNER_BOOTSTRAP_LEASE_MS = 10 * 60 * 1000;
 const LOGIN_FAILURE = "Email or password is incorrect.";
 const SIGNUP_FAILURE = "Owner account setup is unavailable.";
 const FAKE_PASSWORD_HASH = "scrypt$v=1$n=65536,r=8,p=2$b3BlbmJ1Y2tldC1mYWtlLXNhbHQtdjEh$_bN6H6xtF0oe903HJCwA8H1W3KHsbTmZcqWwmwimHOvgCGl3Ch0H9zFVua0drEwacEERDzosya2wiopfgGniog";
 
-export type PublicUser = { id: string; email: string; name: string | null };
+export type UserRole = "admin" | "member";
+export type PublicUser = { id: string; email: string; name: string | null; role: UserRole };
 
-function publicUser(user: UserDocument): PublicUser {
-  return { id: user._id.toHexString(), email: user.email, name: user.name };
+function publicUser(user: UserDocument, role: UserRole): PublicUser {
+  return { id: user._id.toHexString(), email: user.email, name: user.name, role };
+}
+
+async function resolveUserRole(user: UserDocument, collections: AuthCollections): Promise<UserRole> {
+  if (user.role === "admin" || user.role === "member") return user.role;
+
+  const ownerControl = await collections.authControls.findOne({
+    _id: OWNER_BOOTSTRAP_CONTROL_ID,
+    status: "claimed",
+    userId: user._id,
+  });
+  const role: UserRole = ownerControl ? "admin" : "member";
+  await collections.users.updateOne(
+    { _id: user._id, role: { $exists: false } },
+    { $set: { role, updatedAt: new Date() } },
+  );
+  user.role = role;
+  return role;
 }
 
 function normalizeEmail(value: unknown): string {
@@ -135,9 +154,13 @@ async function applySignupRateLimits(request: Request, email: string): Promise<v
 
 async function createSession(
   request: Request, userId: ObjectId,
+  options: {
+    collections?: AuthCollections;
+    mongoSession?: ClientSession;
+  } = {},
 ): Promise<{ id: string; token: string; expiresAt: Date }> {
   const config = getAuthConfig();
-  const { sessions } = await getAuthCollections();
+  const { sessions } = options.collections ?? await getAuthCollections();
   const token = createSessionToken();
   const now = new Date();
   const expiresAt = new Date(now.getTime() + config.sessionTtlSeconds * 1000);
@@ -151,7 +174,7 @@ async function createSession(
     expiresAt,
     ipHash: keyedHash(config.authSecret, "session-ip", requestIp(request)),
     userAgentHash: keyedHash(config.authSecret, "session-agent", userAgent),
-  });
+  }, options.mongoSession ? { session: options.mongoSession } : undefined);
   return { id, token, expiresAt };
 }
 
@@ -159,7 +182,8 @@ export async function authenticateRequest(request: Request): Promise<PublicUser 
   const token = getSessionToken(request);
   if (!token) return null;
   const config = getAuthConfig();
-  const { sessions, users } = await getAuthCollections();
+  const collections = await getAuthCollections();
+  const { sessions, users } = collections;
   const id = keyedHash(config.authSecret, "session", token);
   const now = new Date();
   const session = await sessions.findOne({ _id: id, expiresAt: { $gt: now } });
@@ -172,79 +196,12 @@ export async function authenticateRequest(request: Request): Promise<PublicUser 
   if (now.getTime() - session.lastSeenAt.getTime() >= SESSION_TOUCH_INTERVAL_MS) {
     await sessions.updateOne({ _id: id, expiresAt: { $gt: now } }, { $set: { lastSeenAt: now } });
   }
-  return publicUser(user);
+  const role = await resolveUserRole(user, collections);
+  return publicUser(user, role);
 }
-
-type OwnerBootstrapClaim = {
-  claimId: string;
-  collections: AuthCollections;
-};
 
 function signupUnavailable(): ApiError {
   return new ApiError(403, "SIGNUP_UNAVAILABLE", SIGNUP_FAILURE);
-}
-
-function isDuplicateKey(error: unknown): boolean {
-  return (error as { code?: unknown }).code === 11000;
-}
-
-async function finalizeOwnerBootstrap(claim: OwnerBootstrapClaim, userId: ObjectId): Promise<void> {
-  await claim.collections.authControls.updateOne(
-    { _id: OWNER_BOOTSTRAP_CONTROL_ID },
-    {
-      $set: { status: "claimed", claimedAt: new Date(), userId },
-      $setOnInsert: { createdAt: new Date() },
-      $unset: { claimId: "" },
-    },
-    { upsert: true },
-  );
-}
-
-async function claimOwnerBootstrap(): Promise<OwnerBootstrapClaim> {
-  const collections = await getAuthCollections();
-  const claimId = createSessionToken();
-  try {
-    await collections.authControls.insertOne({
-      _id: OWNER_BOOTSTRAP_CONTROL_ID,
-      status: "claiming",
-      claimId,
-      createdAt: new Date(),
-    });
-  } catch (error) {
-    if (isDuplicateKey(error)) throw signupUnavailable();
-    throw error;
-  }
-
-  const existing = await collections.users.findOne({}, { projection: { _id: 1 } });
-  if (existing) {
-    await finalizeOwnerBootstrap({ claimId, collections }, existing._id);
-    throw signupUnavailable();
-  }
-  return { claimId, collections };
-}
-
-async function rollbackOwnerBootstrap(claim: OwnerBootstrapClaim, userId: ObjectId): Promise<void> {
-  try {
-    const deleted = await claim.collections.users.deleteOne({ _id: userId });
-    if (!deleted.acknowledged) return;
-  } catch {
-    console.error("OpenBucket owner bootstrap rollback could not remove the unfinished user.");
-    return;
-  }
-  try {
-    await claim.collections.sessions.deleteMany({ userId });
-  } catch {
-    console.error("OpenBucket owner bootstrap rollback could not remove unfinished sessions.");
-  }
-  try {
-    await claim.collections.authControls.deleteOne({
-      _id: OWNER_BOOTSTRAP_CONTROL_ID,
-      status: "claiming",
-      claimId: claim.claimId,
-    });
-  } catch {
-    console.error("OpenBucket owner bootstrap remains closed after an incomplete rollback.");
-  }
 }
 
 export async function handleRegister(request: Request): Promise<Response> {
@@ -267,34 +224,88 @@ export async function handleRegister(request: Request): Promise<Response> {
       emailNormalized: email,
       name,
       passwordHash,
+      role: "admin",
       status: "active",
       createdAt: now,
       updatedAt: now,
     };
-    const claim = await claimOwnerBootstrap();
-    const { users } = claim.collections;
+    const collections = await getAuthCollections();
+    const { client } = await getAuthDatabaseContext();
+    const mongoSession = client.startSession();
+    let created = false;
+    let createdSession: Awaited<ReturnType<typeof createSession>> | undefined;
     try {
-      await users.insertOne(user);
-    } catch (error) {
-      if (isDuplicateKey(error)) {
-        const existing = await users.findOne({ emailNormalized: email }, { projection: { _id: 1 } });
-        if (existing) {
-          await finalizeOwnerBootstrap(claim, existing._id);
-          throw signupUnavailable();
+      await mongoSession.withTransaction(async () => {
+        created = false;
+        createdSession = undefined;
+        const leaseCutoff = new Date(Date.now() - OWNER_BOOTSTRAP_LEASE_MS);
+        const control = await collections.authControls.findOne(
+          { _id: OWNER_BOOTSTRAP_CONTROL_ID },
+          { session: mongoSession },
+        );
+        let existing = await collections.users.findOne(
+          {},
+          { session: mongoSession, sort: { createdAt: 1 }, projection: { _id: 1 } },
+        );
+
+        if (control?.status === "claimed") return;
+        if (control?.status === "claiming") {
+          if (control.createdAt > leaseCutoff) return;
+          if (existing) {
+            await collections.authControls.updateOne(
+              { _id: OWNER_BOOTSTRAP_CONTROL_ID, status: "claiming", createdAt: control.createdAt },
+              {
+                $set: { status: "claimed", claimedAt: new Date(), userId: existing._id },
+                $unset: { claimId: "" },
+              },
+              { session: mongoSession },
+            );
+            return;
+          }
+          await collections.authControls.deleteOne(
+            { _id: OWNER_BOOTSTRAP_CONTROL_ID, status: "claiming", createdAt: control.createdAt },
+            { session: mongoSession },
+          );
+          existing = null;
         }
-      }
-      await rollbackOwnerBootstrap(claim, user._id);
-      throw error;
+
+        if (existing) {
+          await collections.authControls.updateOne(
+            { _id: OWNER_BOOTSTRAP_CONTROL_ID },
+            {
+              $setOnInsert: {
+                status: "claimed",
+                createdAt: new Date(),
+                claimedAt: new Date(),
+                userId: existing._id,
+              },
+            },
+            { upsert: true, session: mongoSession },
+          );
+          return;
+        }
+
+        await collections.authControls.insertOne({
+          _id: OWNER_BOOTSTRAP_CONTROL_ID,
+          status: "claimed",
+          createdAt: now,
+          claimedAt: now,
+          userId: user._id,
+        }, { session: mongoSession });
+        await collections.users.insertOne(user, { session: mongoSession });
+        createdSession = await createSession(request, user._id, { collections, mongoSession });
+        created = true;
+      }, {
+        readConcern: { level: "snapshot" },
+        writeConcern: { w: "majority" },
+        readPreference: "primary",
+      });
+    } finally {
+      await mongoSession.endSession();
     }
-    let session: Awaited<ReturnType<typeof createSession>>;
-    try {
-      session = await createSession(request, user._id);
-    } catch (error) {
-      await rollbackOwnerBootstrap(claim, user._id);
-      throw error;
-    }
-    await finalizeOwnerBootstrap(claim, user._id);
-    const response = jsonResponse({ user: publicUser(user) }, 201);
+    if (!created || !createdSession) throw signupUnavailable();
+    const session = createdSession;
+    const response = jsonResponse({ user: publicUser(user, "admin") }, 201);
     response.headers.append("Set-Cookie", sessionCookie(request, session.token, config.sessionTtlSeconds));
     return response;
   } catch (error) {
@@ -310,7 +321,8 @@ export async function handleLogin(request: Request): Promise<Response> {
     const email = normalizeEmail(body.email);
     const password = validatePassword(body.password);
     await applyLoginRateLimits(request, email);
-    const { users } = await getAuthCollections();
+    const collections = await getAuthCollections();
+    const { users } = collections;
     const user = await users.findOne({ emailNormalized: email });
     const passwordHash = user?.passwordHash ?? FAKE_PASSWORD_HASH;
     const matches = await verifyPassword(password, passwordHash);
@@ -319,7 +331,8 @@ export async function handleLogin(request: Request): Promise<Response> {
     }
     const config = getAuthConfig();
     const session = await createSession(request, user._id);
-    const response = jsonResponse({ user: publicUser(user) });
+    const role = await resolveUserRole(user, collections);
+    const response = jsonResponse({ user: publicUser(user, role) });
     response.headers.append("Set-Cookie", sessionCookie(request, session.token, config.sessionTtlSeconds));
     return response;
   } catch (error) {

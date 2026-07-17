@@ -51,17 +51,19 @@ export function DocsPage() {
 
           <DocSection id="installation" eyebrow="01 · INSTALLATION" title="Install the published CLI">
             <p>The npm package contains the CLI, daemon, embedded production dashboard, and management client commands. Install it globally on the storage host.</p>
-            <CodeBlock>{"npm install --global openbucket@0.1.0\nopenbucket version"}</CodeBlock>
+            <CodeBlock>{"npm install --global openbucket@0.1.1\nopenbucket version"}</CodeBlock>
+            <p>Account login and hosted metering require version 0.1.1 or newer. Until that trusted release is published, build this repository; npm 0.1.0 supports the earlier local-only flow.</p>
             <h3>Installer script</h3>
             <p>Download and inspect the script before executing it. It verifies Node and npm, then installs the same published package without using sudo.</p>
-            <CodeBlock>{"curl -fsSLO https://openbucket-eight.vercel.app/install.sh\nless install.sh\nOPENBUCKET_INSTALL_VERSION=0.1.0 sh install.sh"}</CodeBlock>
+            <CodeBlock>{"curl -fsSLO https://openbucket-eight.vercel.app/install.sh\nless install.sh\nOPENBUCKET_INSTALL_VERSION=0.1.1 sh install.sh"}</CodeBlock>
             <h3>Windows PowerShell</h3>
-            <CodeBlock label="PowerShell">{"Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile install.ps1\nGet-Content .\\install.ps1\n.\\install.ps1 -Version 0.1.0"}</CodeBlock>
+            <CodeBlock label="PowerShell">{"Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile install.ps1\nGet-Content .\\install.ps1\n.\\install.ps1 -Version 0.1.1"}</CodeBlock>
           </DocSection>
 
           <DocSection id="first-node" eyebrow="02 · FIRST NODE" title="Serve a directory you control">
             <p>Pass an existing directory, mounted drive, or NAS path. OpenBucket keeps internal metadata beneath that storage root and serves real object bytes from it.</p>
-            <CodeBlock>{"mkdir -p /srv/openbucket\nopenbucket serve /srv/openbucket"}</CodeBlock>
+            <CodeBlock>{"mkdir -p /srv/openbucket\nopenbucket login --email you@example.com\nopenbucket serve /srv/openbucket --name home-node"}</CodeBlock>
+            <p>The normal flow verifies your account before starting, registers the node, reports storage and aggregate request counters, and advertises its active public endpoint. Use <code>--offline --no-tunnel</code> only for deliberate standalone development.</p>
             <p>The safe defaults bind the management API to <code>127.0.0.1:7272</code>, S3 to <code>127.0.0.1:8333</code>, and the embedded dashboard to <code>localhost:3000</code>. The CLI generates a strong management token when one is not supplied.</p>
             <div className="docs-warning"><strong>Keep it local first.</strong><p>Do not bind management to a public interface without a firewall, TLS proxy, independent access policy, and an exact dashboard origin.</p></div>
           </DocSection>
@@ -75,14 +77,18 @@ export function DocsPage() {
 
           <DocSection id="dashboard" eyebrow="04 · DASHBOARD" title="Operate the live node">
             <p><code>openbucket serve</code> hosts and opens the packaged dashboard automatically. It receives a one-time pairing fragment, removes it from the address bar, and keeps the management token in API-scoped session storage.</p>
+            <h3>Bootstrap the production owner</h3>
+            <p>From a reviewed source checkout, run the helper once after configuring the permanent Vercel database and auth variables. It prompts for the password without echo and closes the temporary signup window after creating the owner.</p>
+            <CodeBlock>{"npm run bootstrap:owner -- --email owner@example.com --name \"Owner\" --url https://openbucket-eight.vercel.app"}</CodeBlock>
             <CodeBlock>{"openbucket dashboard"}</CodeBlock>
-            <p>The hosted <a href="/dashboard">web dashboard</a> adds an OpenBucket account gate. After sign-in, the browser still connects directly to your daemon. Signing in does not upload object bytes, node state, or management credentials to the website database.</p>
+            <p>The hosted <a href="/dashboard">web dashboard</a> adds an OpenBucket account gate and reads MongoDB-backed node registrations, presence, storage summaries, and aggregate usage. Object bytes, raw node tokens, management credentials, and S3 keys remain on the storage host.</p>
             <p>Your browser may ask for Local Network Access when this public HTTPS site first contacts a loopback or private daemon. Grant it for OpenBucket; if the browser blocks plain HTTP local requests, expose management through an authenticated HTTPS tunnel or reverse proxy.</p>
           </DocSection>
 
           <DocSection id="docker" eyebrow="05 · CONTAINERS" title="Run with persistent volumes">
             <p>Until the first container release is published, use the repository&apos;s documented Compose profile. It builds both services from source with persistent volumes. Set a management token containing at least 32 random UTF-8 bytes in <code>.env</code> before startup.</p>
-            <CodeBlock label="Docker Compose">{"git clone https://github.com/Razin-developer/openbucket.git\ncd openbucket\ncp .env.example .env\n# Set OPENBUCKET_ADMIN_TOKEN in .env, then:\ndocker compose up --build -d"}</CodeBlock>
+            <CodeBlock label="Docker Compose">{"git clone https://github.com/Razin-developer/openbucket.git\ncd openbucket\ncp .env.example .env\n# Set OPENBUCKET_ADMIN_TOKEN and, for a custom deployment, OPENBUCKET_CONTROL_PLANE_URL.\ndocker compose build daemon\ndocker compose run --rm daemon login --email you@example.com\ndocker compose up --build -d"}</CodeBlock>
+            <p>The one-off login writes the account session into the persistent <code>openbucket-state</code> volume. Compose then starts the daemon only after that account can be verified.</p>
           </DocSection>
 
           <DocSection id="production" eyebrow="06 · PRODUCTION" title="Treat the disk as infrastructure">

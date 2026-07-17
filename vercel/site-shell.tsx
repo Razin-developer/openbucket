@@ -31,7 +31,7 @@ export function SiteHeader({ current, overlay = false }: { current?: SiteShellPr
       </nav>
       <div className="site-header-actions">
         <a className="site-login-link" href="/login">Sign in</a>
-        <a className="site-button dark small" href="/register">Get started</a>
+        <a className="site-button dark small" href="/dashboard">Open dashboard</a>
       </div>
     </header>
   );

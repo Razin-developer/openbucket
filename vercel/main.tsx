@@ -25,7 +25,7 @@ function setMetaContent(selector: string, value: string) {
 function setAbsoluteMetadata(route: ReturnType<typeof routeForPath>) {
   const base = configuredAppUrl();
   const metadata = routeMetadata[route];
-  const canonical = new URL(metadata.path, `${base.origin}/`).toString();
+  const canonical = new URL(route === "node-discovery" ? window.location.pathname : metadata.path, `${base.origin}/`).toString();
   const socialImage = new URL("/og.png", base.origin).toString();
   document.title = metadata.title;
   document.documentElement.dataset.route = route;

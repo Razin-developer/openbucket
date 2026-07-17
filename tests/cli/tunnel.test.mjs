@@ -3,7 +3,7 @@ import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import test from "node:test";
 
-import { startQuickTunnel } from "../../dist/cli/tunnel.js";
+import { sanitizeQuickTunnelEnvironment, startQuickTunnel } from "../../dist/cli/tunnel.js";
 
 class FakeChild extends EventEmitter {
   constructor({ stubborn = false } = {}) {
@@ -126,4 +126,22 @@ test("times out startup and force-kills a child that ignores graceful stop", asy
     /did not publish a Quick Tunnel URL within 1s/,
   );
   assert.deepEqual(child.kills, ["SIGTERM", "SIGKILL"]);
+});
+
+test("passes only operational environment values to cloudflared", () => {
+  const sanitized = sanitizeQuickTunnelEnvironment({
+    Path: "C:\\Windows\\System32",
+    HTTPS_PROXY: "http://127.0.0.1:8080",
+    SSL_CERT_FILE: "/etc/ssl/custom.pem",
+    OPENBUCKET_PASSWORD: "must-not-reach-child",
+    OPENBUCKET_AUTH_SECRET: "must-not-reach-child",
+    MONGODB_URI: "mongodb+srv://must-not-reach-child",
+    AWS_SECRET_ACCESS_KEY: "must-not-reach-child",
+  });
+
+  assert.deepEqual(sanitized, {
+    Path: "C:\\Windows\\System32",
+    HTTPS_PROXY: "http://127.0.0.1:8080",
+    SSL_CERT_FILE: "/etc/ssl/custom.pem",
+  });
 });

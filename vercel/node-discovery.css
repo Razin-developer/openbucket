@@ -1,0 +1,23 @@
+.discovery-page { min-height: calc(100vh - 72px); padding: clamp(50px, 8vw, 110px) clamp(22px, 8vw, 140px); color: #111; background-color: #f6f6f3; background-image: linear-gradient(rgb(0 0 0 / 4%) 1px, transparent 1px), linear-gradient(90deg, rgb(0 0 0 / 4%) 1px, transparent 1px); background-size: 72px 72px; font-family: Arial, "Helvetica Neue", sans-serif; }
+.discovery-page *, .discovery-page *::before, .discovery-page *::after { box-sizing: border-box; }
+.discovery-hero { max-width: 1000px; }
+.discovery-hero h1 { margin: 22px 0 0; font-size: clamp(70px, 12vw, 170px); line-height: .82; letter-spacing: -.085em; word-break: break-word; }
+.discovery-hero > p:last-child { max-width: 700px; margin: 35px 0 0; color: #595955; font-size: 15px; line-height: 1.7; }
+.discovery-status { width: max-content; display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid #ccc; border-radius: 99px; background: rgb(255 255 255 / 80%); font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.discovery-status i { width: 7px; height: 7px; border-radius: 50%; background: #999; }
+.discovery-status.online i { background: #159452; box-shadow: 0 0 0 4px rgb(21 148 82 / 12%); }
+.discovery-card { max-width: 1100px; margin-top: 65px; border-top: 1px solid #bbb; border-left: 1px solid #bbb; background: #fff; box-shadow: 0 20px 50px rgb(0 0 0 / 5%); }
+.discovery-card > div { min-height: 78px; display: grid; grid-template-columns: 180px minmax(0, 1fr) auto; align-items: center; gap: 20px; padding: 15px 20px; border-right: 1px solid #bbb; border-bottom: 1px solid #bbb; }
+.discovery-card span { color: #777; font-size: 10px; }
+.discovery-card code { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 11px/1.5 ui-monospace, Consolas, monospace; }
+.discovery-card button, .discovery-connect button { padding: 7px 9px; border: 1px solid #bbb; border-radius: 4px; background: #fff; cursor: pointer; font-size: 9px; }
+.discovery-card .available { border-left: 3px solid #159452; }.discovery-card .unavailable { border-left: 3px solid #999; }
+.discovery-card strong { color: #777; font-size: 11px; }
+.discovery-connect { max-width: 1100px; display: grid; grid-template-columns: 1fr 1fr; gap: 70px; align-items: center; margin-top: 25px; padding: 45px; color: #fff; background: #111; }
+.discovery-connect h2 { margin: 0; font-size: clamp(30px, 4vw, 50px); line-height: 1; letter-spacing: -.05em; }.discovery-connect p:not(.section-kicker) { color: #999; line-height: 1.6; }
+.discovery-connect > div:last-child { min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 17px; border: 1px solid #333; border-radius: 6px; background: #1b1b1b; }.discovery-connect code { overflow: auto; color: #ddd; white-space: nowrap; font: 10px/1.5 ui-monospace, Consolas, monospace; }.discovery-connect button { color: #ddd; border-color: #444; background: #292929; }
+.discovery-notice { max-width: 1100px; margin-top: 25px; padding: 30px; border: 1px solid #bbb; background: #ecece7; }.discovery-notice strong { font-size: 14px; }.discovery-notice p { max-width: 720px; margin-bottom: 0; color: #666; line-height: 1.6; }
+.discovery-state { min-height: 60vh; display: grid; place-content: center; justify-items: center; text-align: center; }.discovery-state h1 { margin: 0; font-size: clamp(50px, 8vw, 95px); letter-spacing: -.07em; }.discovery-state > p:not(.section-kicker) { max-width: 580px; color: #666; }.discovery-state > div { display: flex; gap: 10px; margin-top: 20px; }.discovery-spinner { width: 36px; height: 36px; border: 3px solid #ccc; border-top-color: #111; border-radius: 50%; animation: discovery-spin .8s linear infinite; }
+@keyframes discovery-spin { to { transform: rotate(360deg); } }
+@media (max-width: 720px) { .discovery-page { min-height: calc(100vh - 62px); padding: 45px 18px 80px; }.discovery-card > div { grid-template-columns: 1fr auto; }.discovery-card span { grid-column: 1 / -1; }.discovery-connect { grid-template-columns: 1fr; gap: 25px; padding: 30px 20px; }.discovery-state > div { flex-wrap: wrap; justify-content: center; } }
+@media (prefers-reduced-motion: reduce) { .discovery-page *, .discovery-page *::before, .discovery-page *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; } }

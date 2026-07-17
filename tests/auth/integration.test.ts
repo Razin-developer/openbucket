@@ -87,6 +87,13 @@ describe("MongoDB-backed authentication", { skip: !testUri }, () => {
     }));
     assert.equal(invalidBootstrap.status, 403);
     assert.equal((await invalidBootstrap.json() as { error: { code: string } }).error.code, "SIGNUP_UNAVAILABLE");
+    const bootstrapCollections = await getAuthCollections();
+    await bootstrapCollections.authControls.insertOne({
+      _id: "owner-bootstrap",
+      status: "claiming",
+      claimId: "abandoned-bootstrap-lease",
+      createdAt: new Date(Date.now() - 11 * 60 * 1000),
+    });
 
     const registered = await handleRegister(apiRequest("/api/auth/register", "POST", {
       email,
@@ -96,11 +103,12 @@ describe("MongoDB-backed authentication", { skip: !testUri }, () => {
     }));
     assert.equal(registered.status, 201);
     const registeredPayload = await registered.json() as {
-      user: { id: string; email: string; name: string | null };
+      user: { id: string; email: string; name: string | null; role: string };
     };
     assert.match(registeredPayload.user.id, /^[a-f0-9]{24}$/);
     assert.equal(registeredPayload.user.email, "owner@example.com");
     assert.equal(registeredPayload.user.name, "OpenBucket Owner");
+    assert.equal(registeredPayload.user.role, "admin");
     const registeredCookie = cookiePair(registered);
     assert.match(registeredCookie, /^__Host-openbucket_session=[A-Za-z0-9_-]{43}$/);
 
@@ -108,6 +116,7 @@ describe("MongoDB-backed authentication", { skip: !testUri }, () => {
     const storedUser = await users.findOne({ emailNormalized: "owner@example.com" });
     assert.ok(storedUser);
     assert.notEqual(storedUser.passwordHash, password);
+    assert.equal(storedUser.role, "admin");
     assert.equal(JSON.stringify(storedUser).includes(password), false);
     const token = registeredCookie.split("=", 2)[1];
     const storedSession = await sessions.findOne({ userId: storedUser._id });
@@ -123,8 +132,9 @@ describe("MongoDB-backed authentication", { skip: !testUri }, () => {
 
     const session = await handleSession(apiRequest("/api/auth/session", "GET", undefined, registeredCookie));
     assert.equal(session.status, 200);
-    assert.equal((await session.json() as { user: { email: string } }).user.email, "owner@example.com");
-
+    const sessionPayload = await session.json() as { user: { email: string; role: string } };
+    assert.equal(sessionPayload.user.email, "owner@example.com");
+    assert.equal(sessionPayload.user.role, "admin");
     const secondOwner = await handleRegister(apiRequest("/api/auth/register", "POST", {
       email: "second-owner@example.com",
       password,

@@ -61,7 +61,8 @@ if ($LASTEXITCODE -ne 0) { throw "npm install failed with exit code $LASTEXITCOD
 $command = Get-Command openbucket -ErrorAction SilentlyContinue
 if ($command) {
   & openbucket version
-  Write-Host "Installed successfully. Run: openbucket serve C:\path\to\storage"
+  Write-Host "Installed successfully. Run: openbucket login --email you@example.com"
+  Write-Host "Then serve a disk: openbucket serve C:\path\to\storage --name my-node"
 } else {
   Write-Warning "npm completed, but openbucket is not on PATH. Add npm's global bin directory to PATH, then run openbucket version."
 }

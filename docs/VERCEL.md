@@ -2,7 +2,7 @@
 
 Vercel hosts the public site, documentation, hosted account API, and browser dashboard. The OpenBucket daemon must remain on the machine, server, NAS, or VM that owns the storage disk. A Vercel deployment cannot mount or serve an arbitrary disk from your computer.
 
-The repository contains a Vite target plus Vercel Functions for account authentication. The dashboard still connects directly from the browser to a management API URL selected at build time or entered in **Connection settings**; bucket bytes never pass through MongoDB or the hosted account API.
+The repository contains a Vite target plus Vercel Functions for authentication, node registration, heartbeat/usage ingestion, public discovery, and admin aggregates. MongoDB holds that control-plane metadata. The **Live node** view still connects directly to a daemon management API; object bytes never pass through MongoDB or Vercel.
 
 ## Current production deployment
 
@@ -19,10 +19,14 @@ Production routes are:
 - `/` - public landing page;
 - `/docs` - public product and operations documentation;
 - `/login` and `/register` - hosted account authentication;
-- `/dashboard` - hosted-session-protected dashboard;
-- `/api/auth/*` - server-only registration, login, session, and logout functions.
+- `/dashboard` - protected nodes, usage, account, live-daemon, and admin views;
+- `/<node-name>` - rate-limited public discovery metadata, never an S3 proxy;
+- `/api/auth/*` - registration, login, session, and logout;
+- `/api/nodes`, `/api/node/*`, and `/api/usage` - node lifecycle, heartbeat, and metering;
+- `/api/admin/overview` - admin-only aggregates;
+- `/api/nodes/resolve?name=<node-name>` - public endpoint discovery.
 
-The npm/local dashboard remains account-free. `openbucket dashboard` pairs a browser directly with the local daemon and does not require MongoDB or Vercel.
+Normal `serve` requires an account and registers the node. Explicit `--offline` development remains standalone but disables registration, usage, discovery, and automatic tunneling.
 
 Configure non-secret build values for Production and Preview:
 
@@ -48,26 +52,25 @@ NEXT_PUBLIC_DOCS_URL=https://openbucket-eight.vercel.app/docs
 
 The Git-connected build exposes `VERCEL_GIT_COMMIT_SHA`. The web build writes it to `/deployment.json`; this contains only the commit SHA and is safe to expose.
 
-## Hosted authentication variables
+## Hosted account and control-plane variables
 
 Configure these server-only values in Vercel Project Settings or with the CLI. Never prefix them with `NEXT_PUBLIC_` or `VITE_`:
 
 ```bash
-npx vercel@latest env add MONGODB_URI production
+npx vercel@latest env add MONGODB_URI production --sensitive
 npx vercel@latest env add MONGODB_DATABASE production
-npx vercel@latest env add OPENBUCKET_AUTH_SECRET production
-npx vercel@latest env add OPENBUCKET_SIGNUP_TOKEN production
-npx vercel@latest env add OPENBUCKET_ALLOW_SIGNUP production
+npx vercel@latest env add OPENBUCKET_AUTH_SECRET production --sensitive
+npx vercel@latest env add OPENBUCKET_NODE_DOMAIN production
 ```
 
 - `MONGODB_URI` is the rotated Atlas connection URI. Treat any URI disclosed in chat, logs, or source as compromised and rotate its database-user password before deployment.
 - `MONGODB_DATABASE` defaults to `openbucket_web`.
 - `OPENBUCKET_AUTH_SECRET` is required and must contain at least 32 random bytes. Generate it with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` and store only the result in Vercel.
-- `OPENBUCKET_SIGNUP_TOKEN` is required when signup is enabled, must contain at least 32 random bytes, and must differ from the auth secret.
-- `OPENBUCKET_ALLOW_SIGNUP` defaults to `false`. Set it to `true` only for the intentional registration window, create the owner account, then set it back to `false` and redeploy.
+- `OPENBUCKET_NODE_DOMAIN` defaults to `openbucket.dev` and produces future names such as `s3.home-node.openbucket.dev`; it does not provision DNS/TLS/routing.
+- `OPENBUCKET_SIGNUP_TOKEN` and `OPENBUCKET_ALLOW_SIGNUP` are short-lived controls managed by the bootstrap helper below.
 The first successful registration atomically consumes the bootstrap record before creating the owner, so concurrent requests and immutable older deployment URLs cannot create another account afterward. The raw setup token is never stored. Disable signup, remove the setup token, and redeploy after bootstrap as defense in depth.
 
-Use distinct database users/databases and secrets for Preview and Production. Vercel environment changes apply to new deployments, so redeploy after adding or rotating a value. MongoDB stores hosted users, password verifiers, opaque sessions, and rate-limit records only. It never stores object bytes, daemon admin tokens, or S3 credentials.
+Use distinct database users/databases and secrets for Preview and Production. MongoDB stores users, password verifiers, sessions, bootstrap/rate-limit records, node registrations, hashed node credentials, heartbeat/storage summaries, and aggregate usage events. It never stores object bytes, raw node credentials, daemon admin tokens, or S3 credentials.
 
 For a fork or replacement Vercel project, authenticate, link the directory, and connect its Git repository once:
 
@@ -77,22 +80,45 @@ npx vercel@latest link
 npx vercel@latest git connect
 ```
 
+After the permanent variables are configured and the project is linked, bootstrap the single owner:
+
+```bash
+node scripts/bootstrap-owner.mjs \
+  --email owner@example.com \
+  --name "Owner" \
+  --url https://openbucket-eight.vercel.app
+```
+
+The helper:
+
+1. prompts twice for a hidden 12-128 character password;
+2. generates a high-entropy one-time token in memory;
+3. invokes Vercel with argument arrays and `shell: false`, sending environment values over stdin rather than command arguments;
+4. deploys the short registration window and posts registration to the same HTTPS origin; and
+5. always sets signup back to false, removes the token, and redeploys—even after an earlier failure.
+
+It never writes the password/token to disk or environment variables and redacts them from surfaced child-process errors. If cleanup reports a failure, immediately verify `OPENBUCKET_ALLOW_SIGNUP=false`, remove `OPENBUCKET_SIGNUP_TOKEN`, and redeploy manually before doing anything else.
+
 Validate the web target locally with `npm ci && npm run build:vercel`. Push a reviewed commit to `main` for production; do not manually promote an unrelated local build to the production alias.
 
 ## Connect the daemon safely
 
-The browser must be able to reach the configured management origin over HTTPS. Configure the daemon with the exact dashboard origin so CORS can authorize it:
+Log in once on each node host, then serve a DNS-safe name:
 
-```dotenv
-OPENBUCKET_DASHBOARD_URL=https://openbucket-eight.vercel.app
-OPENBUCKET_ALLOWED_ORIGINS=https://openbucket-eight.vercel.app
+```bash
+openbucket login --email owner@example.com
+openbucket serve /srv/openbucket --name home-node
 ```
 
-Then expose the management listener only through a TLS reverse proxy, named Cloudflare Tunnel, VPN, or comparable access layer. Keep the daemon's bearer authentication enabled. A temporary `openbucket serve ... --tunnel` session can validate the connection, but its URL changes on restart.
+The prompt is hidden. `OPENBUCKET_CONTROL_PLANE_URL` or `--control-plane-url` selects a custom hosted origin. `serve` registers the node and reports heartbeat/storage/request counters. With no managed public URL it automatically starts an S3-only Quick Tunnel; this is restart-dependent development/preview infrastructure, not an SLA endpoint.
 
-Current Chrome versions show a Local Network Access permission prompt when the public HTTPS dashboard first connects to a loopback or private-network daemon; grant it for this site. The default `http://127.0.0.1:7272` loopback target works in browsers that follow the secure-loopback exception. For Safari, a private hostname, or a browser that blocks plain-HTTP local requests, use the documented HTTPS reverse proxy/tunnel instead.
+For production, provision a stable TLS route to the S3 listener, then set `OPENBUCKET_PUBLIC_BASE_URL=https://s3.example.com` and run with `--no-tunnel`. The public `/<node-name>` page reports connection metadata but never proxies bytes. `OPENBUCKET_NODE_DOMAIN` only controls the advertised future hostname.
 
-Never store `OPENBUCKET_ADMIN_TOKEN`, S3 access keys, or S3 secret keys in `NEXT_PUBLIC_*`, `VITE_*`, or Vercel dashboard build variables. Those values are compiled into browser-visible JavaScript. Enter the management token in the dashboard connection dialog; OpenBucket keeps it in API-scoped browser session storage.
+Use `--offline` only for standalone local development; it disables registration, usage, discovery, and the automatic tunnel.
+
+The **Live node** browser must still reach management. Keep its bearer authentication enabled and expose it only through an independently protected HTTPS/private access layer. Never put management/S3 secrets in `NEXT_PUBLIC_*`, `VITE_*`, or Vercel build variables.
+
+Current Chrome versions may show a Local Network Access prompt when the public HTTPS dashboard connects to loopback/private management. The default loopback target works only in browsers honoring the secure-loopback exception; otherwise use a protected HTTPS route.
 
 ## GitHub Actions production verification
 
@@ -109,7 +135,7 @@ npx vercel@latest domains add openbucket.dev openbucket
 npx vercel@latest domains inspect openbucket.dev
 ```
 
-Follow the returned DNS verification records, update `NEXT_PUBLIC_APP_URL`, update the GitHub `VERCEL_PRODUCTION_URL` variable, update the daemon's `OPENBUCKET_DASHBOARD_URL`/`OPENBUCKET_ALLOWED_ORIGINS`, and push a production deployment. The source code does not require a domain-specific change.
+Follow the returned DNS records, update `NEXT_PUBLIC_APP_URL`, GitHub's `VERCEL_PRODUCTION_URL`, `OPENBUCKET_CONTROL_PLANE_URL` on node hosts, and dashboard CORS origins. Set server-only `OPENBUCKET_NODE_DOMAIN=openbucket.dev` for future names, then separately provision each S3 DNS/TLS route.
 
 ## Verify a deployment
 
