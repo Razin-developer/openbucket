@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.5] - 2026-07-18
+
+### Fixed
+
+- Make hosted live-node routing pass the production React lint gate while remounting a console safely when its selected node changes.
+- Remove the remaining transient management address from the local dashboard UI and its status example.
+
 ## [0.1.4] - 2026-07-18
 
 - Repair hosted live-node authentication by binding short-lived console capabilities to the hosted node identity.
@@ -50,7 +57,8 @@ All notable changes to OpenBucket are documented here. Published artifacts follo
 - npm, PyPI, GHCR, GitHub release, CI, security scanning, and trusted-publishing automation.
 - Typed Python management client packaged separately as `openbucket-client`.
 
-[Unreleased]: https://github.com/Razin-developer/openbucket/compare/v0.1.4...HEAD
+[Unreleased]: https://github.com/Razin-developer/openbucket/compare/v0.1.5...HEAD
+[0.1.5]: https://github.com/Razin-developer/openbucket/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Razin-developer/openbucket/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Razin-developer/openbucket/compare/v0.1.2...v0.1.3
 [0.1.1]: https://github.com/Razin-developer/openbucket/compare/822e01397c2cd53ec98c33a1bb4343c468834a34...v0.1.1

@@ -6,7 +6,7 @@ OpenBucket writes real object bytes to the directory you choose. The normal prod
 
 > OpenBucket is currently a single-node, self-hosted v0.1 product. It is useful for development, homelabs, local backup targets, and trusted private networks. Read [Security](#security) and [Current limitations](#current-limitations) before exposing it outside a machine you control.
 
-The Node daemon and CLI are published as [`openbucket@0.1.4`](https://www.npmjs.com/package/openbucket/v/0.1.4), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). Release `0.1.4` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
+The Node daemon and CLI are published as [`openbucket@0.1.5`](https://www.npmjs.com/package/openbucket/v/0.1.5), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). Release `0.1.5` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
 
 ## What is included
 
@@ -92,7 +92,7 @@ openbucket version
 
 ```bash
 npm pack
-npm install --global ./openbucket-0.1.4.tgz
+npm install --global ./openbucket-0.1.5.tgz
 ```
 
 ### From npm
@@ -100,7 +100,7 @@ npm install --global ./openbucket-0.1.4.tgz
 Install the current release from npm:
 
 ```bash
-npm install --global openbucket@0.1.4
+npm install --global openbucket@0.1.5
 openbucket version
 openbucket login --email you@example.com
 openbucket serve /path/to/storage --name my-node
@@ -116,12 +116,12 @@ The installers are thin, auditable npm wrappers served by the current Vercel dep
 
 ```bash
 curl -fsSLo openbucket-install.sh https://openbucket-eight.vercel.app/install.sh
-OPENBUCKET_INSTALL_VERSION=0.1.4 sh ./openbucket-install.sh
+OPENBUCKET_INSTALL_VERSION=0.1.5 sh ./openbucket-install.sh
 ```
 
 ```powershell
 Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile openbucket-install.ps1
-& ./openbucket-install.ps1 -Version 0.1.4
+& ./openbucket-install.ps1 -Version 0.1.5
 ```
 
 From a source checkout, the same installers are available directly:

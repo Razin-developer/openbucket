@@ -223,8 +223,6 @@ function LiveNodeConsole({ user, node, onBack, onLogout }: { user: AccountUser; 
   const [error, setError] = useState("");
   useEffect(() => {
     if (!node) return;
-    setConnection(null);
-    setError("");
     void controlPlaneApi.managementSession(node.id).then((value) => setConnection({ apiBase: value.managementUrl, token: value.token })).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Node management is unavailable."));
   }, [node]);
   return <div className="cp-live-console">{node && connection ? <Dashboard initialConnection={{ ...connection, displayUrl: nodeApiUrl(node) }} /> : <main className="cp-loading"><p>{error || `Connecting securely to ${node?.name ?? "your node"}…`}</p></main>}<aside className="cp-live-dock" aria-label="Hosted account controls"><button type="button" onClick={onBack}>← Account dashboard</button><span>{user.email}</span><button type="button" onClick={onLogout}>Sign out</button></aside></div>;
@@ -270,8 +268,11 @@ export function HostedControlPlane({ user }: { user: AccountUser }) {
     const requested = match?.[1];
     const node = requested ? nodes.find((item) => item.name === requested) : undefined;
     if (node) {
-      setSelectedNode(node);
-      setView("node-console");
+      const timer = window.setTimeout(() => {
+        setSelectedNode(node);
+        setView("node-console");
+      }, 0);
+      return () => window.clearTimeout(timer);
     }
   }, [nodes]);
 
@@ -286,7 +287,7 @@ export function HostedControlPlane({ user }: { user: AccountUser }) {
   ] as Array<[CloudView, string, string]>, [user.role]);
 
   const openNode = (node: AccountNode) => { setSelectedNode(node); window.history.pushState({}, "", `/dashboard/nodes/${encodeURIComponent(node.name)}`); setView("node-console"); };
-  if (view === "node-console") return <LiveNodeConsole user={user} node={selectedNode ?? nodes?.[0] ?? null} onBack={() => { window.history.pushState({}, "", "/dashboard"); setView("overview"); }} onLogout={() => void logout()} />;
+  if (view === "node-console") { const node = selectedNode ?? nodes?.[0] ?? null; return <LiveNodeConsole key={node?.id ?? "no-node"} user={user} node={node} onBack={() => { window.history.pushState({}, "", "/dashboard"); setView("overview"); }} onLogout={() => void logout()} />; }
 
   return <div className="cp-shell">
     <a className="cp-skip" href="#cloud-main">Skip to content</a>
