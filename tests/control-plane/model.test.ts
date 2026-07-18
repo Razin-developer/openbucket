@@ -85,7 +85,9 @@ describe("control-plane input model", () => {
   test("validates bounded heartbeat metrics and explicit public discovery", () => {
     const parsed = validateHeartbeatPayload(heartbeat());
     assert.equal(parsed.publicDiscoverable, true);
-    assert.equal(parsed.publicS3Url, "https://office-node.tunnel.example/");
+    assert.equal(parsed.publicS3Url, "https://office-node.tunnel.example");
+    assert.equal(parsed.managementUrl, "http://127.0.0.1:4880");
+    assert.equal(parsed.dashboardUrl, "http://localhost:4881");
     assert.equal(parsed.storage.usedBytes, 400);
 
     assert.throws(

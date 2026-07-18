@@ -128,9 +128,11 @@ function parseUrl(value: unknown, field: string, publicOnly: boolean): string | 
   if (url.username || url.password || url.search || url.hash) {
     throw new ApiError(400, "INVALID_ENDPOINT", field + " must not contain credentials, a query, or a fragment.");
   }
-  if (url.protocol === "https:") return url.toString();
+  url.pathname = url.pathname.replace(/\/+$/, "");
+  const normalized = url.toString().replace(/\/$/, "");
+  if (url.protocol === "https:") return normalized;
   const loopback = url.hostname === "localhost" || url.hostname === "::1" || url.hostname === "[::1]" || /^127(?:\.[0-9]{1,3}){3}$/.test(url.hostname);
-  if (!publicOnly && url.protocol === "http:" && loopback) return url.toString();
+  if (!publicOnly && url.protocol === "http:" && loopback) return normalized;
   throw new ApiError(400, "INVALID_ENDPOINT", field + (publicOnly ? " must use HTTPS." : " must use HTTPS or loopback HTTP."));
 }
 

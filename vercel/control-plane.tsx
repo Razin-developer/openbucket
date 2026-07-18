@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { Activity, ArrowLeft, ArrowRight, Box, Check, Copy, ExternalLink, LayoutDashboard, Network, RefreshCw, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { Dashboard } from "../app/dashboard";
 import { Brand } from "./site-shell";
 import "./control-plane.css";
@@ -134,7 +135,7 @@ function relativeHeartbeat(value: string | null): string {
 
 function CopyValue({ value, label = "Copy" }: { value: string; label?: string }) {
   const [copied, setCopied] = useState(false);
-  return <button className="cp-copy" type="button" onClick={async () => { await navigator.clipboard.writeText(value); setCopied(true); window.setTimeout(() => setCopied(false), 1_500); }}>{copied ? "Copied" : label}</button>;
+  return <button className="cp-copy" type="button" onClick={async () => { await navigator.clipboard.writeText(value); setCopied(true); window.setTimeout(() => setCopied(false), 1_500); }}>{copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> {label}</>}</button>;
 }
 
 function Metric({ label, value, note }: { label: string; value: string; note?: string }) {
@@ -142,7 +143,7 @@ function Metric({ label, value, note }: { label: string; value: string; note?: s
 }
 
 function StatePanel({ tone = "plain", title, children, action }: { tone?: "plain" | "error"; title: string; children: ReactNode; action?: ReactNode }) {
-  return <section className={`cp-state ${tone}`}><span aria-hidden="true">{tone === "error" ? "!" : "OB"}</span><h2>{title}</h2><div>{children}</div>{action}</section>;
+  return <section className={`cp-state ${tone}`}><span aria-hidden="true">{tone === "error" ? <ShieldCheck size={22} /> : "OB"}</span><h2>{title}</h2><div>{children}</div>{action}</section>;
 }
 
 function NodeStatus({ status }: { status: AccountNode["status"] }) {
@@ -164,7 +165,7 @@ function NodeCard({ node, onOpen }: { node: AccountNode; onOpen?: (node: Account
         <div><span>Last seen</span><strong>{relativeHeartbeat(node.lastSeenAt)}</strong></div>
       </div>
       <div className="cp-node-endpoints"><div className="cp-endpoint"><span>OpenBucket API</span><code>{nodeApiUrl(node)}</code><CopyValue value={nodeApiUrl(node)} /></div><div className="cp-endpoint"><span>Node services</span><em>{node.status === "online" ? "Available" : "Offline"}</em></div></div>
-      <footer><span>OpenBucket {node.version || "version pending"}</span>{onOpen ? <button type="button" onClick={() => onOpen(node)}>Open node →</button> : <span>Registered {formatDate(node.createdAt)}</span>}</footer>
+      <footer><span>OpenBucket {node.version || "version pending"}</span>{onOpen ? <button type="button" onClick={() => onOpen(node)}>Open node <ArrowRight size={14} /></button> : <span>Registered {formatDate(node.createdAt)}</span>}</footer>
     </article>
   );
 }
@@ -174,7 +175,7 @@ function Onboarding({ user }: { user: AccountUser }) {
   const serveCommand = "openbucket serve /path/to/storage";
   return (
     <section className="cp-onboarding">
-      <div className="cp-onboarding-copy"><p className="cp-eyebrow">CONNECT A REAL NODE</p><h2>Login once. Serve the disk.</h2><p>The CLI securely prompts for your password, registers the node, and sends real heartbeats and usage to this account. Object bytes remain on the storage host.</p><a href="/docs#first-node">Read the node guide →</a></div>
+      <div className="cp-onboarding-copy"><p className="cp-eyebrow">CONNECT A REAL NODE</p><h2>Login once. Serve the disk.</h2><p>The CLI securely prompts for your password, registers the node, and sends real heartbeats and usage to this account. Object bytes remain on the storage host.</p><a href="/docs#first-node">Read the node guide <ArrowRight size={14} /></a></div>
       <div className="cp-command-stack">
         <div><span><b>01</b> Authenticate this machine</span><div><code>{loginCommand}</code><CopyValue value={loginCommand} /></div></div>
         <div><span><b>02</b> Name and start the node</span><div><code>{serveCommand}</code><CopyValue value={serveCommand} /></div></div>
@@ -195,7 +196,7 @@ function Overview({ user, nodes, usage, onView, onOpen }: { user: AccountUser; n
       <Metric label="Objects" value={formatCount(summary.objectCount)} note={`${formatCount(summary.bucketCount)} buckets`} />
       <Metric label="Requests" value={formatCount(summary.requestCount)} note={`${formatBytes(summary.bytesIn + summary.bytesOut)} transferred`} />
     </section>
-    {nodes.length === 0 ? <Onboarding user={user} /> : <section className="cp-section"><div className="cp-section-head"><div><p className="cp-eyebrow">NODE FLEET</p><h2>Storage hosts</h2></div><button type="button" onClick={() => onView("nodes")}>View all nodes →</button></div><div className="cp-node-grid">{nodes.slice(0, 2).map((node) => <NodeCard node={node} key={node.id} onOpen={onOpen} />)}</div></section>}
+    {nodes.length === 0 ? <Onboarding user={user} /> : <section className="cp-section"><div className="cp-section-head"><div><p className="cp-eyebrow">NODE FLEET</p><h2>Storage hosts</h2></div><button type="button" onClick={() => onView("nodes")}>View all nodes <ArrowRight size={14} /></button></div><div className="cp-node-grid">{nodes.slice(0, 2).map((node) => <NodeCard node={node} key={node.id} onOpen={onOpen} />)}</div></section>}
     {nodes.length > 0 ? <Onboarding user={user} /> : null}
   </>;
 }
@@ -225,7 +226,7 @@ function LiveNodeConsole({ user, node, onBack, onLogout }: { user: AccountUser; 
     if (!node) return;
     void controlPlaneApi.managementSession(node.id).then((value) => setConnection({ apiBase: value.managementUrl, token: value.token })).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Node management is unavailable."));
   }, [node]);
-  return <div className="cp-live-console">{node && connection ? <Dashboard initialConnection={{ ...connection, displayUrl: nodeApiUrl(node) }} /> : <main className="cp-loading"><p>{error || `Connecting securely to ${node?.name ?? "your node"}…`}</p></main>}<aside className="cp-live-dock" aria-label="Hosted account controls"><button type="button" onClick={onBack}>← Account dashboard</button><span>{user.email}</span><button type="button" onClick={onLogout}>Sign out</button></aside></div>;
+  return <div className="cp-live-console">{node && connection ? <Dashboard initialConnection={{ ...connection, displayUrl: nodeApiUrl(node) }} /> : <main className="cp-loading"><p>{error || `Connecting securely to ${node?.name ?? "your node"}…`}</p></main>}<aside className="cp-live-dock" aria-label="Hosted account controls"><button type="button" onClick={onBack}><ArrowLeft size={14} /> Account dashboard</button><span>{user.email}</span><button type="button" onClick={onLogout}>Sign out</button></aside></div>;
 }
 
 export function HostedControlPlane({ user }: { user: AccountUser }) {
@@ -282,17 +283,17 @@ export function HostedControlPlane({ user }: { user: AccountUser }) {
   }, []);
 
   const navigation = useMemo(() => [
-    ["overview", "Overview", "⌂"], ["nodes", "Nodes", "◇"], ["usage", "Usage", "↗"], ["node-console", "Live node", "⌁"], ["account", "Account", "○"],
-    ...(user.role === "admin" ? [["admin", "Admin", "A"]] : []),
-  ] as Array<[CloudView, string, string]>, [user.role]);
+    ["overview", "Overview", LayoutDashboard], ["nodes", "Nodes", Network], ["usage", "Usage", Activity], ["node-console", "Live node", Box], ["account", "Account", UserRound],
+    ...(user.role === "admin" ? [["admin", "Admin", UsersRound]] : []),
+  ] as Array<[CloudView, string, typeof LayoutDashboard]>, [user.role]);
 
   const openNode = (node: AccountNode) => { setSelectedNode(node); window.history.pushState({}, "", `/dashboard/nodes/${encodeURIComponent(node.name)}`); setView("node-console"); };
   if (view === "node-console") { const node = selectedNode ?? nodes?.[0] ?? null; return <LiveNodeConsole key={node?.id ?? "no-node"} user={user} node={node} onBack={() => { window.history.pushState({}, "", "/dashboard"); setView("overview"); }} onLogout={() => void logout()} />; }
 
   return <div className="cp-shell">
     <a className="cp-skip" href="#cloud-main">Skip to content</a>
-    <aside className="cp-sidebar"><Brand /><div className="cp-workspace-label"><span>Cloud workspace</span><strong>{user.name || user.email}</strong></div><nav aria-label="Account dashboard">{navigation.map(([id, label, glyph]) => <button className={view === id ? "active" : ""} type="button" key={id} onClick={() => setView(id)}><span aria-hidden="true">{glyph}</span>{label}</button>)}</nav><div className="cp-sidebar-foot"><a href="/docs">Documentation ↗</a><a href="https://github.com/Razin-developer/openbucket">GitHub ↗</a></div></aside>
-    <div className="cp-workspace"><header className="cp-topbar"><div><span className={`cp-cloud-status ${error ? "error" : "healthy"}`}><i />{error ? "Account API issue" : "Account API connected"}</span></div><div className="cp-top-actions"><button type="button" disabled={refreshing} onClick={() => void load(true)} aria-label="Refresh account data">{refreshing ? "Refreshing…" : "Refresh"}</button><button className="cp-account-button" type="button" onClick={() => setView("account")}><span>{(user.name || user.email)[0].toUpperCase()}</span><b>{user.name || user.email}</b><small>{user.role}</small></button></div></header><main id="cloud-main" className="cp-main">
+    <aside className="cp-sidebar"><Brand /><div className="cp-workspace-label"><span>Cloud workspace</span><strong>{user.name || user.email}</strong></div><nav aria-label="Account dashboard">{navigation.map(([id, label, Icon]) => <button className={view === id ? "active" : ""} type="button" key={id} onClick={() => setView(id)}><Icon size={17} aria-hidden="true" />{label}</button>)}</nav><div className="cp-sidebar-foot"><a href="/docs">Documentation <ExternalLink size={12} /></a><a href="https://github.com/Razin-developer/openbucket">GitHub <ExternalLink size={12} /></a></div></aside>
+    <div className="cp-workspace"><header className="cp-topbar"><div><span className={`cp-cloud-status ${error ? "error" : "healthy"}`}><i />{error ? "Account API issue" : "Account API connected"}</span></div><div className="cp-top-actions"><button type="button" disabled={refreshing} onClick={() => void load(true)} aria-label="Refresh account data"><RefreshCw size={14} className={refreshing ? "is-spinning" : undefined} /> {refreshing ? "Refreshing…" : "Refresh"}</button><button className="cp-account-button" type="button" onClick={() => setView("account")}><span>{(user.name || user.email)[0].toUpperCase()}</span><b>{user.name || user.email}</b><small>{user.role}</small></button></div></header><main id="cloud-main" className="cp-main">
       {error ? <StatePanel tone="error" title="Account data unavailable" action={<button className="cp-primary" type="button" onClick={() => void load(true)}>Try again</button>}><p>{error}</p></StatePanel> : null}
       {!error && (!nodes || !usage) ? <div className="cp-loading" aria-live="polite"><span /><span /><span /><p>Loading account data…</p></div> : null}
       {!error && nodes && usage && view === "overview" ? <Overview user={user} nodes={nodes} usage={usage} onView={setView} onOpen={openNode} /> : null}

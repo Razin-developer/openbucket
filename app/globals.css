@@ -1,6 +1,8 @@
 @import "tailwindcss";
 
 :root {
+  --font-geist-sans: "Geist", "Geist Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-geist-mono: "Geist Mono", "SFMono-Regular", Consolas, ui-monospace, monospace;
   --ink: #171717; --body: #4d4d4d; --mute: #888; --hairline: #ebebeb; --hairline-strong: #a1a1a1;
   --canvas: #fff; --canvas-soft: #fafafa; --canvas-soft-2: #f5f5f5; --link: #0070f3;
   --error: #ee0000; --error-soft: #f7d4d6; --warning: #ab570a; --warning-soft: #ffefcf;
@@ -32,9 +34,10 @@ code, pre { font-family: var(--font-geist-mono), ui-monospace, monospace; }
 .mobile-close { display: none; margin-left: auto; border: 0; background: transparent; font-size: 24px; }
 .sidebar nav { display: grid; gap: 3px; padding: 16px 0; }
 .sidebar nav button { position: relative; width: 100%; height: 38px; display: flex; align-items: center; gap: 11px; padding: 0 11px; color: var(--body); border: 0; border-radius: 6px; background: transparent; cursor: pointer; text-align: left; }
-.sidebar nav button > span { width: 18px; color: var(--mute); font-family: var(--font-geist-mono), monospace; text-align: center; }
+.sidebar nav button > svg { width: 18px; flex: 0 0 auto; color: var(--mute); }
 .sidebar nav button:hover { color: var(--ink); background: var(--canvas-soft-2); }
 .sidebar nav button.active { color: var(--ink); background: var(--canvas-soft-2); font-weight: 500; box-shadow: 0 0 0 1px rgb(0 0 0 / 4%) inset; }
+.sidebar nav button.active > svg { color: var(--ink); }
 .sidebar nav button.active::before { content: ""; position: absolute; left: 0; width: 2px; height: 18px; border-radius: 2px; background: var(--ink); }
 .sidebar-node { margin-top: auto; padding: 13px; border-radius: 8px; background: var(--canvas-soft); box-shadow: var(--shadow-1); overflow: hidden; }
 .node-state { display: flex; align-items: center; gap: 7px; margin-bottom: 9px; color: var(--body); font-size: 12px; }
@@ -44,7 +47,7 @@ code, pre { font-family: var(--font-geist-mono), ui-monospace, monospace; }
 .sidebar-node strong, .sidebar-node small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sidebar-node strong { font-size: 13px; font-weight: 500; }
 .sidebar-node small { margin: 3px 0 10px; color: var(--mute); font: 10px/1.5 var(--font-geist-mono), monospace; }
-.sidebar-node button { padding: 0; color: var(--body); border: 0; background: none; cursor: pointer; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.sidebar-node button { display: inline-flex; align-items: center; gap: 5px; padding: 0; color: var(--body); border: 0; background: none; cursor: pointer; font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
 
 .workspace { min-height: 100vh; margin-left: var(--sidebar-width); }
 .topbar { position: sticky; z-index: 20; top: 0; height: 64px; display: flex; align-items: center; justify-content: space-between; gap: 20px; padding: 0 28px; border-bottom: 1px solid var(--hairline); background: rgb(255 255 255 / 88%); backdrop-filter: blur(14px); }
@@ -56,14 +59,14 @@ code, pre { font-family: var(--font-geist-mono), ui-monospace, monospace; }
 .last-updated { color: var(--mute); font: 11px/1 var(--font-geist-mono), monospace; }
 .icon-button { width: 32px; height: 32px; display: grid; place-items: center; color: var(--body); border: 1px solid var(--hairline); border-radius: 50%; background: var(--canvas); cursor: pointer; }
 .icon-button:hover { color: var(--ink); background: var(--canvas-soft); }
-.docs-link { height: 32px; display: inline-flex; align-items: center; padding: 0 11px; color: var(--ink); border: 1px solid var(--hairline); border-radius: 6px; background: var(--canvas); text-decoration: none; font-weight: 500; }
+.docs-link { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 11px; color: var(--ink); border: 1px solid var(--hairline); border-radius: 6px; background: var(--canvas); text-decoration: none; font-weight: 500; }
 .mobile-menu { display: none; }
 .main-content { width: min(100%, 1420px); margin: 0 auto; padding: 40px 40px 80px; }
 .eyebrow { margin: 0 0 8px; color: var(--mute); font: 11px/1.4 var(--font-geist-mono), monospace; letter-spacing: .02em; text-transform: uppercase; }
 .page-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
 .page-heading h1 { margin: 0; font-size: 32px; line-height: 40px; font-weight: 600; letter-spacing: -1.28px; }
 .page-heading p:not(.eyebrow) { max-width: 640px; margin: 6px 0 0; color: var(--body); font-size: 15px; }
-.button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; padding: 0 17px; border-radius: 100px; cursor: pointer; font-weight: 500; transition: transform 150ms ease, background 150ms ease, border-color 150ms ease; }
+.button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 17px; border-radius: 100px; cursor: pointer; font-weight: 500; transition: transform 150ms ease, background 150ms ease, border-color 150ms ease; }
 .button:hover:not(:disabled) { transform: translateY(-1px); }
 .button:disabled, .button.disabled { cursor: not-allowed; opacity: .48; }
 .button.primary { color: white; border: 1px solid var(--ink); background: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 18%); }
@@ -72,6 +75,7 @@ code, pre { font-family: var(--font-geist-mono), ui-monospace, monospace; }
 .button.secondary:hover:not(:disabled) { border-color: #d3d3d3; background: var(--canvas-soft); }
 .button.compact { min-height: 36px; padding: 0 14px; border-radius: 6px; font-size: 13px; }
 .text-button { padding: 0; color: var(--body); border: 0; background: none; cursor: pointer; font-weight: 500; }
+.text-button-icon, .back-button, .inline-actions button { display: inline-flex; align-items: center; gap: 5px; }
 .text-button:hover { color: var(--ink); }
 .danger { color: var(--error) !important; }
 
@@ -102,7 +106,7 @@ code, pre { font-family: var(--font-geist-mono), ui-monospace, monospace; }
 .command-row { min-width: 340px; justify-content: space-between; padding: 9px 10px 9px 13px; border: 1px solid rgb(197 0 0 / 14%); border-radius: 6px; background: rgb(255 255 255 / 68%); }
 .command-row code { overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
 .alert-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
-.copy-button { min-width: 56px; height: 28px; padding: 0 9px; color: var(--body); border: 1px solid var(--hairline); border-radius: 5px; background: var(--canvas); cursor: pointer; font-size: 11px; font-weight: 500; }
+.copy-button { min-width: 56px; height: 28px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; padding: 0 9px; color: var(--body); border: 1px solid var(--hairline); border-radius: 5px; background: var(--canvas); cursor: pointer; font-size: 11px; font-weight: 500; }
 .copy-button:hover { color: var(--ink); border-color: #d2d2d2; }
 .metrics-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin: 20px 0; }
 .metric-card { min-height: 132px; padding: 21px; border-radius: 8px; background: var(--canvas); box-shadow: var(--shadow-2); }
@@ -132,7 +136,7 @@ td { height: 56px; padding: 0 16px; border-top: 1px solid var(--hairline); color
 .strong-cell, .object-key { color: var(--ink); font-weight: 500; }
 .bucket-link { display: inline-flex; align-items: center; gap: 10px; padding: 0; color: var(--ink); border: 0; background: none; cursor: pointer; font-weight: 500; }
 .bucket-link:hover { color: var(--link); }
-.bucket-glyph { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 5px; background: var(--canvas-soft-2); font: 14px/1 var(--font-geist-mono), monospace; }
+.bucket-glyph { width: 25px; height: 25px; display: grid; place-items: center; border-radius: 5px; background: var(--canvas-soft-2); }
 .row-actions { text-align: right; }
 .inline-actions { display: flex; justify-content: flex-end; gap: 12px; }
 .inline-actions button { padding: 0; color: var(--body); border: 0; background: transparent; cursor: pointer; font-size: 12px; }

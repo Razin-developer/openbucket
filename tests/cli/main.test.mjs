@@ -114,13 +114,14 @@ test("parseDuration returns whole seconds for supported human durations", () => 
   assert.throws(() => parseDuration("2w"), CLIUsageError);
 });
 
-test("dashboard launch credentials use a fragment and preserve a clean API hint", () => {
+test("dashboard launch credentials use a fragment and replace stale dashboard query parameters", () => {
   const launch = new URL(dashboardLaunchUrl(
-    "http://localhost:3000",
-    "http://127.0.0.1:7272",
+    "http://localhost:3000/?api=https%3A%2F%2Fold.example.test%2F&unused=value#old-token",
+    "http://127.0.0.1:7272/",
     "dashboard-admin-token",
   ));
   assert.equal(launch.searchParams.get("api"), "http://127.0.0.1:7272");
+  assert.equal(launch.searchParams.get("unused"), null);
   assert.equal(new URLSearchParams(launch.hash.slice(1)).get("token"), "dashboard-admin-token");
   assert.equal(launch.toString().includes("?token="), false);
 });
@@ -406,6 +407,7 @@ test("dashboard command re-pairs through a fragment without printing the token",
     assert.equal(new URLSearchParams(new URL(openedUrl).hash.slice(1)).get("token"), "reopen-secret-token");
     assert.equal(new URL(openedUrl).searchParams.get("api"), "https://remote-api.trycloudflare.com");
     assert.equal(stdout.value().includes("reopen-secret-token"), false);
+    assert.equal(stdout.value().includes("remote-api.trycloudflare.com"), false);
     assert.match(stdout.value(), /one-time pairing fragment/i);
   } finally {
     await rm(temporaryHome, { recursive: true, force: true });

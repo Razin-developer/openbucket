@@ -1147,9 +1147,9 @@ async function getProductVersion(io: CLIIO): Promise<string> {
     const packageData = JSON.parse(await readFile(packageUrl, "utf8")) as {
       version?: unknown;
     };
-    return typeof packageData.version === "string" ? packageData.version : "0.1.5";
+    return typeof packageData.version === "string" ? packageData.version : "0.1.6";
   } catch {
-    return "0.1.5";
+    return "0.1.6";
   }
 }
 
@@ -1351,9 +1351,7 @@ async function runDashboard(io: CLIIO): Promise<number> {
   );
   if (!launchUrl) throw new Error("The dashboard URL is invalid.");
   openDashboard(launchUrl, io);
-  const displayUrl = new URL(active.dashboardUrl);
-  displayUrl.hash = "";
-  writeLine(io.stdout, `Opening OpenBucket dashboard at ${displayUrl.toString()}`);
+  writeLine(io.stdout, "Opening your secure OpenBucket dashboard.");
   writeLine(io.stdout, "The one-time pairing fragment is removed from the address bar after launch.");
   return EXIT_SUCCESS;
 }
@@ -1372,12 +1370,26 @@ export function dashboardLaunchUrl(value: string | undefined, managementUrl: str
   if (!value) return undefined;
   try {
     const url = new URL(value);
+    url.search = "";
+    url.hash = "";
     url.searchParams.set("api", connectableUrl(managementUrl));
     if (token) {
-      const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
+      const fragment = new URLSearchParams();
       fragment.set("token", token);
       url.hash = fragment.toString();
     }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function dashboardBaseUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    url.search = "";
+    url.hash = "";
     return url.toString();
   } catch {
     return value;
@@ -1845,10 +1857,7 @@ async function serveForeground(
     pid: io.pid,
     managementUrl,
     s3Url: connectableUrl(handle.config.s3Url ?? config.s3Url),
-    dashboardUrl: dashboardLaunchUrl(
-      handle.config.dashboardUrl ?? effectiveDashboardUrl,
-      dashboardApiUrl,
-    ),
+    dashboardUrl: dashboardBaseUrl(handle.config.dashboardUrl ?? effectiveDashboardUrl),
     ...(dashboardApiUrl !== managementUrl ? { dashboardApiUrl } : {}),
     ...(publicUrl ? { publicUrl } : {}),
     ...(quickTunnels.get("management")?.url ? { publicManagementUrl: quickTunnels.get("management")!.url } : {}),

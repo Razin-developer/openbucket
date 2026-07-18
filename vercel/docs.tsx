@@ -1,11 +1,12 @@
 import { useState, type ReactNode } from "react";
+import { ArrowRight, Check, Copy, ExternalLink, Info } from "lucide-react";
 import { SiteShell, githubUrl } from "./site-shell";
 
 function CodeBlock({ children, label = "Terminal" }: { children: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <div className="docs-code">
-      <div><span>{label}</span><button type="button" onClick={async () => { await navigator.clipboard.writeText(children); setCopied(true); window.setTimeout(() => setCopied(false), 1_400); }}>{copied ? "Copied" : "Copy"}</button></div>
+      <div><span>{label}</span><button type="button" onClick={async () => { await navigator.clipboard.writeText(children); setCopied(true); window.setTimeout(() => setCopied(false), 1_400); }}>{copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}</button></div>
       <pre><code>{children}</code></pre>
     </div>
   );
@@ -37,7 +38,7 @@ export function DocsPage() {
           <div className="docs-sidebar-callout">
             <strong>Need every detail?</strong>
             <p>The repository includes API, operations, security, S3 compatibility, and contribution references.</p>
-            <a href={`${githubUrl}/tree/main/docs`}>Browse all guides ↗</a>
+            <a href={`${githubUrl}/tree/main/docs`}>Browse all guides <ExternalLink size={13} /></a>
           </div>
         </aside>
 
@@ -46,7 +47,7 @@ export function DocsPage() {
             <p className="section-kicker">OPENBUCKET DOCUMENTATION</p>
             <h1>From local folder<br />to S3 endpoint.</h1>
             <p>Install the daemon on the machine that owns your storage, choose a path, then connect standard S3 clients or the live dashboard.</p>
-            <div className="docs-requirement"><span aria-hidden="true">i</span><p><strong>Runtime requirement</strong> Node.js 22.13 or newer. Production releases are tested on Node.js 22 and 24.</p></div>
+            <div className="docs-requirement"><span aria-hidden="true"><Info size={13} /></span><p><strong>Runtime requirement</strong> Node.js 22.13 or newer. Production releases are tested on Node.js 22 and 24.</p></div>
           </header>
 
           <DocSection id="installation" eyebrow="01 · INSTALLATION" title="Install the published CLI">
@@ -99,8 +100,8 @@ export function DocsPage() {
               <div><span>04</span><p><strong>Monitor the host</strong>Track free space, process health, request errors, and restore drills on representative data.</p></div>
             </div>
             <div className="docs-next-links">
-              <a href={`${githubUrl}/blob/main/docs/OPERATIONS.md`}><span>Next</span><strong>Production operations →</strong></a>
-              <a href={`${githubUrl}/blob/main/docs/SECURITY.md`}><span>Review</span><strong>Security model →</strong></a>
+              <a href={`${githubUrl}/blob/main/docs/OPERATIONS.md`}><span>Next</span><strong>Production operations <ArrowRight size={13} /></strong></a>
+              <a href={`${githubUrl}/blob/main/docs/SECURITY.md`}><span>Review</span><strong>Security model <ArrowRight size={13} /></strong></a>
             </div>
           </DocSection>
         </article>

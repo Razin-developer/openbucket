@@ -28,7 +28,7 @@ test("server-renders the complete OpenBucket dashboard shell", async () => {
   assert.match(html, /<title>OpenBucket — your disk, now S3-compatible<\/title>/i);
   assert.match(html, /<meta name="application-name" content="OpenBucket"\/>/i);
   assert.match(html, /OpenBucket/);
-  assert.match(html, /Local control plane/);
+  assert.match(html, /Node console/);
   assert.match(html, /Connect your first disk\./);
   assert.match(html, /Buckets/);
   assert.match(html, /API keys/);
@@ -53,7 +53,8 @@ test("removes starter preview code and wires only live daemon data", async () =>
   assert.match(dashboard, /\/v1\/buckets/);
   assert.match(dashboard, /\/v1\/analytics/);
   assert.match(dashboard, /\/v1\/logs\?limit=100/);
-  assert.match(dashboard, /fetch\(`/);
+  assert.match(dashboard, /apiRequestUrl\(apiBase, path\)/);
+  assert.match(dashboard, /lucide-react/);
   assert.match(dashboard, /localStorage\.setItem\(API_STORAGE_KEY/);
   assert.match(dashboard, /sessionStorage\.setItem\(tokenStorageKey\(apiBase\)/);
   assert.match(dashboard, /current\.hash = ""/);

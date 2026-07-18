@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.6] - 2026-07-18
+
+### Added
+
+- Unify local and hosted live-node views around the same Geist, Lucide-powered node console.
+
+### Fixed
+
+- Normalize endpoint URLs before daemon heartbeats and browser requests, eliminating trailing-slash double-request failures.
+- Keep tunnel endpoints out of saved dashboard URLs and CLI output while preserving private one-time console pairing.
+
 ## [0.1.5] - 2026-07-18
 
 ### Fixed
@@ -57,7 +68,8 @@ All notable changes to OpenBucket are documented here. Published artifacts follo
 - npm, PyPI, GHCR, GitHub release, CI, security scanning, and trusted-publishing automation.
 - Typed Python management client packaged separately as `openbucket-client`.
 
-[Unreleased]: https://github.com/Razin-developer/openbucket/compare/v0.1.5...HEAD
+[Unreleased]: https://github.com/Razin-developer/openbucket/compare/v0.1.6...HEAD
+[0.1.6]: https://github.com/Razin-developer/openbucket/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Razin-developer/openbucket/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Razin-developer/openbucket/compare/v0.1.3...v0.1.4
 [0.1.3]: https://github.com/Razin-developer/openbucket/compare/v0.1.2...v0.1.3
