@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.2] - 2026-07-18
+
+- Add secure per-node hosted console connections and persisted S3/management tunnel state.
+- Add public user/node discovery routes and owner-only node console routing.
+- Add interactive tunnel status, setup guidance, and connector update commands.
+
 All notable changes to OpenBucket are documented here. Published artifacts follow Semantic Versioning.
 
 ## [Unreleased]
@@ -37,6 +43,7 @@ All notable changes to OpenBucket are documented here. Published artifacts follo
 - npm, PyPI, GHCR, GitHub release, CI, security scanning, and trusted-publishing automation.
 - Typed Python management client packaged separately as `openbucket-client`.
 
-[Unreleased]: https://github.com/Razin-developer/openbucket/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/Razin-developer/openbucket/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/Razin-developer/openbucket/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/Razin-developer/openbucket/compare/822e01397c2cd53ec98c33a1bb4343c468834a34...v0.1.1
 [0.1.0]: https://www.npmjs.com/package/openbucket/v/0.1.0
