@@ -18,7 +18,7 @@ Protect `main`, require the CI and security checks, require pull-request review,
 
 `openbucket@0.1.0` was published manually on July 16, 2026 from commit `822e01397c2cd53ec98c33a1bb4343c468834a34`. It is immutable and has no trusted-publishing provenance attestation. The npm trusted publisher was configured afterward, so it applies only to future versions.
 
-For `0.1.3` and later, confirm the package's **Trusted Publisher** settings use:
+For `0.1.4` and later, confirm the package's **Trusted Publisher** settings use:
 
 - provider: GitHub Actions;
 - organization/user: `Razin-developer`;
@@ -40,7 +40,7 @@ The Python distribution is `openbucket-client`; its import package is `openbucke
 3. Set PyPI project name to `openbucket-client`, owner to `Razin-developer`, repository to `openbucket`, workflow name to `release.yml`, and environment name to `pypi`.
 4. Confirm the GitHub repository has an environment named `pypi`; add a required reviewer and tag deployment protection when the account plan supports them.
 5. Keep the publish job's `id-token: write` permission and do not add a PyPI password or API token.
-6. Publish through the protected `v0.1.3` tag workflow. On first successful use, PyPI creates the project and converts the pending publisher into a normal trusted publisher.
+6. Publish through the protected `v0.1.4` tag workflow. On first successful use, PyPI creates the project and converts the pending publisher into a normal trusted publisher.
 
 A pending publisher does not reserve the project name. Configure it immediately before the release, verify every field exactly, and use the official [pending-publisher guide](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/) and [publishing guide](https://docs.pypi.org/trusted-publishers/using-a-publisher/). TestPyPI uses a separate publisher configuration.
 
@@ -55,7 +55,7 @@ One-time owner bootstrap additionally requires a distinct `OPENBUCKET_SIGNUP_TOK
 
 ## Prepare a version
 
-This release's unified version is `0.1.3`; existing registry versions cannot be republished.
+This release's unified version is `0.1.4`; existing registry versions cannot be republished.
 
 Update every synchronized version location:
 
@@ -96,8 +96,8 @@ Commit the version change through a reviewed pull request.
 Create an annotated tag from the protected, green `main` commit and push it:
 
 ```bash
-git tag -a v0.1.3 -m "OpenBucket v0.1.3"
-git push origin v0.1.3
+git tag -a v0.1.4 -m "OpenBucket v0.1.4"
+git push origin v0.1.4
 ```
 
 The release workflow verifies that the tag and every package version match, then:
@@ -113,9 +113,9 @@ Do not rerun only one registry job after changing source. Fix forward with a new
 ## Verify and rollback
 
 ```bash
-npm view openbucket@0.1.3 version dist.integrity dist.attestations
+npm view openbucket@0.1.4 version dist.integrity dist.attestations
 python -m pip index versions openbucket-client
-docker buildx imagetools inspect ghcr.io/razin-developer/openbucket:0.1.3
+docker buildx imagetools inspect ghcr.io/razin-developer/openbucket:0.1.4
 ```
 
 Install into clean temporary environments and run `openbucket version` plus a real daemon health check. Confirm the Vercel production deployment separately.

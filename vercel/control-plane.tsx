@@ -149,8 +149,8 @@ function NodeStatus({ status }: { status: AccountNode["status"] }) {
   return <span className={`cp-node-status ${status}`}><i aria-hidden="true" />{status[0].toUpperCase() + status.slice(1)}</span>;
 }
 
-function EndpointRow({ label, value }: { label: string; value: string | null }) {
-  return <div className="cp-endpoint"><span>{label}</span>{value ? <><code>{value}</code><CopyValue value={value} /></> : <em>Not advertised</em>}</div>;
+function nodeApiUrl(node: AccountNode): string {
+  return new URL(node.endpoint.nodePath, node.endpoint.controlPlaneUrl).toString();
 }
 
 function NodeCard({ node, onOpen }: { node: AccountNode; onOpen?: (node: AccountNode) => void }) {
@@ -163,11 +163,7 @@ function NodeCard({ node, onOpen }: { node: AccountNode; onOpen?: (node: Account
         <div><span>Requests</span><strong>{formatCount(node.usage.requests)}</strong></div>
         <div><span>Last seen</span><strong>{relativeHeartbeat(node.lastSeenAt)}</strong></div>
       </div>
-      <div className="cp-node-endpoints">
-        <EndpointRow label="Public S3" value={node.endpoint.endpoints.s3.url ?? node.endpoint.publicS3Url} />
-        <EndpointRow label="Management" value={node.endpoint.endpoints.management.url ?? node.endpoint.managementUrl} />
-        <EndpointRow label="Dashboard" value={node.endpoint.dashboardUrl} />
-      </div>
+      <div className="cp-node-endpoints"><div className="cp-endpoint"><span>OpenBucket API</span><code>{nodeApiUrl(node)}</code><CopyValue value={nodeApiUrl(node)} /></div><div className="cp-endpoint"><span>Node services</span><em>{node.status === "online" ? "Available" : "Offline"}</em></div></div>
       <footer><span>OpenBucket {node.version || "version pending"}</span>{onOpen ? <button type="button" onClick={() => onOpen(node)}>Open node →</button> : <span>Registered {formatDate(node.createdAt)}</span>}</footer>
     </article>
   );
@@ -175,14 +171,14 @@ function NodeCard({ node, onOpen }: { node: AccountNode; onOpen?: (node: Account
 
 function Onboarding({ user }: { user: AccountUser }) {
   const loginCommand = `openbucket login --email ${user.email}`;
-  const serveCommand = "openbucket serve /path/to/storage --name my-node --tunnel";
+  const serveCommand = "openbucket serve /path/to/storage";
   return (
     <section className="cp-onboarding">
       <div className="cp-onboarding-copy"><p className="cp-eyebrow">CONNECT A REAL NODE</p><h2>Login once. Serve the disk.</h2><p>The CLI securely prompts for your password, registers the node, and sends real heartbeats and usage to this account. Object bytes remain on the storage host.</p><a href="/docs#first-node">Read the node guide →</a></div>
       <div className="cp-command-stack">
         <div><span><b>01</b> Authenticate this machine</span><div><code>{loginCommand}</code><CopyValue value={loginCommand} /></div></div>
-        <div><span><b>02</b> Start and register the node</span><div><code>{serveCommand}</code><CopyValue value={serveCommand} /></div></div>
-        <p>For an internet-reachable production endpoint, replace the development Quick Tunnel with a named TLS tunnel or reverse proxy and independent access controls.</p>
+        <div><span><b>02</b> Name and start the node</span><div><code>{serveCommand}</code><CopyValue value={serveCommand} /></div></div>
+        <p>OpenBucket asks for a unique node name and keeps infrastructure endpoints out of this dashboard.</p>
       </div>
     </section>
   );
@@ -215,7 +211,7 @@ function UsageView({ usage, nodes }: { usage: UsageSummary; nodes: AccountNode[]
 }
 
 function AccountView({ user }: { user: AccountUser }) {
-  return <><header className="cp-page-heading"><div><p className="cp-eyebrow">AUTHENTICATED PROFILE</p><h1>Account</h1><p>Your identity is read from the current secure server session.</p></div></header><section className="cp-profile-card"><span className="cp-profile-avatar" aria-hidden="true">{(user.name || user.email)[0].toUpperCase()}</span><div><span>Name</span><strong>{user.name || "Not set"}</strong></div><div><span>Email</span><strong>{user.email}</strong></div><div><span>Role</span><strong className="cp-role">{user.role}</strong></div><div><span>User ID</span><code>{user.id}</code></div></section><section className="cp-account-note"><p className="cp-eyebrow">SEPARATE SECURITY BOUNDARIES</p><h2>Account login is not a daemon token.</h2><p>This session controls account records and node reporting. The live node console still asks for that daemon&apos;s management URL and bearer token, and keeps the token only in browser session storage.</p></section></>;
+  return <><header className="cp-page-heading"><div><p className="cp-eyebrow">AUTHENTICATED PROFILE</p><h1>Account</h1><p>Your identity is read from the current secure server session.</p></div></header><section className="cp-profile-card"><span className="cp-profile-avatar" aria-hidden="true">{(user.name || user.email)[0].toUpperCase()}</span><div><span>Name</span><strong>{user.name || "Not set"}</strong></div><div><span>Email</span><strong>{user.email}</strong></div><div><span>Role</span><strong className="cp-role">{user.role}</strong></div><div><span>User ID</span><code>{user.id}</code></div></section><section className="cp-account-note"><p className="cp-eyebrow">SEPARATE SECURITY BOUNDARIES</p><h2>Account login never exposes a daemon token.</h2><p>The live node console receives a short-lived, node-scoped capability only after the owner opens it. Infrastructure addresses and long-lived storage credentials stay off this dashboard.</p></section></>;
 }
 
 function AdminView({ overview }: { overview: AdminOverview }) {
@@ -227,9 +223,11 @@ function LiveNodeConsole({ user, node, onBack, onLogout }: { user: AccountUser; 
   const [error, setError] = useState("");
   useEffect(() => {
     if (!node) return;
+    setConnection(null);
+    setError("");
     void controlPlaneApi.managementSession(node.id).then((value) => setConnection({ apiBase: value.managementUrl, token: value.token })).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Node management is unavailable."));
   }, [node]);
-  return <div className="cp-live-console">{node && connection ? <Dashboard initialConnection={connection} /> : <main className="cp-loading"><p>{error || `Connecting securely to ${node?.name ?? "your node"}…`}</p></main>}<aside className="cp-live-dock" aria-label="Hosted account controls"><button type="button" onClick={onBack}>← Account dashboard</button><span>{user.email}</span><button type="button" onClick={onLogout}>Sign out</button></aside></div>;
+  return <div className="cp-live-console">{node && connection ? <Dashboard initialConnection={{ ...connection, displayUrl: nodeApiUrl(node) }} /> : <main className="cp-loading"><p>{error || `Connecting securely to ${node?.name ?? "your node"}…`}</p></main>}<aside className="cp-live-dock" aria-label="Hosted account controls"><button type="button" onClick={onBack}>← Account dashboard</button><span>{user.email}</span><button type="button" onClick={onLogout}>Sign out</button></aside></div>;
 }
 
 export function HostedControlPlane({ user }: { user: AccountUser }) {
@@ -265,6 +263,17 @@ export function HostedControlPlane({ user }: { user: AccountUser }) {
     const timer = window.setTimeout(() => void load(), 0);
     return () => window.clearTimeout(timer);
   }, [load]);
+
+  useEffect(() => {
+    if (!nodes) return;
+    const match = /^\/dashboard\/nodes\/([a-z0-9][a-z0-9-]{1,47})$/.exec(window.location.pathname);
+    const requested = match?.[1];
+    const node = requested ? nodes.find((item) => item.name === requested) : undefined;
+    if (node) {
+      setSelectedNode(node);
+      setView("node-console");
+    }
+  }, [nodes]);
 
   const logout = useCallback(async () => {
     try { await fetch("/api/auth/logout", { method: "POST", credentials: "same-origin", headers: { "content-type": "application/json" }, body: "{}" }); }

@@ -1,6 +1,6 @@
 {
   "name": "openbucket",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Turn any local disk or folder into S3-compatible object storage.",
   "author": "Razin",
   "license": "Apache-2.0",

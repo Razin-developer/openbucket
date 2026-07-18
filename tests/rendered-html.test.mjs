@@ -34,7 +34,7 @@ test("server-renders the complete OpenBucket dashboard shell", async () => {
   assert.match(html, /API keys/);
   assert.match(html, /Connections/);
   assert.match(html, /Logs &amp; analytics/);
-  assert.match(html, /http:\/\/127\.0\.0\.1:8333/);
+  assert.match(html, /OPENBUCKET_S3_ENDPOINT/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
@@ -57,10 +57,10 @@ test("removes starter preview code and wires only live daemon data", async () =>
   assert.match(dashboard, /localStorage\.setItem\(API_STORAGE_KEY/);
   assert.match(dashboard, /sessionStorage\.setItem\(tokenStorageKey\(apiBase\)/);
   assert.match(dashboard, /current\.hash = ""/);
-  assert.match(dashboard, /const endpoint = clientConfig\.publicBaseUrl/);
+  assert.match(dashboard, /const endpoint = "\$\{OPENBUCKET_S3_ENDPOINT\}"/);
   assert.match(dashboard, /NEXT_PUBLIC_DOCS_URL/);
   assert.match(dashboard, /https:\/\/github\.com\/Razin-developer\/openbucket\/tree\/main\/docs/);
-  assert.match(dashboard, /\["Dashboard API", apiBase/);
+  assert.match(dashboard, /\["OpenBucket API", initialConnection\?\.displayUrl/);
   assert.doesNotMatch(dashboard, /sessionStorage\.setItem\(TOKEN_STORAGE_KEY,/);
   assert.doesNotMatch(dashboard, /media.*18,231|datasets.*142|14,281|429 GB/i);
   assert.match(css, /--ink:\s*#171717/);

@@ -19,7 +19,7 @@ import {
   type RequestLog,
 } from "./store.js";
 
-export const OPENBUCKET_VERSION = "0.1.3";
+export const OPENBUCKET_VERSION = "0.1.4";
 
 export interface DaemonOptions {
   storageRoot: string;
@@ -33,6 +33,8 @@ export interface DaemonOptions {
   adminToken?: string;
   /** Per-node verifier for short-lived hosted-console capabilities. */
   managementCapabilitySecret?: string;
+  /** Hosted control-plane node identity; distinct from the local disk node ID. */
+  managementCapabilityNodeId?: string;
   dashboardUrl?: string;
   beforeStop?: () => void | Promise<void>;
 }
@@ -52,6 +54,7 @@ export interface DaemonConfig {
   allowedOrigins: string[];
   adminToken?: string;
   managementCapabilitySecret?: string;
+  managementCapabilityNodeId?: string;
   dashboardUrl?: string;
 }
 
@@ -411,6 +414,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     allowedOrigins: [...new Set(options.allowedOrigins ?? [])],
     adminToken,
     managementCapabilitySecret: options.managementCapabilitySecret,
+    managementCapabilityNodeId: options.managementCapabilityNodeId,
     dashboardUrl: cleanBaseUrl(options.dashboardUrl),
   };
 
@@ -470,7 +474,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     }
     if (config.adminToken) {
       const header = req.headers.authorization ?? "";
-      if (!safeEqual(header, `Bearer ${config.adminToken}`) && !validManagementCapability(header, config.managementCapabilitySecret, store.nodeId)) {
+      if (!safeEqual(header, `Bearer ${config.adminToken}`) && !validManagementCapability(header, config.managementCapabilitySecret, config.managementCapabilityNodeId ?? store.nodeId)) {
         res.setHeader("www-authenticate", 'Bearer realm="OpenBucket management"');
         throw new StoreError("Unauthorized", "A valid management bearer token is required.", 401);
       }

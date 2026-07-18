@@ -45,9 +45,9 @@ export function NodeDiscoveryPage({ nodeName, handle }: { nodeName: string; hand
       <section className="discovery-card">
         <div><span>Canonical discovery page</span><code>{state.value.canonicalPath}</code><CopyDiscovery value={state.value.canonicalPath} label="Copy" /></div>
         <div><span>Planned stable hostname</span><code>{state.value.futureHostname}</code><CopyDiscovery value={state.value.futureHostname} label="Copy" /></div>
-        <div className={state.value.s3Endpoint ? "available" : "unavailable"}><span>Public S3 endpoint</span>{state.value.s3Endpoint ? <><code>{state.value.s3Endpoint}</code><CopyDiscovery value={state.value.s3Endpoint} label="Copy endpoint" /></> : <strong>Not publicly advertised</strong>}</div>
+        <div className={state.value.online ? "available" : "unavailable"}><span>OpenBucket API</span><code>{new URL(state.value.canonicalPath, window.location.origin).toString()}</code><CopyDiscovery value={new URL(state.value.canonicalPath, window.location.origin).toString()} label="Copy API URL" /></div>
       </section>
-      {state.value.s3Endpoint ? <section className="discovery-connect"><div><p className="section-kicker">CONNECT DIRECTLY</p><h2>Use the endpoint with your S3 client.</h2><p>Authentication and authorization are enforced by the node. Obtain workload credentials from its operator.</p></div><div><code>{`aws s3 ls --endpoint-url ${state.value.s3Endpoint}`}</code><CopyDiscovery value={`aws s3 ls --endpoint-url ${state.value.s3Endpoint}`} label="Copy command" /></div></section> : <section className="discovery-notice"><strong>No public data path is active.</strong><p>The node may be offline or its owner may have disabled public discovery. This page intentionally does not reveal a private or stale endpoint.</p></section>}
+      <section className="discovery-notice"><strong>{state.value.online ? "Node services are available." : "Node currently offline."}</strong><p>OpenBucket keeps transport addresses private. Sign in as the owner to open the live console and manage this node.</p></section>
     </> : null}
   </main></SiteShell>;
 }

@@ -114,6 +114,7 @@ export interface ActiveDaemonState {
   publicUrl?: string;
   publicManagementUrl?: string;
   tunnelMode?: "quick" | "managed";
+  nodeApiUrl?: string;
   root: string;
   node: string;
   token?: string;
@@ -1044,18 +1045,10 @@ function printBanner(
   writeLine(io.stdout, "  ✓ Daemon running");
   writeLine(io.stdout, `  Node        ${state.node}`);
   writeLine(io.stdout, `  Storage     ${state.root}`);
-  writeLine(io.stdout, `  Management  ${state.managementUrl}`);
-  if (state.s3Url) writeLine(io.stdout, `  S3 endpoint ${state.s3Url}`);
-  if (state.publicUrl) writeLine(io.stdout, `  Public S3   ${state.publicUrl}`);
-  if (state.dashboardApiUrl && state.dashboardApiUrl !== state.managementUrl) {
-    writeLine(io.stdout, `  Remote API  ${state.dashboardApiUrl}`);
-  }
+  if (state.nodeApiUrl) writeLine(io.stdout, `  OpenBucket API  ${state.nodeApiUrl}`);
   if (state.dashboardUrl) {
-    writeLine(io.stdout, `  Dashboard   ${state.dashboardUrl}`);
+    writeLine(io.stdout, `  Local dashboard  ${state.dashboardUrl.split("?")[0].split("#")[0]}`);
     writeLine(io.stdout, "  Reopen      openbucket dashboard");
-  }
-  if (state.tunnelMode === "quick") {
-    writeLine(io.stdout, "  Tunnel      Cloudflare Quick Tunnel (development only)");
   }
   if (initialCredentials) {
     writeLine(io.stdout, "");
@@ -1154,9 +1147,9 @@ async function getProductVersion(io: CLIIO): Promise<string> {
     const packageData = JSON.parse(await readFile(packageUrl, "utf8")) as {
       version?: unknown;
     };
-    return typeof packageData.version === "string" ? packageData.version : "0.1.3";
+    return typeof packageData.version === "string" ? packageData.version : "0.1.4";
   } catch {
-    return "0.1.3";
+    return "0.1.4";
   }
 }
 
@@ -1473,7 +1466,7 @@ async function prepareHostedNode(
       managementSecret: returned.managementSecret,
       createdAt: returned.createdAt,
     };
-  } else if (!saved || saved.nodeId !== registration.node.id) {
+  } else if (!saved || saved.nodeId !== registration.node.id || !saved.managementSecret) {
     const rotated = await controlPlane.rotateNodeToken(registration.node.id);
     if (
       !rotated.credential ||
@@ -1776,6 +1769,7 @@ async function serveForeground(
       allowedOrigins?: string[];
       adminToken?: string;
       managementCapabilitySecret?: string;
+      managementCapabilityNodeId?: string;
       beforeStop?: () => void | Promise<void>;
     }) => Promise<DaemonHandle> | DaemonHandle;
   };
@@ -1798,6 +1792,7 @@ async function serveForeground(
       allowedOrigins: [...effectiveOrigins],
       adminToken,
       managementCapabilitySecret: hostedNode?.credential.managementSecret,
+      managementCapabilityNodeId: hostedNode?.credential.nodeId,
       beforeStop: async () => { await hostedHeartbeat?.stop(); },
     });
   } catch (error) {
@@ -1811,7 +1806,7 @@ async function serveForeground(
   let shutdownStarted = false;
 
   if (config.quickTunnel) {
-    writeLine(io.stdout, "Starting Cloudflare Quick Tunnels…");
+    writeLine(io.stdout, "Preparing secure OpenBucket access…");
     const surfaces: Array<{ surface: QuickTunnelSurface; origin: string }> = [
       {
         surface: "s3",
@@ -1841,7 +1836,7 @@ async function serveForeground(
       await stopQuickTunnels(quickTunnels);
       await handle.stop();
       await dashboardHandle?.stop().catch(() => undefined);
-      throw error;
+      throw new Error("Could not establish OpenBucket public access. Run `openbucket doctor` for recovery guidance.");
     }
   }
 
@@ -1858,6 +1853,7 @@ async function serveForeground(
     ...(publicUrl ? { publicUrl } : {}),
     ...(quickTunnels.get("management")?.url ? { publicManagementUrl: quickTunnels.get("management")!.url } : {}),
     ...(config.quickTunnel ? { tunnelMode: "quick" as const } : {}),
+    ...(hostedNode ? { nodeApiUrl: new URL(`/dashboard/nodes/${encodeURIComponent(hostedNode.credential.nodeName)}`, hostedNode.session.controlPlaneUrl).toString() } : {}),
     root: config.storageRoot,
     node: handle.config.nodeName ?? config.nodeName,
     token: handle.config.adminToken ?? adminToken,
@@ -2092,7 +2088,6 @@ async function serveDetached(
     await writeActiveState(scrubbed, io);
     active = scrubbed;
   }
-  writeLine(io.stdout, `  Logs        ${paths.logFile}`);
   writeLine(io.stdout, "");
   if (config.openDashboard && active.dashboardUrl) {
     openDashboard(
@@ -2108,6 +2103,13 @@ async function serveDetached(
 }
 
 async function runServe(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
+  const suppliedName = typeof parsed.options.name === "string" || Boolean(io.env.OPENBUCKET_NODE_NAME ?? io.env.OPENBUCKET_NAME);
+  if (!suppliedName && !parsed.options.internalForeground && io.stdout.isTTY) {
+    const entered = (await io.prompt("Node name (unique, lowercase): ")).trim();
+    if (!entered) throw new CLIUsageError("A node name is required. Pass --name <unique-node-name>.");
+    parsed.options.name = entered;
+    parsed.raw.push("--name", entered);
+  }
   const config = resolveServeConfig(parsed, io.env, io.cwd());
   const session = await requireHostedSession(config, io);
   if (config.detach && !config.internalForeground) {
@@ -2153,17 +2155,8 @@ async function runStatus(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
     io.stdout,
     `  Objects     ${String(storage.objects ?? 0)} in ${String(storage.buckets ?? 0)} bucket(s)`,
   );
-  writeLine(
-    io.stdout,
-    `  Management  ${connectableUrl(String(endpoints.management ?? target.baseUrl))}`,
-  );
-  if (endpoints.s3) {
-    writeLine(io.stdout, `  S3 endpoint ${connectableUrl(String(endpoints.s3))}`);
-  }
-  if (endpoints.public) {
-    writeLine(io.stdout, `  Public URL  ${connectableUrl(String(endpoints.public))}`);
-  }
-  if (endpoints.dashboard) writeLine(io.stdout, `  Dashboard   ${String(endpoints.dashboard)}`);
+  if (target.state?.nodeApiUrl) writeLine(io.stdout, `  OpenBucket API  ${target.state.nodeApiUrl}`);
+  if (endpoints.dashboard) writeLine(io.stdout, "  Local dashboard  available");
   return EXIT_SUCCESS;
 }
 
@@ -2683,13 +2676,11 @@ async function runTunnel(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
     ? parsed.options.cloudflaredPath
     : io.env.OPENBUCKET_CLOUDFLARED_PATH || "cloudflared";
   if (parsed.subcommand === "status") {
-    writeLine(io.stdout, "OpenBucket tunnels");
+    writeLine(io.stdout, "OpenBucket public access");
     writeLine(io.stdout, "");
-    writeLine(io.stdout, `  Connector       ${executable}`);
-    writeLine(io.stdout, `  S3 endpoint     ${active?.publicUrl ?? "not active"}`);
-    writeLine(io.stdout, `  Management API  ${active?.publicManagementUrl ?? "not active"}`);
-    writeLine(io.stdout, `  Mode            ${active?.tunnelMode === "quick" ? "Quick Tunnel (preview only)" : active?.tunnelMode ?? "not active"}`);
-    if (active?.tunnelMode === "quick") writeLine(io.stdout, pc.yellow("  Note            Quick Tunnel URLs change when the node restarts."));
+    writeLine(io.stdout, `  S3 service       ${active?.publicUrl ? "available" : "not active"}`);
+    writeLine(io.stdout, `  Node console     ${active?.publicManagementUrl ? "available" : "not active"}`);
+    if (active?.nodeApiUrl) writeLine(io.stdout, `  OpenBucket API   ${active.nodeApiUrl}`);
     return EXIT_SUCCESS;
   }
   if (parsed.subcommand === "update") {
