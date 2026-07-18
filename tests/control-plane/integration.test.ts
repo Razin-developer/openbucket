@@ -237,7 +237,7 @@ describe("MongoDB-backed control plane", { skip: !testUri }, () => {
       canonicalPath: string;
     };
     assert.equal(discoveredPayload.tunnelMode, "quick");
-    assert.equal(discoveredPayload.s3Endpoint, "https://office-control.tunnel.example/");
+    assert.equal(discoveredPayload.s3Endpoint, "https://office-control.tunnel.example");
     assert.equal(discoveredPayload.canonicalPath, origin + "/office-control");
     assert.equal(JSON.stringify(discoveredPayload).includes("management"), false);
 

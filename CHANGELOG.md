@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.7] - 2026-07-18
+
+### Fixed
+
+- Verify normalized MongoDB endpoint persistence in the required release integration suite.
+
 ## [0.1.6] - 2026-07-18
 
 ### Added
@@ -68,7 +74,8 @@ All notable changes to OpenBucket are documented here. Published artifacts follo
 - npm, PyPI, GHCR, GitHub release, CI, security scanning, and trusted-publishing automation.
 - Typed Python management client packaged separately as `openbucket-client`.
 
-[Unreleased]: https://github.com/Razin-developer/openbucket/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/Razin-developer/openbucket/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/Razin-developer/openbucket/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/Razin-developer/openbucket/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/Razin-developer/openbucket/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/Razin-developer/openbucket/compare/v0.1.3...v0.1.4
