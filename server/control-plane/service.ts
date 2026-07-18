@@ -29,6 +29,7 @@ import {
   toPublicDiscovery,
   validateHeartbeatPayload,
 } from "./model.js";
+import { createHmac } from "node:crypto";
 
 const MAX_NODES_PER_USER = 100;
 const USER_WRITE_WINDOW_MS = 60 * 60 * 1000;
@@ -136,13 +137,24 @@ async function consumeRateLimit(
   }
 }
 
-function issueNodeCredential(nodeId: ObjectId): { token: string; tokenHash: string; createdAt: Date } {
+function managementCapabilitySecret(nodeId: ObjectId): string {
+  return keyedHash(getAuthConfig().authSecret, "node-management-capability", nodeId.toHexString());
+}
+
+function issueNodeCredential(nodeId: ObjectId): { token: string; tokenHash: string; createdAt: Date; managementSecret: string } {
   const token = "obn_" + nodeId.toHexString() + "_" + createSessionToken();
   return {
     token,
     tokenHash: keyedHash(getAuthConfig().authSecret, "node-credential", token),
     createdAt: new Date(),
+    managementSecret: managementCapabilitySecret(nodeId),
   };
+}
+
+function managementCapability(node: NodeDocument): string {
+  const payload = Buffer.from(JSON.stringify({ v: 1, nodeId: node._id.toHexString(), exp: Math.floor(Date.now() / 1000) + 300 }), "utf8").toString("base64url");
+  const signature = createHmac("sha256", managementCapabilitySecret(node._id)).update(payload).digest("base64url");
+  return `obm.${payload}.${signature}`;
 }
 
 function bearerToken(request: Request): string {
@@ -200,6 +212,10 @@ function initialNode(userId: ObjectId, name: string, credential: ReturnType<type
     publicDiscoverable: false,
     managementUrl: null,
     dashboardUrl: null,
+    endpoints: {
+      s3: { url: null, kind: "none", healthy: false, updatedAt: null },
+      management: { url: null, kind: "none", healthy: false, updatedAt: null },
+    },
   };
 }
 
@@ -276,7 +292,7 @@ export async function handleCreateNode(request: Request): Promise<Response> {
     return jsonResponse({
       created: true,
       node: toNodeView(node, requestOrigin(request)),
-      credential: { token: credential.token, createdAt: credential.createdAt.toISOString() },
+      credential: { token: credential.token, managementSecret: credential.managementSecret, createdAt: credential.createdAt.toISOString() },
     }, 201);
   } catch (error) {
     return errorResponse(error);
@@ -336,6 +352,10 @@ export async function handleDeleteNode(request: Request, nodeId: string): Promis
           managementUrl: null,
           tunnelMode: "none",
           dashboardUrl: null,
+          endpoints: {
+            s3: { url: null, kind: "none", healthy: false, updatedAt: null },
+            management: { url: null, kind: "none", healthy: false, updatedAt: null },
+          },
           updatedAt: new Date(),
         },
       },
@@ -375,7 +395,7 @@ export async function handleRotateNodeToken(request: Request, nodeId: string): P
     if (!updated) throw new ApiError(404, "NODE_NOT_FOUND", "Node not found.");
     return jsonResponse({
       node: toNodeView(updated, requestOrigin(request)),
-      credential: { token: credential.token, createdAt: credential.createdAt.toISOString() },
+      credential: { token: credential.token, managementSecret: credential.managementSecret, createdAt: credential.createdAt.toISOString() },
     });
   } catch (error) {
     return errorResponse(error);
@@ -410,6 +430,24 @@ export async function handleRevokeNodeToken(request: Request, nodeId: string): P
     );
     if (!updated) throw new ApiError(404, "NODE_NOT_FOUND", "Node not found.");
     return jsonResponse({ node: toNodeView(updated, requestOrigin(request)) });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+/** Issues a five-minute, node-scoped browser capability without exposing a daemon token. */
+export async function handleManagementSession(request: Request, nodeId: string): Promise<Response> {
+  try {
+    assertSameOriginPost(request);
+    const user = await requireUser(request);
+    const body = await readJsonObject(request);
+    onlyFields(body, []);
+    const node = await ownedNode(objectId(user.id), nodeId);
+    const endpoint = node.endpoints?.management;
+    if (!endpoint?.url || !endpoint.healthy || endpoint.kind === "none" || endpoint.kind === "local") {
+      throw new ApiError(409, "MANAGEMENT_ENDPOINT_UNAVAILABLE", "This node has no reachable management endpoint. Start the node with tunneling enabled.");
+    }
+    return jsonResponse({ nodeId: node._id.toHexString(), managementUrl: endpoint.url, token: managementCapability(node), expiresIn: 300 });
   } catch (error) {
     return errorResponse(error);
   }
@@ -498,6 +536,7 @@ export async function handleNodeHeartbeat(request: Request): Promise<Response> {
               tunnelMode: heartbeat.tunnelMode,
               managementUrl: heartbeat.managementUrl,
               dashboardUrl: heartbeat.dashboardUrl,
+              endpoints: heartbeat.endpoints,
               updatedAt: receivedAt,
             },
             $inc: {
@@ -739,17 +778,28 @@ export async function handleResolveNode(request: Request): Promise<Response> {
     assertMethod(request, "GET");
     const url = new URL(request.url);
     const name = normalizeNodeName(url.searchParams.get("name"));
+    const handle = url.searchParams.get("handle")?.trim().toLowerCase();
+    if (handle !== undefined && !/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/.test(handle)) {
+      throw new ApiError(400, "INVALID_HANDLE", "Account handle is invalid.");
+    }
     const collections = await getControlPlaneCollections();
     await consumeRateLimit(collections, "discovery", requestIp(request), DISCOVERY_LIMIT, DISCOVERY_WINDOW_MS);
-    const node = await collections.nodes.findOne({
+    const filter: Record<string, unknown> = {
       name,
       lifecycle: "active",
       publicDiscoverable: true,
       publicS3Url: { $ne: null },
       tunnelMode: { $in: ["quick", "managed"] },
-    });
+    };
+    if (handle) {
+      const { users } = await getAuthCollections();
+      const user = await users.findOne({ handle }, { projection: { _id: 1 } });
+      if (!user) throw new ApiError(404, "NODE_NOT_FOUND", "Node not found.");
+      filter.userId = user._id;
+    }
+    const node = await collections.nodes.findOne(filter);
     if (!node) throw new ApiError(404, "NODE_NOT_FOUND", "Node not found.");
-    return jsonResponse(toPublicDiscovery(node, requestOrigin(request)));
+    return jsonResponse(toPublicDiscovery(node, requestOrigin(request), Date.now(), handle));
   } catch (error) {
     return errorResponse(error);
   }

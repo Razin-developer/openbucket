@@ -4,7 +4,7 @@ import { Brand } from "./site-shell";
 import "./control-plane.css";
 
 export type AccountRole = "admin" | "member";
-export type AccountUser = { id: string; email: string; name: string | null; role: AccountRole };
+export type AccountUser = { id: string; email: string; name: string | null; handle: string; role: AccountRole };
 
 type NodeStorage = {
   capacityBytes: number | null;
@@ -32,6 +32,10 @@ export type AccountNode = {
     managementUrl: string | null;
     dashboardUrl: string | null;
     futureS3Hostname: string;
+    endpoints: {
+      s3: { url: string | null; kind: "local" | "quick" | "named" | "none"; healthy: boolean; updatedAt: string | null };
+      management: { url: string | null; kind: "local" | "quick" | "named" | "none"; healthy: boolean; updatedAt: string | null };
+    };
   };
 };
 
@@ -79,6 +83,7 @@ export const controlPlaneApi = {
   createNode: (input: CreateNodeRequest) => apiRequest<CreateNodeResponse>("/api/nodes", { method: "POST", body: JSON.stringify(input) }),
   usage: () => apiRequest<UsageSummary>("/api/usage"),
   adminOverview: () => apiRequest<AdminOverview>("/api/admin/overview"),
+  managementSession: (nodeId: string) => apiRequest<{ managementUrl: string; token: string; expiresIn: number }>(`/api/nodes/${encodeURIComponent(nodeId)}/management-session`, { method: "POST", body: "{}" }),
 };
 function summarizeFleet(nodes: AccountNode[], usage: UsageSummary): FleetSummary {
   const seen = nodes.map((node) => node.lastSeenAt).filter((value): value is string => Boolean(value)).sort().at(-1) ?? null;
@@ -148,7 +153,7 @@ function EndpointRow({ label, value }: { label: string; value: string | null }) 
   return <div className="cp-endpoint"><span>{label}</span>{value ? <><code>{value}</code><CopyValue value={value} /></> : <em>Not advertised</em>}</div>;
 }
 
-function NodeCard({ node }: { node: AccountNode }) {
+function NodeCard({ node, onOpen }: { node: AccountNode; onOpen?: (node: AccountNode) => void }) {
   return (
     <article className="cp-node-card">
       <header><div><NodeStatus status={node.status} /><h3>{node.name}</h3><p>{node.endpoint.futureS3Hostname}</p></div><span className="cp-node-id">{node.id}</span></header>
@@ -159,11 +164,11 @@ function NodeCard({ node }: { node: AccountNode }) {
         <div><span>Last seen</span><strong>{relativeHeartbeat(node.lastSeenAt)}</strong></div>
       </div>
       <div className="cp-node-endpoints">
-        <EndpointRow label="Public S3" value={node.endpoint.publicS3Url} />
-        <EndpointRow label="Management" value={node.endpoint.managementUrl} />
+        <EndpointRow label="Public S3" value={node.endpoint.endpoints.s3.url ?? node.endpoint.publicS3Url} />
+        <EndpointRow label="Management" value={node.endpoint.endpoints.management.url ?? node.endpoint.managementUrl} />
         <EndpointRow label="Dashboard" value={node.endpoint.dashboardUrl} />
       </div>
-      <footer><span>OpenBucket {node.version || "version pending"}</span><span>Registered {formatDate(node.createdAt)}</span></footer>
+      <footer><span>OpenBucket {node.version || "version pending"}</span>{onOpen ? <button type="button" onClick={() => onOpen(node)}>Open node →</button> : <span>Registered {formatDate(node.createdAt)}</span>}</footer>
     </article>
   );
 }
@@ -183,7 +188,7 @@ function Onboarding({ user }: { user: AccountUser }) {
   );
 }
 
-function Overview({ user, nodes, usage, onView }: { user: AccountUser; nodes: AccountNode[]; usage: UsageSummary; onView: (view: CloudView) => void }) {
+function Overview({ user, nodes, usage, onView, onOpen }: { user: AccountUser; nodes: AccountNode[]; usage: UsageSummary; onView: (view: CloudView) => void; onOpen: (node: AccountNode) => void }) {
   const name = user.name?.trim().split(/\s+/)[0] || user.email.split("@")[0];
   const summary = summarizeFleet(nodes, usage);
   return <>
@@ -194,13 +199,13 @@ function Overview({ user, nodes, usage, onView }: { user: AccountUser; nodes: Ac
       <Metric label="Objects" value={formatCount(summary.objectCount)} note={`${formatCount(summary.bucketCount)} buckets`} />
       <Metric label="Requests" value={formatCount(summary.requestCount)} note={`${formatBytes(summary.bytesIn + summary.bytesOut)} transferred`} />
     </section>
-    {nodes.length === 0 ? <Onboarding user={user} /> : <section className="cp-section"><div className="cp-section-head"><div><p className="cp-eyebrow">NODE FLEET</p><h2>Storage hosts</h2></div><button type="button" onClick={() => onView("nodes")}>View all nodes →</button></div><div className="cp-node-grid">{nodes.slice(0, 2).map((node) => <NodeCard node={node} key={node.id} />)}</div></section>}
+    {nodes.length === 0 ? <Onboarding user={user} /> : <section className="cp-section"><div className="cp-section-head"><div><p className="cp-eyebrow">NODE FLEET</p><h2>Storage hosts</h2></div><button type="button" onClick={() => onView("nodes")}>View all nodes →</button></div><div className="cp-node-grid">{nodes.slice(0, 2).map((node) => <NodeCard node={node} key={node.id} onOpen={onOpen} />)}</div></section>}
     {nodes.length > 0 ? <Onboarding user={user} /> : null}
   </>;
 }
 
-function NodesView({ user, nodes }: { user: AccountUser; nodes: AccountNode[] }) {
-  return <><header className="cp-page-heading"><div><p className="cp-eyebrow">REGISTERED STORAGE</p><h1>Nodes</h1><p>Every value below comes from a node heartbeat stored by the account API.</p></div></header>{nodes.length ? <div className="cp-node-grid full">{nodes.map((node) => <NodeCard node={node} key={node.id} />)}</div> : <StatePanel title="No nodes registered"><p>Authenticate the CLI and start a storage node. It will appear after its first successful registration.</p><Onboarding user={user} /></StatePanel>}</>;
+function NodesView({ user, nodes, onOpen }: { user: AccountUser; nodes: AccountNode[]; onOpen: (node: AccountNode) => void }) {
+  return <><header className="cp-page-heading"><div><p className="cp-eyebrow">REGISTERED STORAGE</p><h1>Nodes</h1><p>Every value below comes from a node heartbeat stored by the account API.</p></div></header>{nodes.length ? <div className="cp-node-grid full">{nodes.map((node) => <NodeCard node={node} key={node.id} onOpen={onOpen} />)}</div> : <StatePanel title="No nodes registered"><p>Authenticate the CLI and start a storage node. It will appear after its first successful registration.</p><Onboarding user={user} /></StatePanel>}</>;
 }
 
 function UsageView({ usage, nodes }: { usage: UsageSummary; nodes: AccountNode[] }) {
@@ -217,8 +222,14 @@ function AdminView({ overview }: { overview: AdminOverview }) {
   return <><header className="cp-page-heading"><div><p className="cp-eyebrow">AUTHORIZED ADMINISTRATION</p><h1>System overview</h1><p>Global totals returned by the admin-only API.</p></div><span className="cp-generated">Generated {formatDate(overview.generatedAt)}</span></header><section className="cp-metrics admin"><Metric label="Users" value={formatCount(overview.users.total)} note={`${overview.users.active} active · ${overview.users.disabled} disabled`} /><Metric label="Nodes" value={formatCount(overview.nodes.total)} note={`${overview.nodes.online} online · ${overview.nodes.revoked} revoked`} /><Metric label="Stored" value={formatBytes(overview.storage.usedBytes)} note={`${formatBytes(overview.storage.capacityBytes)} capacity`} /><Metric label="Objects" value={formatCount(overview.storage.objectCount)} note={`${formatCount(overview.storage.bucketCount)} buckets`} /><Metric label="Requests" value={formatCount(overview.usage.requests)} note={`${formatCount(overview.usage.errors)} errors`} /></section><section className="cp-admin-note"><strong>Read-only overview</strong><p>This page deliberately exposes aggregate operational state only. Account credentials, node bearer tokens, daemon management tokens, and S3 secrets are never returned here.</p></section></>;
 }
 
-function LiveNodeConsole({ user, onBack, onLogout }: { user: AccountUser; onBack: () => void; onLogout: () => void }) {
-  return <div className="cp-live-console"><Dashboard /><aside className="cp-live-dock" aria-label="Hosted account controls"><button type="button" onClick={onBack}>← Account dashboard</button><span>{user.email}</span><button type="button" onClick={onLogout}>Sign out</button></aside></div>;
+function LiveNodeConsole({ user, node, onBack, onLogout }: { user: AccountUser; node: AccountNode | null; onBack: () => void; onLogout: () => void }) {
+  const [connection, setConnection] = useState<{ apiBase: string; token: string } | null>(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    if (!node) return;
+    void controlPlaneApi.managementSession(node.id).then((value) => setConnection({ apiBase: value.managementUrl, token: value.token })).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Node management is unavailable."));
+  }, [node]);
+  return <div className="cp-live-console">{node && connection ? <Dashboard initialConnection={connection} /> : <main className="cp-loading"><p>{error || `Connecting securely to ${node?.name ?? "your node"}…`}</p></main>}<aside className="cp-live-dock" aria-label="Hosted account controls"><button type="button" onClick={onBack}>← Account dashboard</button><span>{user.email}</span><button type="button" onClick={onLogout}>Sign out</button></aside></div>;
 }
 
 export function HostedControlPlane({ user }: { user: AccountUser }) {
@@ -226,6 +237,7 @@ export function HostedControlPlane({ user }: { user: AccountUser }) {
   const [nodes, setNodes] = useState<AccountNode[] | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [admin, setAdmin] = useState<AdminOverview | null>(null);
+  const [selectedNode, setSelectedNode] = useState<AccountNode | null>(null);
   const [error, setError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
@@ -264,7 +276,8 @@ export function HostedControlPlane({ user }: { user: AccountUser }) {
     ...(user.role === "admin" ? [["admin", "Admin", "A"]] : []),
   ] as Array<[CloudView, string, string]>, [user.role]);
 
-  if (view === "node-console") return <LiveNodeConsole user={user} onBack={() => setView("overview")} onLogout={() => void logout()} />;
+  const openNode = (node: AccountNode) => { setSelectedNode(node); window.history.pushState({}, "", `/dashboard/nodes/${encodeURIComponent(node.name)}`); setView("node-console"); };
+  if (view === "node-console") return <LiveNodeConsole user={user} node={selectedNode ?? nodes?.[0] ?? null} onBack={() => { window.history.pushState({}, "", "/dashboard"); setView("overview"); }} onLogout={() => void logout()} />;
 
   return <div className="cp-shell">
     <a className="cp-skip" href="#cloud-main">Skip to content</a>
@@ -272,8 +285,8 @@ export function HostedControlPlane({ user }: { user: AccountUser }) {
     <div className="cp-workspace"><header className="cp-topbar"><div><span className={`cp-cloud-status ${error ? "error" : "healthy"}`}><i />{error ? "Account API issue" : "Account API connected"}</span></div><div className="cp-top-actions"><button type="button" disabled={refreshing} onClick={() => void load(true)} aria-label="Refresh account data">{refreshing ? "Refreshing…" : "Refresh"}</button><button className="cp-account-button" type="button" onClick={() => setView("account")}><span>{(user.name || user.email)[0].toUpperCase()}</span><b>{user.name || user.email}</b><small>{user.role}</small></button></div></header><main id="cloud-main" className="cp-main">
       {error ? <StatePanel tone="error" title="Account data unavailable" action={<button className="cp-primary" type="button" onClick={() => void load(true)}>Try again</button>}><p>{error}</p></StatePanel> : null}
       {!error && (!nodes || !usage) ? <div className="cp-loading" aria-live="polite"><span /><span /><span /><p>Loading account data…</p></div> : null}
-      {!error && nodes && usage && view === "overview" ? <Overview user={user} nodes={nodes} usage={usage} onView={setView} /> : null}
-      {!error && nodes && usage && view === "nodes" ? <NodesView user={user} nodes={nodes} /> : null}
+      {!error && nodes && usage && view === "overview" ? <Overview user={user} nodes={nodes} usage={usage} onView={setView} onOpen={openNode} /> : null}
+      {!error && nodes && usage && view === "nodes" ? <NodesView user={user} nodes={nodes} onOpen={openNode} /> : null}
       {!error && nodes && usage && view === "usage" ? <UsageView usage={usage} nodes={nodes} /> : null}
       {!error && view === "account" ? <AccountView user={user} /> : null}
       {!error && view === "admin" && user.role === "admin" && admin ? <AdminView overview={admin} /> : null}

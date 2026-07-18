@@ -29,6 +29,7 @@ export interface NodeCredential {
   nodeId: string;
   nodeName: string;
   token: string;
+  managementSecret?: string;
   createdAt: string;
 }
 export interface HostedNodeSummary {
@@ -41,7 +42,7 @@ export interface HostedNodeSummary {
 export interface NodeRegistrationResult {
   created: boolean;
   node: HostedNodeSummary;
-  credential: { token: string; createdAt: string } | null;
+  credential: { token: string; managementSecret: string; createdAt: string } | null;
 }
 
 interface NodeCredentialStore {
@@ -483,6 +484,7 @@ function validateNodeCredential(value: unknown): NodeCredential | undefined {
     typeof credential.nodeId !== "string" ||
     typeof credential.nodeName !== "string" ||
     typeof credential.token !== "string" ||
+    (credential.managementSecret !== undefined && (typeof credential.managementSecret !== "string" || !/^[a-f0-9]{64}$/.test(credential.managementSecret))) ||
     credential.token.length < 20 ||
     typeof credential.createdAt !== "string"
   ) {
@@ -704,7 +706,7 @@ export class AuthenticatedControlPlane {
     });
   }
 
-  rotateNodeToken(nodeId: string): Promise<{ node: HostedNodeSummary; credential: { token: string; createdAt: string } }> {
+  rotateNodeToken(nodeId: string): Promise<{ node: HostedNodeSummary; credential: { token: string; managementSecret: string; createdAt: string } }> {
     return this.request(`/api/nodes/${encodeURIComponent(nodeId)}/rotate-token`, {
       method: "POST",
       headers: {
@@ -742,6 +744,7 @@ export async function rotateSavedNodeCredential(options: {
     nodeId: node.id,
     nodeName: node.name,
     token: replacement.token,
+    ...(replacement.managementSecret ? { managementSecret: replacement.managementSecret } : {}),
     createdAt: replacement.createdAt,
   });
   if (!credential) {

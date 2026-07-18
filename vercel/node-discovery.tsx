@@ -19,12 +19,14 @@ function CopyDiscovery({ value, label }: { value: string; label: string }) {
   return <button type="button" onClick={async () => { await navigator.clipboard.writeText(value); setCopied(true); window.setTimeout(() => setCopied(false), 1_400); }}>{copied ? "Copied" : label}</button>;
 }
 
-export function NodeDiscoveryPage({ nodeName }: { nodeName: string }) {
+export function NodeDiscoveryPage({ nodeName, handle }: { nodeName: string; handle?: string }) {
   const [state, setState] = useState<DiscoveryState>({ kind: "loading" });
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void fetch(`/api/nodes/resolve?name=${encodeURIComponent(nodeName)}`, { headers: { accept: "application/json" }, signal: controller.signal })
+      const query = new URLSearchParams({ name: nodeName });
+      if (handle) query.set("handle", handle);
+      void fetch(`/api/nodes/resolve?${query}`, { headers: { accept: "application/json" }, signal: controller.signal })
         .then(async (response) => {
           const payload = await response.json().catch(() => ({})) as Discovery & { error?: { message?: string } };
           if (!response.ok) throw new Error(payload.error?.message || "This node could not be discovered.");
@@ -33,7 +35,7 @@ export function NodeDiscoveryPage({ nodeName }: { nodeName: string }) {
         .catch((error: unknown) => { if (!controller.signal.aborted) setState({ kind: "error", message: error instanceof Error ? error.message : "This node could not be discovered." }); });
     }, 0);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [nodeName]);
+  }, [nodeName, handle]);
 
   return <SiteShell compact><main className="discovery-page">
     {state.kind === "loading" ? <section className="discovery-state" aria-live="polite"><span className="discovery-spinner" /><p>Looking up <strong>{nodeName}</strong>…</p></section> : null}

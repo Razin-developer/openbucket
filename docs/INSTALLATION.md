@@ -47,7 +47,7 @@ openbucket dashboard
 openbucket status
 ```
 
-`serve` registers the node and reports heartbeat, storage, and request counters. Without `OPENBUCKET_PUBLIC_BASE_URL`, it automatically starts an S3-only Quick Tunnel. That endpoint is development/preview only. The hosted `/dashboard` reads real MongoDB-backed node and usage state; `openbucket dashboard` opens the direct local daemon console.
+`serve` registers the node and reports heartbeat, storage, request counters, and separate S3/management endpoint state. Without `OPENBUCKET_PUBLIC_BASE_URL`, it starts supervised Quick Tunnels for both services. Those endpoints are development/preview only. The hosted `/dashboard/nodes/<node>` console obtains a five-minute node-scoped capability; `openbucket dashboard` opens the already-paired loopback console.
 
 For standalone local development only:
 

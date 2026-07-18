@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { Transform, type Readable } from "node:stream";
@@ -31,6 +31,8 @@ export interface DaemonOptions {
   publicBaseUrl?: string;
   allowedOrigins?: string[];
   adminToken?: string;
+  /** Per-node verifier for short-lived hosted-console capabilities. */
+  managementCapabilitySecret?: string;
   dashboardUrl?: string;
   beforeStop?: () => void | Promise<void>;
 }
@@ -49,6 +51,7 @@ export interface DaemonConfig {
   publicBaseUrl?: string;
   allowedOrigins: string[];
   adminToken?: string;
+  managementCapabilitySecret?: string;
   dashboardUrl?: string;
 }
 
@@ -107,6 +110,23 @@ function safeEqual(left: string, right: string): boolean {
   const a = Buffer.from(left);
   const b = Buffer.from(right);
   return a.length === b.length && timingSafeEqual(a, b);
+}
+
+function validManagementCapability(header: string | undefined, secret: string | undefined, nodeId: string): boolean {
+  if (!header?.startsWith("Bearer obm.") || !secret) return false;
+  const token = header.slice(7);
+  const parts = token.split(".");
+  if (parts.length !== 3 || parts[0] !== "obm") return false;
+  const [prefix, payload, signature] = parts;
+  if (!payload || !signature || prefix !== "obm") return false;
+  const expected = createHmac("sha256", secret).update(payload).digest("base64url");
+  if (!safeEqual(signature, expected)) return false;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { v?: unknown; nodeId?: unknown; exp?: unknown };
+    return claims.v === 1 && claims.nodeId === nodeId && typeof claims.exp === "number" && Number.isSafeInteger(claims.exp) && claims.exp > Math.floor(Date.now() / 1000);
+  } catch {
+    return false;
+  }
 }
 
 function xmlEscape(value: unknown): string {
@@ -390,6 +410,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     publicBaseUrl: cleanBaseUrl(options.publicBaseUrl),
     allowedOrigins: [...new Set(options.allowedOrigins ?? [])],
     adminToken,
+    managementCapabilitySecret: options.managementCapabilitySecret,
     dashboardUrl: cleanBaseUrl(options.dashboardUrl),
   };
 
@@ -449,7 +470,7 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     }
     if (config.adminToken) {
       const header = req.headers.authorization ?? "";
-      if (!safeEqual(header, `Bearer ${config.adminToken}`)) {
+      if (!safeEqual(header, `Bearer ${config.adminToken}`) && !validManagementCapability(header, config.managementCapabilitySecret, store.nodeId)) {
         res.setHeader("www-authenticate", 'Bearer realm="OpenBucket management"');
         throw new StoreError("Unauthorized", "A valid management bearer token is required.", 401);
       }

@@ -6,6 +6,8 @@ export type UserDocument = {
   email: string;
   emailNormalized: string;
   name: string | null;
+  /** Immutable public handle used in safe node discovery URLs. */
+  handle?: string;
   passwordHash: string;
   role?: "admin" | "member";
   status: "active" | "disabled";
@@ -100,6 +102,10 @@ async function ensureIndexes(database: Db): Promise<void> {
       database.collection<UserDocument>("users").createIndex(
         { emailNormalized: 1 },
         { name: "users_email_normalized_unique", unique: true },
+      ),
+      database.collection<UserDocument>("users").createIndex(
+        { handle: 1 },
+        { name: "users_handle_unique", unique: true, sparse: true },
       ),
       database.collection<SessionDocument>("sessions").createIndex(
         { expiresAt: 1 },

@@ -27,13 +27,22 @@ export function nodeNameForPath(pathname: string): string | null {
   return name;
 }
 
+export function nodePathForPath(pathname: string): { handle: string; nodeName: string } | null {
+  const parts = pathname.replace(/^\/+|\/+$/g, "").split("/");
+  if (parts.length !== 2) return null;
+  const [handle, nodeName] = parts;
+  if (!handle || !nodeName || !/^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/.test(handle) || reservedNodeNames.has(handle)) return null;
+  return nodeNameForPath(nodeName) ? { handle, nodeName } : null;
+}
+
 export function routeForPath(pathname: string): HostedRoute {
   const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   if (normalized === "/") return "home";
   if (normalized === "/docs") return "docs";
   if (normalized === "/login") return "login";
   if (normalized === "/register") return "register";
-  if (normalized === "/dashboard") return "dashboard";
+  if (normalized === "/dashboard" || /^\/dashboard\/nodes\/[a-z0-9][a-z0-9-]{1,47}$/.test(normalized)) return "dashboard";
+  if (nodePathForPath(pathname)) return "node-discovery";
   if (nodeNameForPath(pathname)) return "node-discovery";
   return "not-found";
 }
@@ -48,6 +57,9 @@ export function HostedApp({ route }: { route: HostedRoute }) {
   if (route === "login") return <AuthPage mode="login" />;
   if (route === "register") return <AuthPage mode="register" />;
   if (route === "dashboard") return <ProtectedDashboard />;
-  if (route === "node-discovery") return <NodeDiscoveryPage nodeName={nodeNameForPath(window.location.pathname) ?? ""} />;
+  if (route === "node-discovery") {
+    const nodePath = nodePathForPath(window.location.pathname);
+    return <NodeDiscoveryPage nodeName={nodePath?.nodeName ?? nodeNameForPath(window.location.pathname) ?? ""} handle={nodePath?.handle} />;
+  }
   return <NotFoundPage />;
 }

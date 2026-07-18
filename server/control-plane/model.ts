@@ -1,5 +1,5 @@
 import { ApiError } from "../auth/http.js";
-import type { NodeCounters, NodeDocument, NodeStorage } from "./database.js";
+import type { NodeCounters, NodeDocument, NodeEndpoint, NodeStorage } from "./database.js";
 
 export const NODE_ONLINE_WINDOW_MS = 90_000;
 const MAX_URL_BYTES = 2_048;
@@ -37,6 +37,7 @@ export type HeartbeatInput = {
   tunnelMode: "none" | "quick" | "managed";
   managementUrl: string | null;
   dashboardUrl: string | null;
+  endpoints: { s3: NodeEndpoint; management: NodeEndpoint };
 };
 
 export type NodeView = {
@@ -58,6 +59,10 @@ export type NodeView = {
     managementUrl: string | null;
     dashboardUrl: string | null;
     futureS3Hostname: string;
+    endpoints: {
+      s3: { url: string | null; kind: NodeEndpoint["kind"]; healthy: boolean; updatedAt: string | null };
+      management: { url: string | null; kind: NodeEndpoint["kind"]; healthy: boolean; updatedAt: string | null };
+    };
   };
 };
 
@@ -129,6 +134,30 @@ function parseUrl(value: unknown, field: string, publicOnly: boolean): string | 
   throw new ApiError(400, "INVALID_ENDPOINT", field + (publicOnly ? " must use HTTPS." : " must use HTTPS or loopback HTTP."));
 }
 
+function endpointFromLegacy(url: string | null, kind: "none" | "quick" | "managed", now: Date): NodeEndpoint {
+  return {
+    url,
+    kind: !url ? "none" : kind === "quick" ? "quick" : kind === "managed" ? "named" : "local",
+    healthy: Boolean(url),
+    updatedAt: url ? now : null,
+  };
+}
+
+function parseEndpoint(value: unknown, field: string, now: Date): NodeEndpoint | null {
+  if (value === undefined) return null;
+  const record = objectValue(value, "INVALID_ENDPOINT", field + " is invalid.");
+  onlyFields(record, ["url", "kind", "healthy"]);
+  const kind = record.kind;
+  if (kind !== "local" && kind !== "quick" && kind !== "named" && kind !== "none") {
+    throw new ApiError(400, "INVALID_ENDPOINT", field + ".kind is invalid.");
+  }
+  const url = parseUrl(record.url, field + ".url", kind !== "local");
+  if (typeof record.healthy !== "boolean" || (kind === "none") !== (url === null)) {
+    throw new ApiError(400, "INVALID_ENDPOINT", field + " is inconsistent.");
+  }
+  return { url, kind, healthy: record.healthy && Boolean(url), updatedAt: url ? now : null };
+}
+
 export function normalizeNodeName(value: unknown): string {
   if (typeof value !== "string") {
     throw new ApiError(400, "INVALID_NODE_NAME", "Node name must contain 3-48 lowercase letters, numbers, or hyphens.");
@@ -161,6 +190,7 @@ export function validateHeartbeatPayload(body: Record<string, unknown>): Heartbe
     "tunnelMode",
     "managementUrl",
     "dashboardUrl",
+    "endpoints",
   ]);
 
   const eventId = optionalText(body.eventId, "eventId", /^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$/, 128);
@@ -213,6 +243,19 @@ export function validateHeartbeatPayload(body: Record<string, unknown>): Heartbe
     throw new ApiError(400, "INVALID_ENDPOINT", "A discoverable node requires a public tunnel.");
   }
 
+  const now = new Date();
+  const legacyS3 = endpointFromLegacy(publicS3Url, tunnelMode, now);
+  const legacyManagement = endpointFromLegacy(
+    parseUrl(body.managementUrl, "managementUrl", false),
+    "none",
+    now,
+  );
+  const endpointObject = body.endpoints === undefined
+    ? null
+    : objectValue(body.endpoints, "INVALID_ENDPOINT", "endpoints is invalid.");
+  if (endpointObject) onlyFields(endpointObject, ["s3", "management"]);
+  const s3 = parseEndpoint(endpointObject?.s3, "endpoints.s3", now) ?? legacyS3;
+  const management = parseEndpoint(endpointObject?.management, "endpoints.management", now) ?? legacyManagement;
   return {
     eventId,
     nodeId,
@@ -225,8 +268,9 @@ export function validateHeartbeatPayload(body: Record<string, unknown>): Heartbe
     publicS3Url,
     publicDiscoverable,
     tunnelMode,
-    managementUrl: parseUrl(body.managementUrl, "managementUrl", false),
+    managementUrl: management.url,
     dashboardUrl: parseUrl(body.dashboardUrl, "dashboardUrl", false),
+    endpoints: { s3, management },
   };
 }
 
@@ -276,6 +320,10 @@ export function nodeStatus(node: NodeDocument, now = Date.now()): "online" | "of
 }
 
 export function toNodeView(node: NodeDocument, requestOrigin: string, now = Date.now()): NodeView {
+  const endpoints = node.endpoints ?? {
+    s3: endpointFromLegacy(node.publicS3Url, node.tunnelMode, new Date(node.updatedAt)),
+    management: endpointFromLegacy(node.managementUrl, "none", new Date(node.updatedAt)),
+  };
   return {
     id: node._id.toHexString(),
     name: node.name,
@@ -295,11 +343,15 @@ export function toNodeView(node: NodeDocument, requestOrigin: string, now = Date
       managementUrl: node.managementUrl,
       dashboardUrl: node.dashboardUrl,
       futureS3Hostname: "s3." + node.name + "." + configuredNodeDomain(),
+      endpoints: {
+        s3: { ...endpoints.s3, updatedAt: endpoints.s3.updatedAt?.toISOString() ?? null },
+        management: { ...endpoints.management, updatedAt: endpoints.management.updatedAt?.toISOString() ?? null },
+      },
     },
   };
 }
 
-export function toPublicDiscovery(node: NodeDocument, requestOrigin: string, now = Date.now()): {
+export function toPublicDiscovery(node: NodeDocument, requestOrigin: string, now = Date.now(), handle?: string): {
   nodeName: string;
   online: boolean;
   tunnelMode: "quick" | "managed" | "unavailable";
@@ -307,15 +359,19 @@ export function toPublicDiscovery(node: NodeDocument, requestOrigin: string, now
   canonicalPath: string;
   futureHostname: string;
 } {
-  const configuredPublic = node.publicDiscoverable && Boolean(node.publicS3Url) && node.tunnelMode !== "none";
+  const endpoints = node.endpoints ?? {
+    s3: endpointFromLegacy(node.publicS3Url, node.tunnelMode, new Date(node.updatedAt)),
+    management: endpointFromLegacy(node.managementUrl, "none", new Date(node.updatedAt)),
+  };
+  const configuredPublic = node.publicDiscoverable && Boolean(endpoints.s3.url) && endpoints.s3.kind !== "none";
   const online = nodeStatus(node, now) === "online";
   const isPublic = configuredPublic && online;
   return {
     nodeName: node.name,
     online,
     tunnelMode: configuredPublic && node.tunnelMode !== "none" ? node.tunnelMode : "unavailable",
-    s3Endpoint: isPublic ? node.publicS3Url : null,
-    canonicalPath: requestOrigin + "/" + node.name,
+    s3Endpoint: isPublic ? endpoints.s3.url : null,
+    canonicalPath: requestOrigin + "/" + (handle ? `${handle}/` : "") + node.name,
     futureHostname: "s3." + node.name + "." + configuredNodeDomain(),
   };
 }

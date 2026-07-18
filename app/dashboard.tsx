@@ -188,7 +188,7 @@ function CopyButton({ value, label = "Copy" }: { value: string; label?: string }
   return <button className="copy-button" type="button" onClick={async () => { await navigator.clipboard.writeText(value); setCopied(true); window.setTimeout(() => setCopied(false), 1400); }}>{copied ? "Copied" : label}</button>;
 }
 
-export function Dashboard() {
+export function Dashboard({ initialConnection }: { initialConnection?: { apiBase: string; token: string } } = {}) {
   const [activeView, setActiveView] = useState<View>("overview");
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [apiBase, setApiBase] = useState(DEFAULT_API);
@@ -228,13 +228,13 @@ export function Dashboard() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const initial = getInitialConnection();
+      const initial = initialConnection ?? getInitialConnection();
       connectionGeneration.current += 1;
       setApiBase(initial.apiBase);
-      setAdminToken(initial.adminToken);
+      setAdminToken("token" in initial ? initial.token : initial.adminToken);
     }, 0);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [initialConnection]);
   const notify = useCallback((message: string, tone: Toast["tone"] = "success") => {
     const id = Date.now();
     setToasts((current) => [...current, { id, tone, message }]);

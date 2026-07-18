@@ -39,7 +39,7 @@ npm run openbucket -- bucket create photos
 npm run openbucket -- status
 ```
 
-`serve` registers the node, stores its node credential in the permission-restricted CLI home, reports heartbeat/storage/request counters, and starts an S3-only Quick Tunnel when no `OPENBUCKET_PUBLIC_BASE_URL` exists. Quick Tunnel URLs change on restart and are suitable only for development or preview.
+`serve` registers the node, stores its node credential in the permission-restricted CLI home, reports heartbeat/storage/request counters, and starts supervised S3 and management Quick Tunnels when no managed public route exists. The account dashboard receives only the public endpoint metadata; daemon and S3 secrets never leave the storage host. Quick Tunnel URLs change on restart and are suitable only for development or preview.
 
 For standalone local development with no hosted login, metering, discovery, or tunnel:
 
@@ -73,7 +73,7 @@ openbucket login --email you@example.com
 openbucket serve /path/to/storage --name demo-node --tunnel --detach
 ```
 
-For an account-connected node, the supervised tunnel exposes S3 only; account and heartbeat traffic use the hosted control-plane API. Offline explicit-tunnel mode also exposes management and the local dashboard for a controlled demo. The banner prints the usable endpoints, and `openbucket stop` terminates the daemon and supervised tunnels.
+For an account-connected node, the supervised S3 and management tunnels are recorded in MongoDB through the node heartbeat. The hosted console receives a short-lived node-scoped capability, never the daemon's long-lived bearer token. The local dashboard remains loopback-only and is automatically paired by `openbucket dashboard`. The banner prints the usable endpoints, and `openbucket stop` terminates the daemon and supervised tunnels.
 
 Quick Tunnel URLs change on restart and Cloudflare documents them as development/testing infrastructure with no uptime guarantee, a 200 in-flight request limit, and no SSE support. Account-connected mode tunnels only S3. An offline explicit-tunnel demo may also expose management, which still requires the full-control bearer token. Use a named tunnel/reverse proxy with an independent access policy for production.
 

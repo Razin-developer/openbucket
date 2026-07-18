@@ -36,6 +36,8 @@ import {
   type NodeCredential,
 } from "./auth-session.js";
 import { startQuickTunnel, type QuickTunnelHandle } from "./tunnel.js";
+import * as prompts from "@clack/prompts";
+import pc from "picocolors";
 
 export const DEFAULT_MANAGEMENT_PORT = 7272;
 export const DEFAULT_S3_PORT = 8333;
@@ -62,6 +64,7 @@ export interface ParsedCLICommand {
     | "status"
     | "logs"
     | "doctor"
+    | "tunnel"
     | "dashboard"
     | "buckets"
     | "bucket"
@@ -72,7 +75,7 @@ export interface ParsedCLICommand {
     | "config"
     | "version"
     | "help";
-  subcommand?: "create" | "delete" | "revoke";
+  subcommand?: "create" | "delete" | "revoke" | "setup" | "status" | "update";
   positionals: string[];
   options: Record<string, CLIOptionValue>;
   raw: string[];
@@ -109,6 +112,7 @@ export interface ActiveDaemonState {
   dashboardUrl?: string;
   dashboardApiUrl?: string;
   publicUrl?: string;
+  publicManagementUrl?: string;
   tunnelMode?: "quick" | "managed";
   root: string;
   node: string;
@@ -467,6 +471,15 @@ export function parseCLIArgs(argv: readonly string[]): ParsedCLICommand {
       parsed = parseOptions(tail, [], []);
       assertPositionals("doctor [directory]", parsed.positionals, 0, 1);
       return { command: "doctor", ...parsed, raw };
+    }
+    case "tunnel": {
+      const subcommand = tail[0]?.toLowerCase() ?? "status";
+      if (subcommand !== "setup" && subcommand !== "status" && subcommand !== "update") {
+        throw new CLIUsageError("Usage: tunnel <setup|status|update>");
+      }
+      parsed = parseOptions(tail.slice(subcommand === "status" && tail.length === 0 ? 0 : 1), ["cloudflared-path"], ["yes"]);
+      assertPositionals(`tunnel ${subcommand} [--cloudflared-path PATH] [--yes]`, parsed.positionals, 0);
+      return { command: "tunnel", subcommand, ...parsed, raw };
     }
     case "buckets":
     case "list":
@@ -1071,6 +1084,7 @@ function renderHelp(topic?: string): string {
     status: "Usage: openbucket status [--json]",
     dashboard: "Usage: openbucket dashboard",
     doctor: "Usage: openbucket doctor [directory]",
+    tunnel: "Usage: openbucket tunnel <setup|status|update> [--cloudflared-path PATH] [--yes]",
     buckets: "Usage: openbucket buckets",
     list: "Usage: openbucket list",
     bucket:
@@ -1103,6 +1117,8 @@ Daemon
   dashboard            Securely open or re-pair the local dashboard
   logs [--follow]      Show daemon request and lifecycle logs
   doctor [directory]   Check the runtime, storage, and network
+  tunnel status         Show S3 and management tunnel state
+  tunnel setup          Guided Cloudflare connector and named-tunnel setup
 
 Storage
   buckets | list       List buckets
@@ -1444,6 +1460,7 @@ async function prepareHostedNode(
   if (
     returned &&
     typeof returned.token === "string" &&
+    typeof returned.managementSecret === "string" && /^[a-f0-9]{64}$/.test(returned.managementSecret) &&
     returned.token.length >= 20 &&
     typeof returned.createdAt === "string"
   ) {
@@ -1453,6 +1470,7 @@ async function prepareHostedNode(
       nodeId: registration.node.id,
       nodeName: registration.node.name,
       token: returned.token,
+      managementSecret: returned.managementSecret,
       createdAt: returned.createdAt,
     };
   } else if (!saved || saved.nodeId !== registration.node.id) {
@@ -1460,6 +1478,7 @@ async function prepareHostedNode(
     if (
       !rotated.credential ||
       typeof rotated.credential.token !== "string" ||
+      typeof rotated.credential.managementSecret !== "string" || !/^[a-f0-9]{64}$/.test(rotated.credential.managementSecret) ||
       rotated.credential.token.length < 20 ||
       typeof rotated.credential.createdAt !== "string"
     ) {
@@ -1471,6 +1490,7 @@ async function prepareHostedNode(
       nodeId: registration.node.id,
       nodeName: registration.node.name,
       token: rotated.credential.token,
+      managementSecret: rotated.credential.managementSecret,
       createdAt: rotated.credential.createdAt,
     };
   }
@@ -1493,6 +1513,10 @@ export function hostedTunnelAdvertisement(state: ActiveDaemonState): {
   publicS3Url?: string;
   tunnelMode: "none" | "quick" | "managed";
   publicDiscoverable: boolean;
+  endpoints?: {
+    s3: { url: string | null; kind: "quick" | "named" | "none"; healthy: boolean };
+    management: { url: string | null; kind: "quick" | "named" | "none"; healthy: boolean };
+  };
 } {
   const publicS3Url = state.publicUrl;
   const tunnelMode = publicS3Url
@@ -1502,6 +1526,10 @@ export function hostedTunnelAdvertisement(state: ActiveDaemonState): {
     ...(publicS3Url ? { publicS3Url } : {}),
     tunnelMode,
     publicDiscoverable: tunnelMode !== "none" && Boolean(publicS3Url),
+    ...((publicS3Url || state.publicManagementUrl) ? { endpoints: {
+      s3: { url: publicS3Url ?? null, kind: publicS3Url ? (tunnelMode === "quick" ? "quick" : "named") : "none", healthy: Boolean(publicS3Url) },
+      management: { url: state.publicManagementUrl ?? null, kind: state.publicManagementUrl ? (state.tunnelMode === "quick" ? "quick" : "named") : "none", healthy: Boolean(state.publicManagementUrl) },
+    } } : {}),
   };
 }
 
@@ -1620,7 +1648,7 @@ async function startHostedHeartbeatReporter(
       errors: Math.max(0, telemetry.counters.errors - baseline.counters.errors),
     },
     ...hostedTunnelAdvertisement(state),
-    managementUrl: state.managementUrl,
+    managementUrl: state.publicManagementUrl ?? null,
     ...(safeDashboardEndpoint(state.dashboardUrl)
       ? { dashboardUrl: safeDashboardEndpoint(state.dashboardUrl) }
       : {}),
@@ -1727,6 +1755,9 @@ async function serveForeground(
   if (effectiveDashboardUrl) {
     try { effectiveOrigins.add(new URL(effectiveDashboardUrl).origin); } catch { /* URL was validated earlier. */ }
   }
+  if (hostedNode) {
+    try { effectiveOrigins.add(new URL(hostedNode.session.controlPlaneUrl).origin); } catch { /* session URL was validated at login. */ }
+  }
 
   const daemonModuleUrl = new URL(
     import.meta.url.endsWith(".ts") ? "../daemon/index.ts" : "../daemon/index.js",
@@ -1744,6 +1775,7 @@ async function serveForeground(
       dashboardUrl?: string;
       allowedOrigins?: string[];
       adminToken?: string;
+      managementCapabilitySecret?: string;
       beforeStop?: () => void | Promise<void>;
     }) => Promise<DaemonHandle> | DaemonHandle;
   };
@@ -1765,6 +1797,7 @@ async function serveForeground(
       dashboardUrl: effectiveDashboardUrl,
       allowedOrigins: [...effectiveOrigins],
       adminToken,
+      managementCapabilitySecret: hostedNode?.credential.managementSecret,
       beforeStop: async () => { await hostedHeartbeat?.stop(); },
     });
   } catch (error) {
@@ -1785,11 +1818,9 @@ async function serveForeground(
         origin: connectableUrl(handle.config.s3Url ?? config.s3Url),
       },
     ];
-    if (!hostedNode) {
-      surfaces.push({ surface: "management", origin: managementUrl });
-      if (isLocalDashboardUrl(effectiveDashboardUrl)) {
-        surfaces.push({ surface: "dashboard", origin: effectiveDashboardUrl });
-      }
+    surfaces.push({ surface: "management", origin: managementUrl });
+    if (!hostedNode && isLocalDashboardUrl(effectiveDashboardUrl)) {
+      surfaces.push({ surface: "dashboard", origin: effectiveDashboardUrl });
     }
     try {
       quickTunnels = await startQuickTunnelSurfaces(surfaces, config.cloudflaredPath);
@@ -1825,6 +1856,7 @@ async function serveForeground(
     ),
     ...(dashboardApiUrl !== managementUrl ? { dashboardApiUrl } : {}),
     ...(publicUrl ? { publicUrl } : {}),
+    ...(quickTunnels.get("management")?.url ? { publicManagementUrl: quickTunnels.get("management")!.url } : {}),
     ...(config.quickTunnel ? { tunnelMode: "quick" as const } : {}),
     root: config.storageRoot,
     node: handle.config.nodeName ?? config.nodeName,
@@ -1859,6 +1891,10 @@ async function serveForeground(
     if (surface !== "s3") {
       void tunnel.closed.then(() => {
         if (!shutdownStarted) {
+          if (surface === "management") {
+            delete state.publicManagementUrl;
+            void hostedHeartbeat?.publicEndpointUnavailable().catch(() => undefined);
+          }
           writeLine(
             io.stderr,
             `The ${surface} Quick Tunnel stopped; local OpenBucket service is still running.`,
@@ -2641,6 +2677,47 @@ async function runDoctor(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
   return failures === 0 ? EXIT_SUCCESS : EXIT_DOCTOR;
 }
 
+async function runTunnel(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
+  const active = await readActiveState(io.env, io.homedir());
+  const executable = typeof parsed.options.cloudflaredPath === "string"
+    ? parsed.options.cloudflaredPath
+    : io.env.OPENBUCKET_CLOUDFLARED_PATH || "cloudflared";
+  if (parsed.subcommand === "status") {
+    writeLine(io.stdout, "OpenBucket tunnels");
+    writeLine(io.stdout, "");
+    writeLine(io.stdout, `  Connector       ${executable}`);
+    writeLine(io.stdout, `  S3 endpoint     ${active?.publicUrl ?? "not active"}`);
+    writeLine(io.stdout, `  Management API  ${active?.publicManagementUrl ?? "not active"}`);
+    writeLine(io.stdout, `  Mode            ${active?.tunnelMode === "quick" ? "Quick Tunnel (preview only)" : active?.tunnelMode ?? "not active"}`);
+    if (active?.tunnelMode === "quick") writeLine(io.stdout, pc.yellow("  Note            Quick Tunnel URLs change when the node restarts."));
+    return EXIT_SUCCESS;
+  }
+  if (parsed.subcommand === "update") {
+    writeLine(io.stdout, `Updating ${executable}…`);
+    const child = io.spawn(executable, ["update"], { stdio: "inherit", shell: false, windowsHide: true });
+    const closed = await waitForChildClose(child, 120_000);
+    if (!closed || child.exitCode !== 0) throw new CLIUsageError(`Could not update ${executable}. Run \`openbucket tunnel setup\` for recovery guidance.`);
+    writeLine(io.stdout, "Cloudflare connector updated.");
+    return EXIT_SUCCESS;
+  }
+
+  if (io.stdout.isTTY && parsed.options.yes !== true) {
+    prompts.intro("OpenBucket tunnel setup");
+    const proceed = await prompts.confirm({ message: "Open the official Cloudflare download page and configure a named tunnel?" });
+    if (prompts.isCancel(proceed) || !proceed) {
+      prompts.cancel("Tunnel setup cancelled.");
+      return EXIT_SUCCESS;
+    }
+  }
+  const platformGuide = "https://developers.cloudflare.com/tunnel/downloads/";
+  writeLine(io.stdout, "OpenBucket keeps connector paths and tunnel tokens out of shell profiles. Install cloudflared from the official page, then run the named-tunnel token command supplied by Cloudflare.");
+  writeLine(io.stdout, `Download guide: ${platformGuide}`);
+  writeLine(io.stdout, `Verify: ${executable} --version`);
+  writeLine(io.stdout, "After the connector is available, run `openbucket serve <directory> --tunnel`; OpenBucket will publish and persist both S3 and management endpoints.");
+  if (io.stdout.isTTY) prompts.outro("Connector guidance ready.");
+  return EXIT_SUCCESS;
+}
+
 async function executeCommand(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
   switch (parsed.command) {
     case "serve":
@@ -2659,6 +2736,8 @@ async function executeCommand(parsed: ParsedCLICommand, io: CLIIO): Promise<numb
       return runLogs(parsed, io);
     case "doctor":
       return runDoctor(parsed, io);
+    case "tunnel":
+      return runTunnel(parsed, io);
     case "dashboard":
       return runDashboard(io);
     case "buckets":
