@@ -133,7 +133,8 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
   assert.match(controlPlane, /apiRequest<UsageSummary>\("\/api\/usage"\)/);
   assert.match(controlPlane, /apiRequest<AdminOverview>\("\/api\/admin\/overview"\)/);
   assert.match(controlPlane, /user\.role === "admin"/);
-  assert.match(discovery, /\/api\/nodes\/resolve\?name=/);
+  assert.match(discovery, /new URLSearchParams\(\{ name: nodeName \}\)/);
+  assert.match(discovery, /\/api\/nodes\/resolve\?\$\{query\}/);
   assert.match(discovery, /does not proxy S3 requests/);
   assert.doesNotMatch(controlPlane, /mock|fixture|fake data/i);
   assert.match(landing, /src="\/og\.png"/);

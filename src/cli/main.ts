@@ -1154,9 +1154,9 @@ async function getProductVersion(io: CLIIO): Promise<string> {
     const packageData = JSON.parse(await readFile(packageUrl, "utf8")) as {
       version?: unknown;
     };
-    return typeof packageData.version === "string" ? packageData.version : "0.1.2";
+    return typeof packageData.version === "string" ? packageData.version : "0.1.3";
   } catch {
-    return "0.1.2";
+    return "0.1.3";
   }
 }
 

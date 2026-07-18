@@ -7,14 +7,14 @@ OpenBucket has two separately versioned deliverables that share the same release
 
 Use Node.js 22.13 or newer for the daemon. Production releases are built and tested on Node.js 22 and 24.
 
-Publication status: release `0.1.2` is published through trusted GitHub Actions to npm, PyPI, GHCR, and GitHub Releases. Pin exact versions in production.
+Publication status: release `0.1.3` is published through trusted GitHub Actions to npm, PyPI, GHCR, and GitHub Releases. Pin exact versions in production.
 
 ## npm
 
 The normal installation is a global npm package:
 
 ```bash
-npm install --global openbucket@0.1.2
+npm install --global openbucket@0.1.3
 openbucket version
 openbucket login --email you@example.com
 openbucket serve /path/to/storage --name my-node
@@ -25,13 +25,13 @@ openbucket serve /path/to/storage --name my-node
 Pin a production deployment to an exact version:
 
 ```bash
-npm install --global openbucket@0.1.2
+npm install --global openbucket@0.1.3
 ```
 
 For a temporary evaluation without a global install:
 
 ```bash
-npx --yes openbucket@0.1.2 version
+npx --yes openbucket@0.1.3 version
 ```
 
 Use a global, version-pinned install for a long-running daemon so an npm cache cleanup cannot affect process restarts.
@@ -72,25 +72,25 @@ Route the stable origin to the S3 listener first; the variable does not provisio
 
 ## GitHub release tarball
 
-The unified tag workflow publishes the npm tarball, Python wheel/source archive, and `SHA256SUMS`. For `v0.1.2`:
+The unified tag workflow publishes the npm tarball, Python wheel/source archive, and `SHA256SUMS`. For `v0.1.3`:
 
 ```bash
 npm install --global \
-  https://github.com/Razin-developer/openbucket/releases/download/v0.1.2/openbucket-0.1.2.tgz
+  https://github.com/Razin-developer/openbucket/releases/download/v0.1.3/openbucket-0.1.3.tgz
 ```
 
 Verify a downloaded file before installation:
 
 ```bash
-grep ' openbucket-0.1.2.tgz$' SHA256SUMS | sha256sum --check -
-npm install --global ./openbucket-0.1.2.tgz
+grep ' openbucket-0.1.3.tgz$' SHA256SUMS | sha256sum --check -
+npm install --global ./openbucket-0.1.3.tgz
 ```
 
 On PowerShell:
 
 ```powershell
-Get-FileHash .\openbucket-0.1.2.tgz -Algorithm SHA256
-npm install --global .\openbucket-0.1.2.tgz
+Get-FileHash .\openbucket-0.1.3.tgz -Algorithm SHA256
+npm install --global .\openbucket-0.1.3.tgz
 ```
 
 Compare the printed digest with the corresponding `SHA256SUMS` entry. Run `sha256sum --check SHA256SUMS` without filtering only when every asset named in that file is present.
@@ -101,15 +101,15 @@ The published installers are small wrappers around npm and accept a version/pack
 
 ```bash
 curl -fsSLo openbucket-install.sh https://openbucket-eight.vercel.app/install.sh
-OPENBUCKET_INSTALL_VERSION=0.1.2 sh ./openbucket-install.sh
+OPENBUCKET_INSTALL_VERSION=0.1.3 sh ./openbucket-install.sh
 ```
 
 ```powershell
 Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile openbucket-install.ps1
-& .\openbucket-install.ps1 -Version 0.1.2
+& .\openbucket-install.ps1 -Version 0.1.3
 ```
 
-From a source checkout, run `sh scripts/install.sh --version 0.1.2` or `& .\scripts\install.ps1 -Version 0.1.2`. Both scripts install the npm package only; they do not register a service, modify the firewall, or expose the daemon.
+From a source checkout, run `sh scripts/install.sh --version 0.1.3` or `& .\scripts\install.ps1 -Version 0.1.3`. Both scripts install the npm package only; they do not register a service, modify the firewall, or expose the daemon.
 
 ## Docker and Docker Compose
 
@@ -130,8 +130,8 @@ docker compose ps
 `docker compose run --rm` mounts the same declared `openbucket-state` volume at `/state`; the hidden-password login survives removal of the one-off container and the daemon later stores its node credential there. Compose keeps object bytes in `openbucket-data`, binds host ports to loopback, and runs separate daemon/dashboard services. Set `OPENBUCKET_STORAGE_MOUNT` for a host directory. Configure `OPENBUCKET_PUBLIC_BASE_URL` only after a managed route exists. The standard image does not include `cloudflared`, and Quick Tunnel is development-only even in a custom image that adds it.
 
 ```bash
-docker pull ghcr.io/razin-developer/openbucket:0.1.2
-docker pull ghcr.io/razin-developer/openbucket-dashboard:0.1.2
+docker pull ghcr.io/razin-developer/openbucket:0.1.3
+docker pull ghcr.io/razin-developer/openbucket-dashboard:0.1.3
 ```
 
 Use those commands only after the release exists. Do not use floating tags in unattended production; pin a semantic version or image digest.
@@ -163,10 +163,10 @@ python -m pip install ./python
 After the first unified release is visible on PyPI, use a pinned registry install or an isolated tool installation:
 
 ```bash
-python -m pip install openbucket-client==0.1.2
-pipx install openbucket-client==0.1.2
+python -m pip install openbucket-client==0.1.3
+pipx install openbucket-client==0.1.3
 # or
-uv tool install openbucket-client==0.1.2
+uv tool install openbucket-client==0.1.3
 ```
 
 Use the console client against an already running daemon:
