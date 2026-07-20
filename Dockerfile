@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM node:22-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS base
+FROM node:26-bookworm-slim@sha256:2d49d876e96237d76de412761cf05dbfe5aee325cc4406a4d41d5824c5bb8beb AS base
 WORKDIR /app
 
 FROM base AS dependencies
@@ -19,7 +19,7 @@ RUN npm run build
 
 # Headless daemon/CLI image. The Compose dashboard runs separately because the
 # embedded dashboard intentionally binds only loopback addresses.
-FROM node:22-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS daemon
+FROM node:26-bookworm-slim@sha256:2d49d876e96237d76de412761cf05dbfe5aee325cc4406a4d41d5824c5bb8beb AS daemon
 WORKDIR /app
 ENV NODE_ENV=production
 ENV OPENBUCKET_STORAGE_ROOT=/data
@@ -46,7 +46,7 @@ CMD ["serve", "/data", "--no-open"]
 
 # Production dashboard image. The compiled Node adapter serves the bundled
 # worker and static assets without retaining the build toolchain.
-FROM node:22-bookworm-slim@sha256:6c74791e557ce11fc957704f6d4fe134a7bc8d6f5ca4403205b2966bd488f6b3 AS dashboard
+FROM node:26-bookworm-slim@sha256:2d49d876e96237d76de412761cf05dbfe5aee325cc4406a4d41d5824c5bb8beb AS dashboard
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
