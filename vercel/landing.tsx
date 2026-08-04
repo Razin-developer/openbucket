@@ -1,7 +1,29 @@
 /* eslint-disable @next/next/no-img-element */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, Check, Copy } from "lucide-react";
 import { SiteFooter, SiteHeader, githubUrl } from "./site-shell";
+
+function useReveal<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        }
+      },
+      { threshold: 0.15 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return ref;
+}
 
 const npmCommand = "npm install --global openbucket";
 const loginCommand = "openbucket login --email you@example.com";
@@ -46,6 +68,12 @@ function ProductDiagram() {
 }
 
 export function LandingPage() {
+  const introRef = useReveal<HTMLElement>();
+  const diagramRef = useReveal<HTMLElement>();
+  const featuresRef = useReveal<HTMLElement>();
+  const quickstartRef = useReveal<HTMLElement>();
+  const ctaRef = useReveal<HTMLElement>();
+
   return (
     <div className="site-shell landing-page">
       <section className="landing-reference-hero" aria-labelledby="landing-title">
@@ -64,7 +92,7 @@ export function LandingPage() {
       </section>
 
       <main>
-        <section className="landing-intro" id="product">
+        <section className="landing-intro reveal" id="product" ref={introRef}>
           <p className="section-kicker">LOCAL BY DESIGN</p>
           <div>
             <h2>Cloud-shaped storage.<br />Without moving the disk.</h2>
@@ -77,7 +105,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="landing-diagram-section">
+        <section className="landing-diagram-section reveal" ref={diagramRef}>
           <div className="section-heading">
             <p className="section-kicker">ONE SMALL CONTROL PLANE</p>
             <h2>Disk in. S3 out.</h2>
@@ -86,7 +114,7 @@ export function LandingPage() {
           <ProductDiagram />
         </section>
 
-        <section className="landing-features">
+        <section className="landing-features reveal" ref={featuresRef}>
           <article className="feature-card featured">
             <p className="section-kicker">S3 COMPATIBILITY</p>
             <h3>Use familiar clients.</h3>
@@ -112,7 +140,7 @@ export function LandingPage() {
           </article>
         </section>
 
-        <section className="landing-quickstart">
+        <section className="landing-quickstart reveal" ref={quickstartRef}>
           <div className="quickstart-copy">
             <p className="section-kicker">RUN IT IN MINUTES</p>
             <h2>Three commands.<br />Your own endpoint.</h2>
@@ -130,7 +158,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="landing-cta">
+        <section className="landing-cta reveal" ref={ctaRef}>
           <div>
             <p className="section-kicker">READY WHEN YOUR DISK IS</p>
             <h2>Make local storage useful everywhere.</h2>

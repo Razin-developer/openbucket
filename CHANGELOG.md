@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.8] - 2026-08-04
+
+### Changed
+
+- Redesign the marketing landing page toward an Apple-inspired system: centered hero, large tracked-negative type, pill CTAs, generous whitespace, and scroll-triggered reveals.
+- Restyle the local and hosted dashboards with a Linear-inspired purple accent, flatter card chrome, and lighter shadows.
+- Polish the CLI `serve` boot banner with color and clearer alignment.
+
 ## [0.1.7] - 2026-07-18
 
 ### Fixed

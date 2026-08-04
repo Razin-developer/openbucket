@@ -1038,31 +1038,27 @@ function printBanner(
   state: ActiveDaemonState,
   initialCredentials?: Record<string, unknown>,
 ): void {
-  writeLine(io.stdout, "");
-  writeLine(io.stdout, "  OpenBucket");
-  writeLine(io.stdout, "  Local disk. Cloud interface.");
-  writeLine(io.stdout, "");
-  writeLine(io.stdout, "  ✓ Daemon running");
-  writeLine(io.stdout, `  Node        ${state.node}`);
-  writeLine(io.stdout, `  Storage     ${state.root}`);
-  if (state.nodeApiUrl) writeLine(io.stdout, `  OpenBucket API  ${state.nodeApiUrl}`);
+  const line = (value = "") => writeLine(io.stdout, value);
+  const label = (value: string) => pc.dim(value.padEnd(15));
+
+  line("");
+  line(`  ${pc.bold("▲ OpenBucket")}${pc.dim("  ·  local disk, cloud interface")}`);
+  line("");
+  line(`  ${pc.green("●")} ${pc.bold("Daemon running")}`);
+  line(`  ${label("Node")}${state.node}`);
+  line(`  ${label("Storage")}${state.root}`);
+  if (state.nodeApiUrl) line(`  ${label("OpenBucket API")}${pc.cyan(state.nodeApiUrl)}`);
   if (state.dashboardUrl) {
-    writeLine(io.stdout, `  Local dashboard  ${state.dashboardUrl.split("?")[0].split("#")[0]}`);
-    writeLine(io.stdout, "  Reopen      openbucket dashboard");
+    line(`  ${label("Local dashboard")}${pc.cyan(state.dashboardUrl.split("?")[0].split("#")[0])}`);
+    line(`  ${label("Reopen")}openbucket dashboard`);
   }
   if (initialCredentials) {
-    writeLine(io.stdout, "");
-    writeLine(io.stdout, "  Initial S3 credentials (shown once)");
-    writeLine(
-      io.stdout,
-      `  Access key  ${String(initialCredentials.accessKeyId ?? "—")}`,
-    );
-    writeLine(
-      io.stdout,
-      `  Secret key  ${String(initialCredentials.secretAccessKey ?? "—")}`,
-    );
+    line("");
+    line(`  ${pc.bold("Initial S3 credentials")}${pc.dim(" (shown once)")}`);
+    line(`  ${label("Access key")}${String(initialCredentials.accessKeyId ?? "—")}`);
+    line(`  ${label("Secret key")}${String(initialCredentials.secretAccessKey ?? "—")}`);
   }
-  writeLine(io.stdout, "");
+  line("");
 }
 
 function renderHelp(topic?: string): string {
@@ -1147,9 +1143,9 @@ async function getProductVersion(io: CLIIO): Promise<string> {
     const packageData = JSON.parse(await readFile(packageUrl, "utf8")) as {
       version?: unknown;
     };
-    return typeof packageData.version === "string" ? packageData.version : "0.1.7";
+    return typeof packageData.version === "string" ? packageData.version : "0.1.8";
   } catch {
-    return "0.1.7";
+    return "0.1.8";
   }
 }
 
