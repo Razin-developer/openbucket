@@ -105,7 +105,9 @@
 .cp-account-note > p:last-child, .cp-admin-note p { max-width: 720px; color: #666; line-height: 1.65; }
 .cp-generated { color: #777; font-size: 9px; }
 .cp-state { display: grid; justify-items: center; padding: 55px; border: 1px solid var(--cp-line); background: #fff; text-align: center; }
-.cp-state > span { width: 45px; height: 45px; display: grid; place-items: center; margin-bottom: 15px; color: #fff; border-radius: 7px; background: #111; font-weight: 800; }
+.cp-state > span { width: 45px; height: 45px; display: grid; place-items: center; margin-bottom: 15px; color: #fff; border-radius: 7px; font-weight: 800; }
+.cp-state.plain > span { background: transparent; }
+.cp-state.error > span { background: #111; }
 .cp-state h2 { margin: 0; font-size: 30px; }
 .cp-state > div > p { color: #666; }
 .cp-state.error > span { border-radius: 50%; background: #a42828; }

@@ -1,7 +1,10 @@
-/* eslint-disable @next/next/no-img-element */
+/* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages */
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Check, Copy } from "lucide-react";
-import { SiteFooter, SiteHeader, githubUrl } from "./site-shell";
+import {
+  ArrowRight, Boxes, Check, Copy, Database, FileKey2, Gauge,
+  HardDrive, KeyRound, Lock, Server, ShieldCheck, Terminal, Workflow,
+} from "lucide-react";
+import { SiteHeader, githubUrl } from "./site-shell";
 
 function useReveal<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
@@ -26,7 +29,6 @@ function useReveal<T extends HTMLElement>() {
 }
 
 const npmCommand = "npm install --global openbucket";
-const loginCommand = "openbucket login --email you@example.com";
 const serveCommand = "openbucket serve /path/to/storage --name home-node";
 
 function CopyCommand({ value }: { value: string }) {
@@ -46,130 +48,227 @@ function CopyCommand({ value }: { value: string }) {
   );
 }
 
-function ProductDiagram() {
+const clients = ["AWS CLI", "Boto3", "JavaScript SDK", "curl", "Terraform", "rclone"];
+
+const fixCards = [
+  { icon: Terminal, title: "One-command daemon", body: "Choose a path and start. OpenBucket creates confined bucket namespaces without relocating the rest of your disk." },
+  { icon: Gauge, title: "Real operations UI", body: "Inspect capacity, buckets, objects, keys, endpoints, logs, and request analytics from the node that produced them." },
+  { icon: Lock, title: "Local-first security", body: "Loopback listeners are the default. The management API requires a strong bearer token and S3 requests use workload credentials." },
+];
+
+const featureCards = [
+  { icon: Database, title: "S3 compatibility", body: "Path-style requests, SigV4, presigned URLs, range reads, and multipart uploads work against your endpoint." },
+  { icon: Gauge, title: "Live analytics", body: "Request counts, transfer totals, and error rates computed from the requests this node actually served." },
+  { icon: KeyRound, title: "Scoped API keys", body: "Issue independent, revocable credentials per application, optionally read-only or bucket-scoped." },
+  { icon: ShieldCheck, title: "Signature verification", body: "Every request is checked against AWS Signature Version 4 before it touches the filesystem." },
+  { icon: FileKey2, title: "Expiring share links", body: "Generate a time-boxed, signed URL for a single object without handing out standing credentials." },
+  { icon: Workflow, title: "Detached lifecycle", body: "Run in the foreground for development, or detach the daemon and manage it with the CLI." },
+];
+
+const deployOptions = [
+  { title: "Local", body: "Run the daemon on your own machine with the CLI. No account required for offline development.", items: ["openbucket serve <path>", "Local dashboard on 127.0.0.1", "Full S3 + management API"] },
+  { title: "Docker / Compose", body: "Ship the same daemon as a container alongside the services that use it.", items: ["Official daemon + dashboard images", "docker-compose.yml included", "Same CLI, same S3 surface"], featured: true },
+  { title: "Hosted dashboard", body: "Pair a local node with the hosted control plane for remote visibility and a Quick Tunnel.", items: ["Account-gated production serve", "S3-only Cloudflare Quick Tunnel", "Usage metering per node"] },
+];
+
+function IntegrationNodes() {
   return (
-    <div className="product-diagram" aria-label="A local OpenBucket daemon connects a disk to S3 clients and the dashboard">
-      <div className="diagram-node disk-node">
-        <span className="diagram-icon disk" aria-hidden="true"><i /><i /><i /></span>
-        <div><small>YOUR HARDWARE</small><strong>Folder, SSD or NAS</strong></div>
-      </div>
-      <span className="diagram-line" aria-hidden="true" />
-      <div className="diagram-node daemon-node">
-        <span className="bucket-shape" aria-hidden="true" />
-        <div><small>ONE DAEMON</small><strong>OpenBucket</strong></div>
-      </div>
-      <span className="diagram-line" aria-hidden="true" />
-      <div className="diagram-targets">
-        <div className="diagram-node"><span className="diagram-code" aria-hidden="true">S3</span><div><small>STANDARD API</small><strong>Existing clients</strong></div></div>
-        <div className="diagram-node"><span className="diagram-code" aria-hidden="true">UI</span><div><small>CONTROL PLANE</small><strong>Live dashboard</strong></div></div>
-      </div>
+    <div className="fs-node-row" aria-label="S3 clients and tools connecting to one OpenBucket node">
+      <span className="fs-node"><Terminal size={20} aria-hidden="true" /></span>
+      <span className="fs-node"><Boxes size={20} aria-hidden="true" /></span>
+      <span className="fs-node fs-hub"><HardDrive size={26} aria-hidden="true" /></span>
+      <span className="fs-node"><Server size={20} aria-hidden="true" /></span>
+      <span className="fs-node"><Database size={20} aria-hidden="true" /></span>
     </div>
   );
 }
 
 export function LandingPage() {
-  const introRef = useReveal<HTMLElement>();
-  const diagramRef = useReveal<HTMLElement>();
+  const splitRef = useReveal<HTMLElement>();
+  const fixRef = useReveal<HTMLElement>();
+  const stepsRef = useReveal<HTMLElement>();
   const featuresRef = useReveal<HTMLElement>();
-  const quickstartRef = useReveal<HTMLElement>();
-  const ctaRef = useReveal<HTMLElement>();
+  const integrationRef = useReveal<HTMLElement>();
+  const deployRef = useReveal<HTMLElement>();
+  const ctaRef = useReveal<HTMLDivElement>();
 
   return (
     <div className="site-shell landing-page">
-      <section className="landing-reference-hero" aria-labelledby="landing-title">
+      <div className="fs-hero">
         <SiteHeader current="home" overlay />
-        <img src="/og.png" alt="" aria-hidden="true" />
-        <div className="landing-accessible-copy">
-          <p>Local storage · cloud interface</p>
-          <h1 id="landing-title">OpenBucket</h1>
-          <strong>Your disk. Now S3-compatible.</strong>
+        <div className="fs-hero-inner">
+          <span className="fs-badge">Local storage · cloud interface</span>
+          <h1>Your disk. Now S3-compatible.</h1>
+          <p>OpenBucket turns any folder, SSD, or NAS into a real S3-compatible endpoint — and gives you a live dashboard to operate it.</p>
+          <div className="fs-hero-actions">
+            <a className="site-button dark" href="/login">Get started</a>
+            <a className="site-button light" href="/docs">Read the docs</a>
+          </div>
         </div>
-        <div className="landing-hero-actions">
-          <a className="site-button dark" href="/login">Open the dashboard</a>
-          <a className="site-button light" href="/docs">Read the docs</a>
-          <span>Open source · Apache-2.0</span>
+        <div className="fs-hero-shot">
+          <div>
+            <img src="/og.png" alt="The OpenBucket dashboard showing buckets, capacity, and live request analytics" />
+          </div>
         </div>
-      </section>
+      </div>
 
       <main>
-        <section className="landing-intro reveal" id="product" ref={introRef}>
-          <p className="section-kicker">LOCAL BY DESIGN</p>
+        <section className="fs-logo-strip" aria-label="Compatible clients">
+          <p>Speaks the S3 API your tools already use</p>
+          <div className="fs-logo-row">
+            {clients.map((client) => <span key={client}>{client}</span>)}
+          </div>
+        </section>
+
+        <section className="fs-split" id="product" ref={splitRef}>
           <div>
-            <h2>Cloud-shaped storage.<br />Without moving the disk.</h2>
-            <p>OpenBucket turns a directory you choose into an S3-compatible endpoint. The daemon serves real bytes from that disk; the CLI and dashboard operate the same live node.</p>
+            <p className="section-kicker">LOCAL BY DESIGN</p>
+            <h2>Cloud-shaped storage. Without moving the disk.</h2>
+            <p>The daemon serves real bytes from a directory you choose. The CLI and dashboard operate that same live node — nothing is simulated.</p>
+            <ul className="fs-split-list">
+              <li><Check size={16} aria-hidden="true" /> Your filesystem remains the source of truth.</li>
+              <li><Check size={16} aria-hidden="true" /> Standard AWS tools point at a custom endpoint.</li>
+              <li><Check size={16} aria-hidden="true" /> Management access stays separately authenticated.</li>
+            </ul>
           </div>
-          <div className="landing-principles" aria-label="OpenBucket principles">
-            <span><b>01</b> Your filesystem remains the source of truth.</span>
-            <span><b>02</b> Standard AWS tools use a custom endpoint.</span>
-            <span><b>03</b> Management access stays separately authenticated.</span>
-          </div>
-        </section>
-
-        <section className="landing-diagram-section reveal" ref={diagramRef}>
-          <div className="section-heading">
-            <p className="section-kicker">ONE SMALL CONTROL PLANE</p>
-            <h2>Disk in. S3 out.</h2>
-            <p>Keep the storage you already own. Add interfaces your tools already understand.</p>
-          </div>
-          <ProductDiagram />
-        </section>
-
-        <section className="landing-features reveal" ref={featuresRef}>
-          <article className="feature-card featured">
-            <p className="section-kicker">S3 COMPATIBILITY</p>
-            <h3>Use familiar clients.</h3>
-            <p>Path-style requests, AWS Signature Version 4, presigned URLs, range reads, multipart uploads, and scoped keys work against your endpoint.</p>
-            <div className="mini-client-grid" aria-label="Compatible client examples">
-              <span>AWS CLI</span><span>Boto3</span><span>JavaScript SDK</span><span>curl</span>
+          <div className="fs-diamond" aria-hidden="true">
+            <div className="fs-diamond-shape" />
+            <div className="fs-diamond-stats">
+              <span className="fs-stat-pill"><Database size={14} /> S3-compatible API</span>
+              <span className="fs-stat-pill"><Lock size={14} /> Bearer-token admin</span>
+              <span className="fs-stat-pill"><HardDrive size={14} /> Your disk, your bytes</span>
             </div>
-          </article>
-          <article className="feature-card">
-            <span className="feature-number">01</span>
-            <h3>One-command daemon</h3>
-            <p>Choose a path and start. OpenBucket creates confined bucket namespaces without relocating the rest of your disk.</p>
-          </article>
-          <article className="feature-card">
-            <span className="feature-number">02</span>
-            <h3>Real operations UI</h3>
-            <p>Inspect capacity, buckets, objects, keys, endpoints, logs, and request analytics from the node that produced them.</p>
-          </article>
-          <article className="feature-card">
-            <span className="feature-number">03</span>
-            <h3>Local-first security</h3>
-            <p>Loopback listeners are the default. The management API requires a strong bearer token and S3 requests use workload credentials.</p>
-          </article>
-        </section>
-
-        <section className="landing-quickstart reveal" ref={quickstartRef}>
-          <div className="quickstart-copy">
-            <p className="section-kicker">RUN IT IN MINUTES</p>
-            <h2>Three commands.<br />Your own endpoint.</h2>
-            <p>Install the published CLI on the machine that owns the disk. The local dashboard opens alongside the daemon.</p>
-            <a className="site-text-link" href="/docs#installation">All installation methods <ArrowRight size={15} aria-hidden="true" /></a>
-          </div>
-          <div className="terminal-card" aria-label="OpenBucket installation commands">
-            <div className="terminal-title"><span><i /><i /><i /></span><b>openbucket — terminal</b></div>
-            <div className="terminal-line"><span>$</span><code>{npmCommand}</code><CopyCommand value={npmCommand} /></div>
-            <div className="terminal-output">CLI installed</div>
-            <div className="terminal-line"><span>$</span><code>{loginCommand}</code><CopyCommand value={loginCommand} /></div>
-            <div className="terminal-output">Account authenticated</div>
-            <div className="terminal-line"><span>$</span><code>{serveCommand}</code><CopyCommand value={serveCommand} /></div>
-            <div className="terminal-output success"><span><Check size={13} /> Node service running</span><span><Check size={13} /> S3 service available</span><span><Check size={13} /> Local dashboard paired</span></div>
           </div>
         </section>
 
-        <section className="landing-cta reveal" ref={ctaRef}>
-          <div>
-            <p className="section-kicker">READY WHEN YOUR DISK IS</p>
-            <h2>Make local storage useful everywhere.</h2>
+        <section className="fs-section soft" ref={fixRef}>
+          <div className="fs-section-head">
+            <p className="fs-kicker">Why OpenBucket</p>
+            <h2>Built to fix that</h2>
+            <p className="fs-lead">Object storage shouldn&apos;t mean renting a bucket you can&apos;t see. OpenBucket keeps the data local and gives it a standard interface.</p>
           </div>
+          <div className="fs-fix-grid">
+            <article className="fs-fix-card fs-visual">
+              <strong>Disk in. S3 out.</strong>
+              <span>One daemon, one storage root, a standard API on the other side.</span>
+            </article>
+            {fixCards.map(({ icon: Icon, title, body }) => (
+              <article className="fs-fix-card" key={title}>
+                <span className="fs-fix-icon"><Icon size={17} aria-hidden="true" /></span>
+                <h3>{title}</h3>
+                <p>{body}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="fs-steps-card" ref={stepsRef}>
+          <div className="fs-steps-inner">
+            <ol className="fs-steps-list">
+              <li className="fs-step"><span>1</span><div><strong>Install the CLI</strong><p>{npmCommand} <CopyCommand value={npmCommand} /></p></div></li>
+              <li className="fs-step"><span>2</span><div><strong>Point it at a folder</strong><p>{serveCommand} <CopyCommand value={serveCommand} /></p></div></li>
+              <li className="fs-step"><span>3</span><div><strong>Connect any S3 client</strong><p>The dashboard opens alongside the daemon automatically.</p></div></li>
+            </ol>
+            <div>
+              <a className="site-button dark" href="/docs#installation">All installation methods <ArrowRight size={15} aria-hidden="true" /></a>
+            </div>
+          </div>
+        </section>
+
+        <section className="fs-section" ref={featuresRef}>
+          <div className="fs-section-head">
+            <p className="fs-kicker">Features</p>
+            <h2>Features that set OpenBucket apart</h2>
+            <p className="fs-lead">Everything a self-hosted S3 endpoint needs, none of the parts that only make sense for a multi-tenant cloud.</p>
+          </div>
+          <div className="fs-features-grid">
+            {featureCards.map(({ icon: Icon, title, body }) => (
+              <article className="fs-feature-card" key={title}>
+                <span className="fs-fix-icon"><Icon size={17} aria-hidden="true" /></span>
+                <h3>{title}</h3>
+                <p>{body}</p>
+                <a href="/docs">Learn more <ArrowRight size={13} aria-hidden="true" /></a>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="fs-integration" ref={integrationRef}>
           <div>
-            <a className="site-button light" href="/login">Sign in</a>
-            <a className="site-button ghost" href={githubUrl}>View source</a>
+            <p className="section-kicker">CONNECT ANYTHING</p>
+            <h2>One node, every S3 tool</h2>
+            <p className="fs-lead" style={{ margin: "14px 0 0", textAlign: "left" }}>Terminals, SDKs, and infrastructure-as-code tools all talk to the same daemon over the standard S3 API — no vendor lock-in, no proprietary client.</p>
+            <IntegrationNodes />
+          </div>
+          <blockquote className="fs-quote">
+            <p>“The daemon serves real bytes from that disk; the CLI and dashboard operate the same live node.”</p>
+            <footer>From the OpenBucket design principles</footer>
+          </blockquote>
+        </section>
+
+        <section className="fs-section soft" ref={deployRef}>
+          <div className="fs-section-head">
+            <p className="fs-kicker">Deployment</p>
+            <h2>Run it wherever your disk is</h2>
+            <p className="fs-lead">OpenBucket is Apache-2.0 and free to self-host. Pick the deployment shape that matches where your storage lives.</p>
+          </div>
+          <div className="fs-deploy-grid">
+            {deployOptions.map((option) => (
+              <article className={`fs-deploy-card${option.featured ? " fs-featured" : ""}`} key={option.title}>
+                <h3>{option.title}</h3>
+                <p>{option.body}</p>
+                <ul className="fs-deploy-list">
+                  {option.items.map((item) => <li key={item}><Check size={14} aria-hidden="true" /> {item}</li>)}
+                </ul>
+                <a className={`site-button ${option.featured ? "light" : "dark"} small`} href="/docs">Read the docs</a>
+              </article>
+            ))}
           </div>
         </section>
       </main>
-      <SiteFooter />
+
+      <div className="fs-cta-band" ref={ctaRef}>
+        <p className="section-kicker">READY WHEN YOUR DISK IS</p>
+        <h2>Make local storage useful everywhere.</h2>
+        <div className="fs-section-actions">
+          <a className="site-button dark" href="/login">Get started</a>
+          <a className="site-button ghost" href={githubUrl}>View source</a>
+        </div>
+      </div>
+
+      <footer className="fs-footer">
+        <div className="fs-footer-top">
+          <div>
+            <a className="site-brand" href="/" aria-label="OpenBucket home">
+              <svg className="site-brand-mark" width={27} height={27} viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#171717" /><path d="M8 10.5h16l-1.6 12.2a3 3 0 0 1-3 2.6h-6.8a3 3 0 0 1-3-2.6L8 10.5Z" fill="#fff" /><path d="M7 8.5A1.5 1.5 0 0 1 8.5 7h15a1.5 1.5 0 0 1 0 3h-15A1.5 1.5 0 0 1 7 8.5Z" fill="#fff" /><path d="M12 15h8M12.7 19h6.6" stroke="#171717" strokeWidth="2" strokeLinecap="round" /></svg>
+              <span>OpenBucket</span>
+            </a>
+            <p>Your disk. A standard S3 interface. No invented data in between.</p>
+          </div>
+          <div>
+            <strong>Product</strong>
+            <a href="/docs">Documentation</a>
+            <a href="/dashboard">Dashboard</a>
+            <a href={`${githubUrl}/releases`}>Releases</a>
+          </div>
+          <div>
+            <strong>Project</strong>
+            <a href={githubUrl}>Source</a>
+            <a href={`${githubUrl}/issues`}>Issues</a>
+            <a href={`${githubUrl}/blob/main/LICENSE`}>Apache-2.0</a>
+          </div>
+          <div>
+            <strong>Get started</strong>
+            <a href="/login">Sign in</a>
+            <a href="/docs#installation">Installation</a>
+            <a href={githubUrl}>Star on GitHub</a>
+          </div>
+        </div>
+        <div className="fs-footer-bottom">
+          <span>OpenBucket is open-source software. Object bytes remain on storage you control.</span>
+          <span>Apache-2.0</span>
+        </div>
+      </footer>
     </div>
   );
 }
