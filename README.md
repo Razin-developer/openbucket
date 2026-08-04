@@ -6,7 +6,7 @@ OpenBucket writes real object bytes to the directory you choose. The normal prod
 
 > OpenBucket is currently a single-node, self-hosted v0.1 product. It is useful for development, homelabs, local backup targets, and trusted private networks. Read [Security](#security) and [Current limitations](#current-limitations) before exposing it outside a machine you control.
 
-The Node daemon and CLI are published as [`openbucket@0.1.0`](https://www.npmjs.com/package/openbucket/v/0.1.0), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). The first unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases is planned as `0.1.1`; see [Releasing](docs/RELEASING.md).
+The Node daemon and CLI are published as [`openbucket@0.1.7`](https://www.npmjs.com/package/openbucket/v/0.1.7), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). Release `0.1.7` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
 
 ## What is included
 
@@ -39,7 +39,7 @@ npm run openbucket -- bucket create photos
 npm run openbucket -- status
 ```
 
-`serve` registers the node, stores its node credential in the permission-restricted CLI home, reports heartbeat/storage/request counters, and starts an S3-only Quick Tunnel when no `OPENBUCKET_PUBLIC_BASE_URL` exists. Quick Tunnel URLs change on restart and are suitable only for development or preview.
+`serve` registers the node, stores its node credential in the permission-restricted CLI home, reports heartbeat/storage/request counters, and starts supervised S3 and management Quick Tunnels when no managed public route exists. The account dashboard receives only the public endpoint metadata; daemon and S3 secrets never leave the storage host. Quick Tunnel URLs change on restart and are suitable only for development or preview.
 
 For standalone local development with no hosted login, metering, discovery, or tunnel:
 
@@ -73,7 +73,7 @@ openbucket login --email you@example.com
 openbucket serve /path/to/storage --name demo-node --tunnel --detach
 ```
 
-For an account-connected node, the supervised tunnel exposes S3 only; account and heartbeat traffic use the hosted control-plane API. Offline explicit-tunnel mode also exposes management and the local dashboard for a controlled demo. The banner prints the usable endpoints, and `openbucket stop` terminates the daemon and supervised tunnels.
+For an account-connected node, the supervised S3 and management tunnels are recorded in MongoDB through the node heartbeat. The hosted console receives a short-lived node-scoped capability, never the daemon's long-lived bearer token. The local dashboard remains loopback-only and is automatically paired by `openbucket dashboard`. The banner prints the usable endpoints, and `openbucket stop` terminates the daemon and supervised tunnels.
 
 Quick Tunnel URLs change on restart and Cloudflare documents them as development/testing infrastructure with no uptime guarantee, a 200 in-flight request limit, and no SSE support. Account-connected mode tunnels only S3. An offline explicit-tunnel demo may also expose management, which still requires the full-control bearer token. Use a named tunnel/reverse proxy with an independent access policy for production.
 
@@ -92,15 +92,15 @@ openbucket version
 
 ```bash
 npm pack
-npm install --global ./openbucket-0.1.1.tgz
+npm install --global ./openbucket-0.1.7.tgz
 ```
 
 ### From npm
 
-Version `0.1.0` is live on the npm registry:
+Install the current release from npm:
 
 ```bash
-npm install --global openbucket@0.1.0
+npm install --global openbucket@0.1.7
 openbucket version
 openbucket login --email you@example.com
 openbucket serve /path/to/storage --name my-node
@@ -116,12 +116,12 @@ The installers are thin, auditable npm wrappers served by the current Vercel dep
 
 ```bash
 curl -fsSLo openbucket-install.sh https://openbucket-eight.vercel.app/install.sh
-OPENBUCKET_INSTALL_VERSION=0.1.0 sh ./openbucket-install.sh
+OPENBUCKET_INSTALL_VERSION=0.1.7 sh ./openbucket-install.sh
 ```
 
 ```powershell
 Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile openbucket-install.ps1
-& ./openbucket-install.ps1 -Version 0.1.0
+& ./openbucket-install.ps1 -Version 0.1.7
 ```
 
 From a source checkout, the same installers are available directly:

@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { AlertCircle } from "lucide-react";
 import { HostedControlPlane, type AccountUser } from "./control-plane";
 import { SiteShell } from "./site-shell";
 
@@ -74,7 +75,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
               {registering ? <label><span>Name <small>optional</small></span><input name="name" type="text" autoComplete="name" maxLength={80} placeholder="Your name" /></label> : null}
               <label><span>Email</span><input name="email" type="email" autoComplete="email" required maxLength={254} placeholder="you@example.com" /></label>
               <label><span>Password</span><input name="password" type="password" autoComplete={registering ? "new-password" : "current-password"} required minLength={12} maxLength={128} placeholder="At least 12 characters" /></label>
-              {error ? <div className="auth-error" role="alert"><span aria-hidden="true">!</span>{error}</div> : null}
+              {error ? <div className="auth-error" role="alert"><span aria-hidden="true"><AlertCircle size={14} /></span>{error}</div> : null}
               <button className="site-button dark auth-submit" type="submit" disabled={busy}>{busy ? "Please wait…" : registering ? "Create account" : "Sign in"}</button>
             </form>
             {registering ? <p className="auth-switch">Already have an account? <a href="/login">Sign in</a></p>
@@ -113,7 +114,7 @@ export function ProtectedDashboard() {
     return <main className="auth-gate"><span className="auth-gate-mark" aria-hidden="true"><i /></span><p>Opening your dashboard…</p></main>;
   }
   if (state.kind === "error") {
-    return <main className="auth-gate"><span className="auth-gate-mark error" aria-hidden="true">!</span><h1>Dashboard unavailable</h1><p>{state.message}</p><button className="site-button dark" type="button" onClick={() => { setState({ kind: "loading" }); void loadSession(); }}>Try again</button></main>;
+    return <main className="auth-gate"><span className="auth-gate-mark error" aria-hidden="true"><AlertCircle size={24} /></span><h1>Dashboard unavailable</h1><p>{state.message}</p><button className="site-button dark" type="button" onClick={() => { setState({ kind: "loading" }); void loadSession(); }}>Try again</button></main>;
   }
   return <HostedControlPlane user={state.user} />;
 }

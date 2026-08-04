@@ -19,12 +19,14 @@ function CopyDiscovery({ value, label }: { value: string; label: string }) {
   return <button type="button" onClick={async () => { await navigator.clipboard.writeText(value); setCopied(true); window.setTimeout(() => setCopied(false), 1_400); }}>{copied ? "Copied" : label}</button>;
 }
 
-export function NodeDiscoveryPage({ nodeName }: { nodeName: string }) {
+export function NodeDiscoveryPage({ nodeName, handle }: { nodeName: string; handle?: string }) {
   const [state, setState] = useState<DiscoveryState>({ kind: "loading" });
   useEffect(() => {
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
-      void fetch(`/api/nodes/resolve?name=${encodeURIComponent(nodeName)}`, { headers: { accept: "application/json" }, signal: controller.signal })
+      const query = new URLSearchParams({ name: nodeName });
+      if (handle) query.set("handle", handle);
+      void fetch(`/api/nodes/resolve?${query}`, { headers: { accept: "application/json" }, signal: controller.signal })
         .then(async (response) => {
           const payload = await response.json().catch(() => ({})) as Discovery & { error?: { message?: string } };
           if (!response.ok) throw new Error(payload.error?.message || "This node could not be discovered.");
@@ -33,7 +35,7 @@ export function NodeDiscoveryPage({ nodeName }: { nodeName: string }) {
         .catch((error: unknown) => { if (!controller.signal.aborted) setState({ kind: "error", message: error instanceof Error ? error.message : "This node could not be discovered." }); });
     }, 0);
     return () => { window.clearTimeout(timer); controller.abort(); };
-  }, [nodeName]);
+  }, [nodeName, handle]);
 
   return <SiteShell compact><main className="discovery-page">
     {state.kind === "loading" ? <section className="discovery-state" aria-live="polite"><span className="discovery-spinner" /><p>Looking up <strong>{nodeName}</strong>…</p></section> : null}
@@ -43,9 +45,9 @@ export function NodeDiscoveryPage({ nodeName }: { nodeName: string }) {
       <section className="discovery-card">
         <div><span>Canonical discovery page</span><code>{state.value.canonicalPath}</code><CopyDiscovery value={state.value.canonicalPath} label="Copy" /></div>
         <div><span>Planned stable hostname</span><code>{state.value.futureHostname}</code><CopyDiscovery value={state.value.futureHostname} label="Copy" /></div>
-        <div className={state.value.s3Endpoint ? "available" : "unavailable"}><span>Public S3 endpoint</span>{state.value.s3Endpoint ? <><code>{state.value.s3Endpoint}</code><CopyDiscovery value={state.value.s3Endpoint} label="Copy endpoint" /></> : <strong>Not publicly advertised</strong>}</div>
+        <div className={state.value.online ? "available" : "unavailable"}><span>OpenBucket API</span><code>{new URL(state.value.canonicalPath, window.location.origin).toString()}</code><CopyDiscovery value={new URL(state.value.canonicalPath, window.location.origin).toString()} label="Copy API URL" /></div>
       </section>
-      {state.value.s3Endpoint ? <section className="discovery-connect"><div><p className="section-kicker">CONNECT DIRECTLY</p><h2>Use the endpoint with your S3 client.</h2><p>Authentication and authorization are enforced by the node. Obtain workload credentials from its operator.</p></div><div><code>{`aws s3 ls --endpoint-url ${state.value.s3Endpoint}`}</code><CopyDiscovery value={`aws s3 ls --endpoint-url ${state.value.s3Endpoint}`} label="Copy command" /></div></section> : <section className="discovery-notice"><strong>No public data path is active.</strong><p>The node may be offline or its owner may have disabled public discovery. This page intentionally does not reveal a private or stale endpoint.</p></section>}
+      <section className="discovery-notice"><strong>{state.value.online ? "Node services are available." : "Node currently offline."}</strong><p>OpenBucket keeps transport addresses private. Sign in as the owner to open the live console and manage this node.</p></section>
     </> : null}
   </main></SiteShell>;
 }

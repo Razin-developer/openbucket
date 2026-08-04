@@ -52,6 +52,7 @@ next-env.d.ts
 *.py[cod]
 /.venv/
 /python/.venv/
+/python/.release-venv/
 /python/.pytest_cache/
 /python/.mypy_cache/
 /python/.ruff_cache/

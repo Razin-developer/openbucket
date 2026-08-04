@@ -28,13 +28,13 @@ test("server-renders the complete OpenBucket dashboard shell", async () => {
   assert.match(html, /<title>OpenBucket — your disk, now S3-compatible<\/title>/i);
   assert.match(html, /<meta name="application-name" content="OpenBucket"\/>/i);
   assert.match(html, /OpenBucket/);
-  assert.match(html, /Local control plane/);
+  assert.match(html, /Node console/);
   assert.match(html, /Connect your first disk\./);
   assert.match(html, /Buckets/);
   assert.match(html, /API keys/);
   assert.match(html, /Connections/);
   assert.match(html, /Logs &amp; analytics/);
-  assert.match(html, /http:\/\/127\.0\.0\.1:8333/);
+  assert.match(html, /OPENBUCKET_S3_ENDPOINT/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 
@@ -53,14 +53,15 @@ test("removes starter preview code and wires only live daemon data", async () =>
   assert.match(dashboard, /\/v1\/buckets/);
   assert.match(dashboard, /\/v1\/analytics/);
   assert.match(dashboard, /\/v1\/logs\?limit=100/);
-  assert.match(dashboard, /fetch\(`/);
+  assert.match(dashboard, /apiRequestUrl\(apiBase, path\)/);
+  assert.match(dashboard, /lucide-react/);
   assert.match(dashboard, /localStorage\.setItem\(API_STORAGE_KEY/);
   assert.match(dashboard, /sessionStorage\.setItem\(tokenStorageKey\(apiBase\)/);
   assert.match(dashboard, /current\.hash = ""/);
-  assert.match(dashboard, /const endpoint = clientConfig\.publicBaseUrl/);
+  assert.match(dashboard, /const endpoint = "\$\{OPENBUCKET_S3_ENDPOINT\}"/);
   assert.match(dashboard, /NEXT_PUBLIC_DOCS_URL/);
   assert.match(dashboard, /https:\/\/github\.com\/Razin-developer\/openbucket\/tree\/main\/docs/);
-  assert.match(dashboard, /\["Dashboard API", apiBase/);
+  assert.match(dashboard, /\["OpenBucket API", initialConnection\?\.displayUrl/);
   assert.doesNotMatch(dashboard, /sessionStorage\.setItem\(TOKEN_STORAGE_KEY,/);
   assert.doesNotMatch(dashboard, /media.*18,231|datasets.*142|14,281|429 GB/i);
   assert.match(css, /--ink:\s*#171717/);
@@ -133,7 +134,8 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
   assert.match(controlPlane, /apiRequest<UsageSummary>\("\/api\/usage"\)/);
   assert.match(controlPlane, /apiRequest<AdminOverview>\("\/api\/admin\/overview"\)/);
   assert.match(controlPlane, /user\.role === "admin"/);
-  assert.match(discovery, /\/api\/nodes\/resolve\?name=/);
+  assert.match(discovery, /new URLSearchParams\(\{ name: nodeName \}\)/);
+  assert.match(discovery, /\/api\/nodes\/resolve\?\$\{query\}/);
   assert.match(discovery, /does not proxy S3 requests/);
   assert.doesNotMatch(controlPlane, /mock|fixture|fake data/i);
   assert.match(landing, /src="\/og\.png"/);

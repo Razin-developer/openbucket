@@ -1,6 +1,29 @@
 /* eslint-disable @next/next/no-img-element */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { ArrowRight, Check, Copy } from "lucide-react";
 import { SiteFooter, SiteHeader, githubUrl } from "./site-shell";
+
+function useReveal<T extends HTMLElement>() {
+  const ref = useRef<T | null>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        }
+      },
+      { threshold: 0.15 },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  return ref;
+}
 
 const npmCommand = "npm install --global openbucket";
 const loginCommand = "openbucket login --email you@example.com";
@@ -18,7 +41,7 @@ function CopyCommand({ value }: { value: string }) {
         window.setTimeout(() => setCopied(false), 1_500);
       }}
     >
-      {copied ? "Copied" : "Copy"}
+      {copied ? <><Check size={12} /> Copied</> : <><Copy size={12} /> Copy</>}
     </button>
   );
 }
@@ -45,6 +68,12 @@ function ProductDiagram() {
 }
 
 export function LandingPage() {
+  const introRef = useReveal<HTMLElement>();
+  const diagramRef = useReveal<HTMLElement>();
+  const featuresRef = useReveal<HTMLElement>();
+  const quickstartRef = useReveal<HTMLElement>();
+  const ctaRef = useReveal<HTMLElement>();
+
   return (
     <div className="site-shell landing-page">
       <section className="landing-reference-hero" aria-labelledby="landing-title">
@@ -63,7 +92,7 @@ export function LandingPage() {
       </section>
 
       <main>
-        <section className="landing-intro" id="product">
+        <section className="landing-intro reveal" id="product" ref={introRef}>
           <p className="section-kicker">LOCAL BY DESIGN</p>
           <div>
             <h2>Cloud-shaped storage.<br />Without moving the disk.</h2>
@@ -76,7 +105,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="landing-diagram-section">
+        <section className="landing-diagram-section reveal" ref={diagramRef}>
           <div className="section-heading">
             <p className="section-kicker">ONE SMALL CONTROL PLANE</p>
             <h2>Disk in. S3 out.</h2>
@@ -85,7 +114,7 @@ export function LandingPage() {
           <ProductDiagram />
         </section>
 
-        <section className="landing-features">
+        <section className="landing-features reveal" ref={featuresRef}>
           <article className="feature-card featured">
             <p className="section-kicker">S3 COMPATIBILITY</p>
             <h3>Use familiar clients.</h3>
@@ -111,12 +140,12 @@ export function LandingPage() {
           </article>
         </section>
 
-        <section className="landing-quickstart">
+        <section className="landing-quickstart reveal" ref={quickstartRef}>
           <div className="quickstart-copy">
             <p className="section-kicker">RUN IT IN MINUTES</p>
             <h2>Three commands.<br />Your own endpoint.</h2>
             <p>Install the published CLI on the machine that owns the disk. The local dashboard opens alongside the daemon.</p>
-            <a className="site-text-link" href="/docs#installation">All installation methods <span aria-hidden="true">→</span></a>
+            <a className="site-text-link" href="/docs#installation">All installation methods <ArrowRight size={15} aria-hidden="true" /></a>
           </div>
           <div className="terminal-card" aria-label="OpenBucket installation commands">
             <div className="terminal-title"><span><i /><i /><i /></span><b>openbucket — terminal</b></div>
@@ -125,11 +154,11 @@ export function LandingPage() {
             <div className="terminal-line"><span>$</span><code>{loginCommand}</code><CopyCommand value={loginCommand} /></div>
             <div className="terminal-output">Account authenticated</div>
             <div className="terminal-line"><span>$</span><code>{serveCommand}</code><CopyCommand value={serveCommand} /></div>
-            <div className="terminal-output success">✓ Management  http://127.0.0.1:7272<br />✓ S3 endpoint http://127.0.0.1:8333<br />✓ Dashboard    http://localhost:3000</div>
+            <div className="terminal-output success"><span><Check size={13} /> Node service running</span><span><Check size={13} /> S3 service available</span><span><Check size={13} /> Local dashboard paired</span></div>
           </div>
         </section>
 
-        <section className="landing-cta">
+        <section className="landing-cta reveal" ref={ctaRef}>
           <div>
             <p className="section-kicker">READY WHEN YOUR DISK IS</p>
             <h2>Make local storage useful everywhere.</h2>

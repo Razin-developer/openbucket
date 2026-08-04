@@ -36,6 +36,8 @@ import {
   type NodeCredential,
 } from "./auth-session.js";
 import { startQuickTunnel, type QuickTunnelHandle } from "./tunnel.js";
+import * as prompts from "@clack/prompts";
+import pc from "picocolors";
 
 export const DEFAULT_MANAGEMENT_PORT = 7272;
 export const DEFAULT_S3_PORT = 8333;
@@ -62,6 +64,7 @@ export interface ParsedCLICommand {
     | "status"
     | "logs"
     | "doctor"
+    | "tunnel"
     | "dashboard"
     | "buckets"
     | "bucket"
@@ -72,7 +75,7 @@ export interface ParsedCLICommand {
     | "config"
     | "version"
     | "help";
-  subcommand?: "create" | "delete" | "revoke";
+  subcommand?: "create" | "delete" | "revoke" | "setup" | "status" | "update";
   positionals: string[];
   options: Record<string, CLIOptionValue>;
   raw: string[];
@@ -109,7 +112,9 @@ export interface ActiveDaemonState {
   dashboardUrl?: string;
   dashboardApiUrl?: string;
   publicUrl?: string;
+  publicManagementUrl?: string;
   tunnelMode?: "quick" | "managed";
+  nodeApiUrl?: string;
   root: string;
   node: string;
   token?: string;
@@ -467,6 +472,15 @@ export function parseCLIArgs(argv: readonly string[]): ParsedCLICommand {
       parsed = parseOptions(tail, [], []);
       assertPositionals("doctor [directory]", parsed.positionals, 0, 1);
       return { command: "doctor", ...parsed, raw };
+    }
+    case "tunnel": {
+      const subcommand = tail[0]?.toLowerCase() ?? "status";
+      if (subcommand !== "setup" && subcommand !== "status" && subcommand !== "update") {
+        throw new CLIUsageError("Usage: tunnel <setup|status|update>");
+      }
+      parsed = parseOptions(tail.slice(subcommand === "status" && tail.length === 0 ? 0 : 1), ["cloudflared-path"], ["yes"]);
+      assertPositionals(`tunnel ${subcommand} [--cloudflared-path PATH] [--yes]`, parsed.positionals, 0);
+      return { command: "tunnel", subcommand, ...parsed, raw };
     }
     case "buckets":
     case "list":
@@ -1024,39 +1038,27 @@ function printBanner(
   state: ActiveDaemonState,
   initialCredentials?: Record<string, unknown>,
 ): void {
-  writeLine(io.stdout, "");
-  writeLine(io.stdout, "  OpenBucket");
-  writeLine(io.stdout, "  Local disk. Cloud interface.");
-  writeLine(io.stdout, "");
-  writeLine(io.stdout, "  ✓ Daemon running");
-  writeLine(io.stdout, `  Node        ${state.node}`);
-  writeLine(io.stdout, `  Storage     ${state.root}`);
-  writeLine(io.stdout, `  Management  ${state.managementUrl}`);
-  if (state.s3Url) writeLine(io.stdout, `  S3 endpoint ${state.s3Url}`);
-  if (state.publicUrl) writeLine(io.stdout, `  Public S3   ${state.publicUrl}`);
-  if (state.dashboardApiUrl && state.dashboardApiUrl !== state.managementUrl) {
-    writeLine(io.stdout, `  Remote API  ${state.dashboardApiUrl}`);
-  }
+  const line = (value = "") => writeLine(io.stdout, value);
+  const label = (value: string) => pc.dim(value.padEnd(15));
+
+  line("");
+  line(`  ${pc.bold("▲ OpenBucket")}${pc.dim("  ·  local disk, cloud interface")}`);
+  line("");
+  line(`  ${pc.green("●")} ${pc.bold("Daemon running")}`);
+  line(`  ${label("Node")}${state.node}`);
+  line(`  ${label("Storage")}${state.root}`);
+  if (state.nodeApiUrl) line(`  ${label("OpenBucket API")}${pc.cyan(state.nodeApiUrl)}`);
   if (state.dashboardUrl) {
-    writeLine(io.stdout, `  Dashboard   ${state.dashboardUrl}`);
-    writeLine(io.stdout, "  Reopen      openbucket dashboard");
-  }
-  if (state.tunnelMode === "quick") {
-    writeLine(io.stdout, "  Tunnel      Cloudflare Quick Tunnel (development only)");
+    line(`  ${label("Local dashboard")}${pc.cyan(state.dashboardUrl.split("?")[0].split("#")[0])}`);
+    line(`  ${label("Reopen")}openbucket dashboard`);
   }
   if (initialCredentials) {
-    writeLine(io.stdout, "");
-    writeLine(io.stdout, "  Initial S3 credentials (shown once)");
-    writeLine(
-      io.stdout,
-      `  Access key  ${String(initialCredentials.accessKeyId ?? "—")}`,
-    );
-    writeLine(
-      io.stdout,
-      `  Secret key  ${String(initialCredentials.secretAccessKey ?? "—")}`,
-    );
+    line("");
+    line(`  ${pc.bold("Initial S3 credentials")}${pc.dim(" (shown once)")}`);
+    line(`  ${label("Access key")}${String(initialCredentials.accessKeyId ?? "—")}`);
+    line(`  ${label("Secret key")}${String(initialCredentials.secretAccessKey ?? "—")}`);
   }
-  writeLine(io.stdout, "");
+  line("");
 }
 
 function renderHelp(topic?: string): string {
@@ -1071,6 +1073,7 @@ function renderHelp(topic?: string): string {
     status: "Usage: openbucket status [--json]",
     dashboard: "Usage: openbucket dashboard",
     doctor: "Usage: openbucket doctor [directory]",
+    tunnel: "Usage: openbucket tunnel <setup|status|update> [--cloudflared-path PATH] [--yes]",
     buckets: "Usage: openbucket buckets",
     list: "Usage: openbucket list",
     bucket:
@@ -1103,6 +1106,8 @@ Daemon
   dashboard            Securely open or re-pair the local dashboard
   logs [--follow]      Show daemon request and lifecycle logs
   doctor [directory]   Check the runtime, storage, and network
+  tunnel status         Show S3 and management tunnel state
+  tunnel setup          Guided Cloudflare connector and named-tunnel setup
 
 Storage
   buckets | list       List buckets
@@ -1138,9 +1143,9 @@ async function getProductVersion(io: CLIIO): Promise<string> {
     const packageData = JSON.parse(await readFile(packageUrl, "utf8")) as {
       version?: unknown;
     };
-    return typeof packageData.version === "string" ? packageData.version : "0.1.1";
+    return typeof packageData.version === "string" ? packageData.version : "0.1.8";
   } catch {
-    return "0.1.1";
+    return "0.1.8";
   }
 }
 
@@ -1342,9 +1347,7 @@ async function runDashboard(io: CLIIO): Promise<number> {
   );
   if (!launchUrl) throw new Error("The dashboard URL is invalid.");
   openDashboard(launchUrl, io);
-  const displayUrl = new URL(active.dashboardUrl);
-  displayUrl.hash = "";
-  writeLine(io.stdout, `Opening OpenBucket dashboard at ${displayUrl.toString()}`);
+  writeLine(io.stdout, "Opening your secure OpenBucket dashboard.");
   writeLine(io.stdout, "The one-time pairing fragment is removed from the address bar after launch.");
   return EXIT_SUCCESS;
 }
@@ -1363,12 +1366,26 @@ export function dashboardLaunchUrl(value: string | undefined, managementUrl: str
   if (!value) return undefined;
   try {
     const url = new URL(value);
+    url.search = "";
+    url.hash = "";
     url.searchParams.set("api", connectableUrl(managementUrl));
     if (token) {
-      const fragment = new URLSearchParams(url.hash.replace(/^#/, ""));
+      const fragment = new URLSearchParams();
       fragment.set("token", token);
       url.hash = fragment.toString();
     }
+    return url.toString();
+  } catch {
+    return value;
+  }
+}
+
+function dashboardBaseUrl(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  try {
+    const url = new URL(value);
+    url.search = "";
+    url.hash = "";
     return url.toString();
   } catch {
     return value;
@@ -1444,6 +1461,7 @@ async function prepareHostedNode(
   if (
     returned &&
     typeof returned.token === "string" &&
+    typeof returned.managementSecret === "string" && /^[a-f0-9]{64}$/.test(returned.managementSecret) &&
     returned.token.length >= 20 &&
     typeof returned.createdAt === "string"
   ) {
@@ -1453,13 +1471,15 @@ async function prepareHostedNode(
       nodeId: registration.node.id,
       nodeName: registration.node.name,
       token: returned.token,
+      managementSecret: returned.managementSecret,
       createdAt: returned.createdAt,
     };
-  } else if (!saved || saved.nodeId !== registration.node.id) {
+  } else if (!saved || saved.nodeId !== registration.node.id || !saved.managementSecret) {
     const rotated = await controlPlane.rotateNodeToken(registration.node.id);
     if (
       !rotated.credential ||
       typeof rotated.credential.token !== "string" ||
+      typeof rotated.credential.managementSecret !== "string" || !/^[a-f0-9]{64}$/.test(rotated.credential.managementSecret) ||
       rotated.credential.token.length < 20 ||
       typeof rotated.credential.createdAt !== "string"
     ) {
@@ -1471,6 +1491,7 @@ async function prepareHostedNode(
       nodeId: registration.node.id,
       nodeName: registration.node.name,
       token: rotated.credential.token,
+      managementSecret: rotated.credential.managementSecret,
       createdAt: rotated.credential.createdAt,
     };
   }
@@ -1493,6 +1514,10 @@ export function hostedTunnelAdvertisement(state: ActiveDaemonState): {
   publicS3Url?: string;
   tunnelMode: "none" | "quick" | "managed";
   publicDiscoverable: boolean;
+  endpoints?: {
+    s3: { url: string | null; kind: "quick" | "named" | "none"; healthy: boolean };
+    management: { url: string | null; kind: "quick" | "named" | "none"; healthy: boolean };
+  };
 } {
   const publicS3Url = state.publicUrl;
   const tunnelMode = publicS3Url
@@ -1502,6 +1527,10 @@ export function hostedTunnelAdvertisement(state: ActiveDaemonState): {
     ...(publicS3Url ? { publicS3Url } : {}),
     tunnelMode,
     publicDiscoverable: tunnelMode !== "none" && Boolean(publicS3Url),
+    ...((publicS3Url || state.publicManagementUrl) ? { endpoints: {
+      s3: { url: publicS3Url ?? null, kind: publicS3Url ? (tunnelMode === "quick" ? "quick" : "named") : "none", healthy: Boolean(publicS3Url) },
+      management: { url: state.publicManagementUrl ?? null, kind: state.publicManagementUrl ? (state.tunnelMode === "quick" ? "quick" : "named") : "none", healthy: Boolean(state.publicManagementUrl) },
+    } } : {}),
   };
 }
 
@@ -1620,7 +1649,7 @@ async function startHostedHeartbeatReporter(
       errors: Math.max(0, telemetry.counters.errors - baseline.counters.errors),
     },
     ...hostedTunnelAdvertisement(state),
-    managementUrl: state.managementUrl,
+    managementUrl: state.publicManagementUrl ?? null,
     ...(safeDashboardEndpoint(state.dashboardUrl)
       ? { dashboardUrl: safeDashboardEndpoint(state.dashboardUrl) }
       : {}),
@@ -1727,6 +1756,9 @@ async function serveForeground(
   if (effectiveDashboardUrl) {
     try { effectiveOrigins.add(new URL(effectiveDashboardUrl).origin); } catch { /* URL was validated earlier. */ }
   }
+  if (hostedNode) {
+    try { effectiveOrigins.add(new URL(hostedNode.session.controlPlaneUrl).origin); } catch { /* session URL was validated at login. */ }
+  }
 
   const daemonModuleUrl = new URL(
     import.meta.url.endsWith(".ts") ? "../daemon/index.ts" : "../daemon/index.js",
@@ -1744,6 +1776,8 @@ async function serveForeground(
       dashboardUrl?: string;
       allowedOrigins?: string[];
       adminToken?: string;
+      managementCapabilitySecret?: string;
+      managementCapabilityNodeId?: string;
       beforeStop?: () => void | Promise<void>;
     }) => Promise<DaemonHandle> | DaemonHandle;
   };
@@ -1765,6 +1799,8 @@ async function serveForeground(
       dashboardUrl: effectiveDashboardUrl,
       allowedOrigins: [...effectiveOrigins],
       adminToken,
+      managementCapabilitySecret: hostedNode?.credential.managementSecret,
+      managementCapabilityNodeId: hostedNode?.credential.nodeId,
       beforeStop: async () => { await hostedHeartbeat?.stop(); },
     });
   } catch (error) {
@@ -1778,18 +1814,16 @@ async function serveForeground(
   let shutdownStarted = false;
 
   if (config.quickTunnel) {
-    writeLine(io.stdout, "Starting Cloudflare Quick Tunnels…");
+    writeLine(io.stdout, "Preparing secure OpenBucket access…");
     const surfaces: Array<{ surface: QuickTunnelSurface; origin: string }> = [
       {
         surface: "s3",
         origin: connectableUrl(handle.config.s3Url ?? config.s3Url),
       },
     ];
-    if (!hostedNode) {
-      surfaces.push({ surface: "management", origin: managementUrl });
-      if (isLocalDashboardUrl(effectiveDashboardUrl)) {
-        surfaces.push({ surface: "dashboard", origin: effectiveDashboardUrl });
-      }
+    surfaces.push({ surface: "management", origin: managementUrl });
+    if (!hostedNode && isLocalDashboardUrl(effectiveDashboardUrl)) {
+      surfaces.push({ surface: "dashboard", origin: effectiveDashboardUrl });
     }
     try {
       quickTunnels = await startQuickTunnelSurfaces(surfaces, config.cloudflaredPath);
@@ -1810,7 +1844,7 @@ async function serveForeground(
       await stopQuickTunnels(quickTunnels);
       await handle.stop();
       await dashboardHandle?.stop().catch(() => undefined);
-      throw error;
+      throw new Error("Could not establish OpenBucket public access. Run `openbucket doctor` for recovery guidance.");
     }
   }
 
@@ -1819,13 +1853,12 @@ async function serveForeground(
     pid: io.pid,
     managementUrl,
     s3Url: connectableUrl(handle.config.s3Url ?? config.s3Url),
-    dashboardUrl: dashboardLaunchUrl(
-      handle.config.dashboardUrl ?? effectiveDashboardUrl,
-      dashboardApiUrl,
-    ),
+    dashboardUrl: dashboardBaseUrl(handle.config.dashboardUrl ?? effectiveDashboardUrl),
     ...(dashboardApiUrl !== managementUrl ? { dashboardApiUrl } : {}),
     ...(publicUrl ? { publicUrl } : {}),
+    ...(quickTunnels.get("management")?.url ? { publicManagementUrl: quickTunnels.get("management")!.url } : {}),
     ...(config.quickTunnel ? { tunnelMode: "quick" as const } : {}),
+    ...(hostedNode ? { nodeApiUrl: new URL(`/dashboard/nodes/${encodeURIComponent(hostedNode.credential.nodeName)}`, hostedNode.session.controlPlaneUrl).toString() } : {}),
     root: config.storageRoot,
     node: handle.config.nodeName ?? config.nodeName,
     token: handle.config.adminToken ?? adminToken,
@@ -1859,6 +1892,10 @@ async function serveForeground(
     if (surface !== "s3") {
       void tunnel.closed.then(() => {
         if (!shutdownStarted) {
+          if (surface === "management") {
+            delete state.publicManagementUrl;
+            void hostedHeartbeat?.publicEndpointUnavailable().catch(() => undefined);
+          }
           writeLine(
             io.stderr,
             `The ${surface} Quick Tunnel stopped; local OpenBucket service is still running.`,
@@ -2056,7 +2093,6 @@ async function serveDetached(
     await writeActiveState(scrubbed, io);
     active = scrubbed;
   }
-  writeLine(io.stdout, `  Logs        ${paths.logFile}`);
   writeLine(io.stdout, "");
   if (config.openDashboard && active.dashboardUrl) {
     openDashboard(
@@ -2072,6 +2108,13 @@ async function serveDetached(
 }
 
 async function runServe(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
+  const suppliedName = typeof parsed.options.name === "string" || Boolean(io.env.OPENBUCKET_NODE_NAME ?? io.env.OPENBUCKET_NAME);
+  if (!suppliedName && !parsed.options.internalForeground && io.stdout.isTTY) {
+    const entered = (await io.prompt("Node name (unique, lowercase): ")).trim();
+    if (!entered) throw new CLIUsageError("A node name is required. Pass --name <unique-node-name>.");
+    parsed.options.name = entered;
+    parsed.raw.push("--name", entered);
+  }
   const config = resolveServeConfig(parsed, io.env, io.cwd());
   const session = await requireHostedSession(config, io);
   if (config.detach && !config.internalForeground) {
@@ -2117,17 +2160,8 @@ async function runStatus(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
     io.stdout,
     `  Objects     ${String(storage.objects ?? 0)} in ${String(storage.buckets ?? 0)} bucket(s)`,
   );
-  writeLine(
-    io.stdout,
-    `  Management  ${connectableUrl(String(endpoints.management ?? target.baseUrl))}`,
-  );
-  if (endpoints.s3) {
-    writeLine(io.stdout, `  S3 endpoint ${connectableUrl(String(endpoints.s3))}`);
-  }
-  if (endpoints.public) {
-    writeLine(io.stdout, `  Public URL  ${connectableUrl(String(endpoints.public))}`);
-  }
-  if (endpoints.dashboard) writeLine(io.stdout, `  Dashboard   ${String(endpoints.dashboard)}`);
+  if (target.state?.nodeApiUrl) writeLine(io.stdout, `  OpenBucket API  ${target.state.nodeApiUrl}`);
+  if (endpoints.dashboard) writeLine(io.stdout, "  Local dashboard  available");
   return EXIT_SUCCESS;
 }
 
@@ -2641,6 +2675,45 @@ async function runDoctor(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
   return failures === 0 ? EXIT_SUCCESS : EXIT_DOCTOR;
 }
 
+async function runTunnel(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
+  const active = await readActiveState(io.env, io.homedir());
+  const executable = typeof parsed.options.cloudflaredPath === "string"
+    ? parsed.options.cloudflaredPath
+    : io.env.OPENBUCKET_CLOUDFLARED_PATH || "cloudflared";
+  if (parsed.subcommand === "status") {
+    writeLine(io.stdout, "OpenBucket public access");
+    writeLine(io.stdout, "");
+    writeLine(io.stdout, `  S3 service       ${active?.publicUrl ? "available" : "not active"}`);
+    writeLine(io.stdout, `  Node console     ${active?.publicManagementUrl ? "available" : "not active"}`);
+    if (active?.nodeApiUrl) writeLine(io.stdout, `  OpenBucket API   ${active.nodeApiUrl}`);
+    return EXIT_SUCCESS;
+  }
+  if (parsed.subcommand === "update") {
+    writeLine(io.stdout, `Updating ${executable}…`);
+    const child = io.spawn(executable, ["update"], { stdio: "inherit", shell: false, windowsHide: true });
+    const closed = await waitForChildClose(child, 120_000);
+    if (!closed || child.exitCode !== 0) throw new CLIUsageError(`Could not update ${executable}. Run \`openbucket tunnel setup\` for recovery guidance.`);
+    writeLine(io.stdout, "Cloudflare connector updated.");
+    return EXIT_SUCCESS;
+  }
+
+  if (io.stdout.isTTY && parsed.options.yes !== true) {
+    prompts.intro("OpenBucket tunnel setup");
+    const proceed = await prompts.confirm({ message: "Open the official Cloudflare download page and configure a named tunnel?" });
+    if (prompts.isCancel(proceed) || !proceed) {
+      prompts.cancel("Tunnel setup cancelled.");
+      return EXIT_SUCCESS;
+    }
+  }
+  const platformGuide = "https://developers.cloudflare.com/tunnel/downloads/";
+  writeLine(io.stdout, "OpenBucket keeps connector paths and tunnel tokens out of shell profiles. Install cloudflared from the official page, then run the named-tunnel token command supplied by Cloudflare.");
+  writeLine(io.stdout, `Download guide: ${platformGuide}`);
+  writeLine(io.stdout, `Verify: ${executable} --version`);
+  writeLine(io.stdout, "After the connector is available, run `openbucket serve <directory> --tunnel`; OpenBucket will publish and persist both S3 and management endpoints.");
+  if (io.stdout.isTTY) prompts.outro("Connector guidance ready.");
+  return EXIT_SUCCESS;
+}
+
 async function executeCommand(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
   switch (parsed.command) {
     case "serve":
@@ -2659,6 +2732,8 @@ async function executeCommand(parsed: ParsedCLICommand, io: CLIIO): Promise<numb
       return runLogs(parsed, io);
     case "doctor":
       return runDoctor(parsed, io);
+    case "tunnel":
+      return runTunnel(parsed, io);
     case "dashboard":
       return runDashboard(io);
     case "buckets":

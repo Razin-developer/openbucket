@@ -77,8 +77,8 @@ from openbucket import OpenBucketHTTPError
 try:
     client.create_bucket("already-present")
 except OpenBucketHTTPError as error:
-    print(error.status)      # 409
-    print(error.code)        # BucketAlreadyExists
+    print(error.status)  # 409
+    print(error.code)  # BucketAlreadyExists
     print(error.request_id)  # request correlation ID, when provided
 ```
 

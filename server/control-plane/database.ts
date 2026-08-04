@@ -20,6 +20,13 @@ export type NodeCounters = {
   errors: number;
 };
 
+export type NodeEndpoint = {
+  url: string | null;
+  kind: "local" | "quick" | "named" | "none";
+  healthy: boolean;
+  updatedAt: Date | null;
+};
+
 export type NodeDocument = {
   _id: ObjectId;
   userId: ObjectId;
@@ -43,6 +50,8 @@ export type NodeDocument = {
   publicDiscoverable: boolean;
   managementUrl: string | null;
   dashboardUrl: string | null;
+  /** Public endpoints only. Loopback listeners and secrets never leave the host. */
+  endpoints?: { s3: NodeEndpoint; management: NodeEndpoint };
 };
 
 export type UsageEventDocument = {

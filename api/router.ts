@@ -11,6 +11,7 @@ import {
   handleCreateNode,
   handleDeleteNode,
   handleListNodes,
+  handleManagementSession,
   handleNodeHeartbeat,
   handleResolveNode,
   handleRevokeNodeToken,
@@ -31,6 +32,7 @@ type ApiRouteId =
   | "health"
   | "node"
   | "node-heartbeat"
+  | "node-management-session"
   | "node-revoke-token"
   | "node-rotate-token"
   | "nodes"
@@ -73,6 +75,7 @@ const routeHandlers: Record<ApiRouteId, RouteHandlers> = {
   "node-revoke-token": {
     POST: (request, route) => handleRevokeNodeToken(request, route.nodeId ?? ""),
   },
+  "node-management-session": { POST: (request, route) => handleManagementSession(request, route.nodeId ?? "") },
   "node-rotate-token": {
     POST: (request, route) => handleRotateNodeToken(request, route.nodeId ?? ""),
   },
@@ -94,13 +97,14 @@ export function matchApiRoute(pathname: string): ApiRouteMatch | null {
   const exact = exactRoutes.get(path);
   if (exact) return { id: exact };
 
-  const nodeMatch = path.match(/^\/api\/nodes\/([a-f0-9]{24})(?:\/(rotate-token|revoke-token))?$/);
+  const nodeMatch = path.match(/^\/api\/nodes\/([a-f0-9]{24})(?:\/(rotate-token|revoke-token|management-session))?$/);
   if (!nodeMatch) return null;
 
   const nodeId = nodeMatch[1];
   if (!nodeId) return null;
   if (nodeMatch[2] === "rotate-token") return { id: "node-rotate-token", nodeId };
   if (nodeMatch[2] === "revoke-token") return { id: "node-revoke-token", nodeId };
+  if (nodeMatch[2] === "management-session") return { id: "node-management-session", nodeId };
   return { id: "node", nodeId };
 }
 

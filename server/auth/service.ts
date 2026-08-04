@@ -29,10 +29,41 @@ const SIGNUP_FAILURE = "Owner account setup is unavailable.";
 const FAKE_PASSWORD_HASH = "scrypt$v=1$n=65536,r=8,p=2$b3BlbmJ1Y2tldC1mYWtlLXNhbHQtdjEh$_bN6H6xtF0oe903HJCwA8H1W3KHsbTmZcqWwmwimHOvgCGl3Ch0H9zFVua0drEwacEERDzosya2wiopfgGniog";
 
 export type UserRole = "admin" | "member";
-export type PublicUser = { id: string; email: string; name: string | null; role: UserRole };
+export type PublicUser = { id: string; email: string; name: string | null; handle: string; role: UserRole };
+
+const RESERVED_HANDLES = new Set(["admin", "api", "auth", "dashboard", "docs", "health", "login", "mail", "node", "nodes", "openbucket", "register", "s3", "status", "support", "usage", "www"]);
+
+function handleStem(value: string): string {
+  const normalized = value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 32);
+  return normalized.length >= 3 && !RESERVED_HANDLES.has(normalized) ? normalized : "user";
+}
+
+/** Lazily migrates existing accounts without a risky deployment-time migration. */
+export async function ensureUserHandle(user: UserDocument, collections: AuthCollections): Promise<UserDocument> {
+  if (typeof user.handle === "string" && /^[a-z0-9](?:[a-z0-9-]{1,30}[a-z0-9])?$/.test(user.handle)) return user;
+  const stem = handleStem(user.name || user.email.split("@")[0] || "user");
+  const suffix = user._id.toHexString().slice(-6);
+  for (const candidate of [stem, `${stem}-${suffix}`]) {
+    try {
+      const updated = await collections.users.findOneAndUpdate(
+        { _id: user._id, handle: { $exists: false } },
+        { $set: { handle: candidate, updatedAt: new Date() } },
+        { returnDocument: "after" },
+      );
+      if (updated) return updated;
+      const current = await collections.users.findOne({ _id: user._id });
+      if (current?.handle) return current;
+    } catch (error) {
+      if ((error as { code?: number }).code !== 11000) throw error;
+    }
+  }
+  throw new ApiError(503, "HANDLE_UNAVAILABLE", "Unable to assign an account handle. Try again.");
+}
 
 function publicUser(user: UserDocument, role: UserRole): PublicUser {
-  return { id: user._id.toHexString(), email: user.email, name: user.name, role };
+  if (!user.handle) throw new Error("User handle was not initialized.");
+  return { id: user._id.toHexString(), email: user.email, name: user.name, handle: user.handle, role };
 }
 
 async function resolveUserRole(user: UserDocument, collections: AuthCollections): Promise<UserRole> {
@@ -196,8 +227,9 @@ export async function authenticateRequest(request: Request): Promise<PublicUser 
   if (now.getTime() - session.lastSeenAt.getTime() >= SESSION_TOUCH_INTERVAL_MS) {
     await sessions.updateOne({ _id: id, expiresAt: { $gt: now } }, { $set: { lastSeenAt: now } });
   }
-  const role = await resolveUserRole(user, collections);
-  return publicUser(user, role);
+  const migrated = await ensureUserHandle(user, collections);
+  const role = await resolveUserRole(migrated, collections);
+  return publicUser(migrated, role);
 }
 
 function signupUnavailable(): ApiError {
@@ -223,6 +255,7 @@ export async function handleRegister(request: Request): Promise<Response> {
       email,
       emailNormalized: email,
       name,
+      handle: handleStem(name || email.split("@")[0] || "user"),
       passwordHash,
       role: "admin",
       status: "active",
@@ -331,8 +364,9 @@ export async function handleLogin(request: Request): Promise<Response> {
     }
     const config = getAuthConfig();
     const session = await createSession(request, user._id);
-    const role = await resolveUserRole(user, collections);
-    const response = jsonResponse({ user: publicUser(user, role) });
+    const migrated = await ensureUserHandle(user, collections);
+    const role = await resolveUserRole(migrated, collections);
+    const response = jsonResponse({ user: publicUser(migrated, role) });
     response.headers.append("Set-Cookie", sessionCookie(request, session.token, config.sessionTtlSeconds));
     return response;
   } catch (error) {

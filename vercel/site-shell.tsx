@@ -1,5 +1,6 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 import type { ReactNode } from "react";
+import { ExternalLink } from "lucide-react";
 
 const githubUrl = "https://github.com/Razin-developer/openbucket";
 
@@ -27,7 +28,7 @@ export function SiteHeader({ current, overlay = false }: { current?: SiteShellPr
       <nav className="site-nav" aria-label="Public navigation">
         <a className={current === "home" ? "active" : ""} href="/#product">Product</a>
         <a className={current === "docs" ? "active" : ""} href="/docs">Docs</a>
-        <a href={githubUrl} target="_blank" rel="noreferrer">GitHub <span aria-hidden="true">↗</span></a>
+        <a href={githubUrl} target="_blank" rel="noreferrer">GitHub <ExternalLink size={13} aria-hidden="true" /></a>
       </nav>
       <div className="site-header-actions">
         <a className="site-login-link" href="/login">Sign in</a>
