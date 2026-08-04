@@ -74,6 +74,7 @@ export interface ParsedCLICommand {
     | "share"
     | "config"
     | "version"
+    | "ui"
     | "help";
   subcommand?: "create" | "delete" | "revoke" | "setup" | "status" | "update";
   positionals: string[];
@@ -382,7 +383,7 @@ function assertPositionals(
 export function parseCLIArgs(argv: readonly string[]): ParsedCLICommand {
   const raw = [...argv];
   if (raw.length === 0) {
-    return { command: "help", positionals: [], options: {}, raw };
+    return { command: "ui", positionals: [], options: {}, raw };
   }
 
   const helpIndex = raw.findIndex((token) => token === "--help" || token === "-h");
@@ -453,6 +454,7 @@ export function parseCLIArgs(argv: readonly string[]): ParsedCLICommand {
     case "dashboard":
     case "config":
     case "version":
+    case "ui":
     case "keys": {
       parsed = parseOptions(tail, [], []);
       assertPositionals(command, parsed.positionals, 0);
@@ -1086,6 +1088,7 @@ function renderHelp(topic?: string): string {
     logs: "Usage: openbucket logs [--follow] [--limit N]",
     config: "Usage: openbucket config",
     version: "Usage: openbucket version",
+    ui: "Usage: openbucket ui (also launched by running \"openbucket\" with no command)",
     help: "Usage: openbucket help [command]",
   };
   if (topic && commandHelp[topic]) return `${commandHelp[topic]}\n`;
@@ -1104,6 +1107,8 @@ Daemon
   stop                 Stop the active daemon
   status [--json]      Show daemon and storage status
   dashboard            Securely open or re-pair the local dashboard
+  ui                   Interactive console (buckets, keys, tunnel, logs, server). Also the
+                       default when you just run "openbucket".
   logs [--follow]      Show daemon request and lifecycle logs
   doctor [directory]   Check the runtime, storage, and network
   tunnel status         Show S3 and management tunnel state
@@ -1143,9 +1148,9 @@ async function getProductVersion(io: CLIIO): Promise<string> {
     const packageData = JSON.parse(await readFile(packageUrl, "utf8")) as {
       version?: unknown;
     };
-    return typeof packageData.version === "string" ? packageData.version : "0.1.9";
+    return typeof packageData.version === "string" ? packageData.version : "0.1.10";
   } catch {
-    return "0.1.9";
+    return "0.1.10";
   }
 }
 
@@ -2165,6 +2170,29 @@ async function runStatus(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
   return EXIT_SUCCESS;
 }
 
+async function runUi(io: CLIIO): Promise<number> {
+  if (!io.stdout.isTTY) {
+    io.stdout.write(renderHelp());
+    return EXIT_SUCCESS;
+  }
+  const { runInteractiveConsole } = await import("./tui.js");
+  const version = await getProductVersion(io);
+  const command = await runInteractiveConsole({
+    version,
+    home: resolveStatePaths(io.env, io.homedir()).directory,
+    env: io.env,
+    request: async <T,>(path: string, options?: RequestInit): Promise<T> => {
+      const target = await getApiTarget(io);
+      return apiRequest<T>(io, target, path, options);
+    },
+  });
+  if (command) {
+    writeLine(io.stdout, "");
+    writeLine(io.stdout, `Next: ${command}`);
+  }
+  return EXIT_SUCCESS;
+}
+
 async function runStop(io: CLIIO): Promise<number> {
   const target = await getApiTarget(io);
   await apiRequest<unknown>(io, target, "/v1/stop", {
@@ -2750,6 +2778,8 @@ async function executeCommand(parsed: ParsedCLICommand, io: CLIIO): Promise<numb
       return runShare(parsed, io);
     case "config":
       return runConfig(io);
+    case "ui":
+      return runUi(io);
     case "version":
       writeLine(io.stdout, `openbucket ${await getProductVersion(io)}`);
       return EXIT_SUCCESS;

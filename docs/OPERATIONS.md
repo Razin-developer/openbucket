@@ -34,14 +34,14 @@ Local global install:
 
 ```bash
 npm pack
-npm install --global ./openbucket-0.1.0.tgz
+npm install --global ./openbucket-0.1.10.tgz
 openbucket version
 ```
 
-The npm `0.1.0` package is live. Pin the version on production hosts:
+The npm `0.1.10` package is live. Pin the version on production hosts:
 
 ```bash
-npm install --global openbucket@0.1.0
+npm install --global openbucket@0.1.10
 ```
 
 ## Start modes
