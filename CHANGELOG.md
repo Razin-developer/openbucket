@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.9] - 2026-08-04
+
+### Changed
+
+- Rebuild the marketing landing page around a real reference layout (gradient hero with product screenshot, logo strip, split intro, "why us" grid, 3-step install, 2x3 feature grid, integration diagram, deployment-options cards, gradient CTA band, 4-column footer).
+- Unify the product on a single bucket-mark logo: landing/docs/auth nav, local dashboard sidebar, hosted control-plane sidebar and empty states, replacing three divergent ad hoc marks.
+
+### Fixed
+
+- `scripts/install.sh` and `scripts/install.ps1` no longer hang indefinitely on a slow or broken network path: both now enforce a configurable wall-clock timeout (`--timeout`/`-TimeoutSeconds`, default 120s, or `OPENBUCKET_INSTALL_TIMEOUT`), set `NODE_OPTIONS=--dns-result-order=ipv4first`, and pass `--no-audit --no-fund --fetch-timeout --fetch-retries` to npm so a stalled connection fails fast with an actionable message instead of hanging.
+
 ## [0.1.8] - 2026-08-04
 
 ### Changed

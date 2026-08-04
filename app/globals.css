@@ -28,7 +28,7 @@ code, pre { font-family: var(--font-geist-mono), ui-monospace, monospace; }
 
 .sidebar { position: fixed; z-index: 30; inset: 0 auto 0 0; width: var(--sidebar-width); display: flex; flex-direction: column; padding: 16px 12px; border-right: 1px solid var(--hairline); background: var(--canvas); }
 .brand-row { height: 52px; display: flex; align-items: center; gap: 11px; padding: 0 8px 12px; border-bottom: 1px solid var(--hairline); }
-.brand-mark { width: 30px; height: 30px; display: grid; place-items: center; border-radius: 7px; color: white; background: var(--ink); font: 500 10px/1 var(--font-geist-mono), monospace; letter-spacing: -.4px; box-shadow: 0 0 0 1px #000 inset, 0 3px 8px rgb(0 0 0 / 14%); }
+.brand-mark { display: block; flex: none; border-radius: 7px; box-shadow: 0 3px 8px rgb(0 0 0 / 14%); }
 .brand-row strong, .brand-row span { display: block; }
 .brand-row strong { font-weight: 600; letter-spacing: -.3px; }
 .brand-row span { color: var(--mute); font-size: 11px; }
@@ -145,7 +145,7 @@ td { height: 56px; padding: 0 16px; border-top: 1px solid var(--hairline); color
 .inline-actions button:hover { color: var(--ink); text-decoration: underline; }
 .etag { color: var(--mute); font-size: 11px; }
 .empty-state { min-height: 340px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 24px; border: 1px dashed #d7d7d7; border-radius: 10px; background: var(--canvas); text-align: center; }
-.empty-mark { width: 50px; height: 50px; display: grid; place-items: center; margin-bottom: 20px; border-radius: 10px; color: white; background: var(--ink); font: 500 13px/1 var(--font-geist-mono), monospace; box-shadow: 0 6px 18px rgb(0 0 0 / 13%); }
+.empty-mark { display: block; margin-bottom: 20px; border-radius: 10px; box-shadow: 0 6px 18px rgb(0 0 0 / 13%); }
 .empty-state h3 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -.5px; }
 .empty-state p { max-width: 440px; margin: 8px 0 20px; color: var(--mute); }
 .object-browser { overflow: hidden; border-radius: 10px; background: var(--canvas); box-shadow: var(--shadow-2); }

@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AlertCircle } from "lucide-react";
 import { HostedControlPlane, type AccountUser } from "./control-plane";
-import { SiteShell } from "./site-shell";
+import { BrandMark, SiteShell } from "./site-shell";
 
 type User = AccountUser;
 type AuthResponse = { user?: User; error?: { code?: string; message?: string } };
@@ -111,7 +111,7 @@ export function ProtectedDashboard() {
   }, [loadSession]);
 
   if (state.kind === "loading") {
-    return <main className="auth-gate"><span className="auth-gate-mark" aria-hidden="true"><i /></span><p>Opening your dashboard…</p></main>;
+    return <main className="auth-gate"><span className="auth-gate-mark" aria-hidden="true"><BrandMark size={40} /><i /></span><p>Opening your dashboard…</p></main>;
   }
   if (state.kind === "error") {
     return <main className="auth-gate"><span className="auth-gate-mark error" aria-hidden="true"><AlertCircle size={24} /></span><h1>Dashboard unavailable</h1><p>{state.message}</p><button className="site-button dark" type="button" onClick={() => { setState({ kind: "loading" }); void loadSession(); }}>Try again</button></main>;

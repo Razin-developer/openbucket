@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Activity, ArrowLeft, ArrowRight, Box, Check, Copy, ExternalLink, LayoutDashboard, Network, RefreshCw, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { Dashboard } from "../app/dashboard";
-import { Brand } from "./site-shell";
+import { Brand, BrandMark } from "./site-shell";
 import "./control-plane.css";
 
 export type AccountRole = "admin" | "member";
@@ -143,7 +143,7 @@ function Metric({ label, value, note }: { label: string; value: string; note?: s
 }
 
 function StatePanel({ tone = "plain", title, children, action }: { tone?: "plain" | "error"; title: string; children: ReactNode; action?: ReactNode }) {
-  return <section className={`cp-state ${tone}`}><span aria-hidden="true">{tone === "error" ? <ShieldCheck size={22} /> : "OB"}</span><h2>{title}</h2><div>{children}</div>{action}</section>;
+  return <section className={`cp-state ${tone}`}><span aria-hidden="true">{tone === "error" ? <ShieldCheck size={22} /> : <BrandMark size={26} />}</span><h2>{title}</h2><div>{children}</div>{action}</section>;
 }
 
 function NodeStatus({ status }: { status: AccountNode["status"] }) {
