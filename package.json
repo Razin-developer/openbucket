@@ -1,6 +1,6 @@
 {
   "name": "openbucket",
-  "version": "0.1.12",
+  "version": "0.1.14",
   "description": "Turn any local disk or folder into S3-compatible object storage.",
   "author": "Razin",
   "license": "Apache-2.0",
@@ -74,6 +74,7 @@
   },
   "dependencies": {
     "@clack/prompts": "^0.11.0",
+    "@vercel/speed-insights": "^2.0.0",
     "chalk": "^6.0.0",
     "ink": "^7.1.1",
     "ink-spinner": "^5.0.0",
@@ -104,7 +105,9 @@
     "wrangler": "^4.111.0"
   },
   "overrides": {
-    "next": "16.3.0-canary.87"
+    "next": "16.3.0-canary.87",
+    "postcss": "^8.5.23",
+    "sharp": "^0.35.0"
   },
   "type": "module"
 }

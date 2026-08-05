@@ -6,6 +6,32 @@ import {
 } from "lucide-react";
 import { SiteHeader, githubUrl } from "./site-shell";
 
+function useParallax<T extends HTMLElement>(factor = 0.25) {
+  const ref = useRef<T | null>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return undefined;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const offset = window.scrollY * factor;
+      node.style.transform = `translate3d(0, ${offset}px, 0)`;
+    };
+    const onScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    update();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [factor]);
+  return ref;
+}
+
 function useReveal<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
   useEffect(() => {
@@ -71,19 +97,32 @@ const deployOptions = [
   { title: "Hosted dashboard", body: "Pair a local node with the hosted control plane for remote visibility and a Quick Tunnel.", items: ["Account-gated production serve", "S3-only Cloudflare Quick Tunnel", "Usage metering per node"] },
 ];
 
+const integrationNodes = [
+  { icon: Terminal, label: "CLI" },
+  { icon: Boxes, label: "SDKs" },
+  { icon: HardDrive, label: "OpenBucket", hub: true },
+  { icon: Server, label: "Infra as code" },
+  { icon: Database, label: "Apps" },
+];
+
 function IntegrationNodes() {
   return (
     <div className="fs-node-row" aria-label="S3 clients and tools connecting to one OpenBucket node">
-      <span className="fs-node"><Terminal size={20} aria-hidden="true" /></span>
-      <span className="fs-node"><Boxes size={20} aria-hidden="true" /></span>
-      <span className="fs-node fs-hub"><HardDrive size={26} aria-hidden="true" /></span>
-      <span className="fs-node"><Server size={20} aria-hidden="true" /></span>
-      <span className="fs-node"><Database size={20} aria-hidden="true" /></span>
+      <svg className="fs-node-svg" viewBox="0 0 400 4" preserveAspectRatio="none" aria-hidden="true">
+        <line className="fs-plotter-line" x1="0" y1="2" x2="400" y2="2" />
+      </svg>
+      {integrationNodes.map(({ icon: Icon, label, hub }) => (
+        <div className="fs-node-item" key={label}>
+          <span className={`fs-node${hub ? " fs-hub" : ""}`}><Icon size={hub ? 32 : 24} aria-hidden="true" /></span>
+          <small>{label}</small>
+        </div>
+      ))}
     </div>
   );
 }
 
 export function LandingPage() {
+  const heroShotRef = useParallax<HTMLDivElement>(-0.08);
   const splitRef = useReveal<HTMLElement>();
   const fixRef = useReveal<HTMLElement>();
   const stepsRef = useReveal<HTMLElement>();
@@ -106,7 +145,7 @@ export function LandingPage() {
           </div>
         </div>
         <div className="fs-hero-shot">
-          <div>
+          <div ref={heroShotRef}>
             <img src="/og.png" alt="The OpenBucket dashboard showing buckets, capacity, and live request analytics" />
           </div>
         </div>
@@ -120,28 +159,28 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-split" id="product" ref={splitRef}>
+        <section className="fs-split reveal" id="product" ref={splitRef}>
           <div>
             <p className="section-kicker">LOCAL BY DESIGN</p>
             <h2>Cloud-shaped storage. Without moving the disk.</h2>
             <p>The daemon serves real bytes from a directory you choose. The CLI and dashboard operate that same live node — nothing is simulated.</p>
             <ul className="fs-split-list">
-              <li><Check size={16} aria-hidden="true" /> Your filesystem remains the source of truth.</li>
-              <li><Check size={16} aria-hidden="true" /> Standard AWS tools point at a custom endpoint.</li>
-              <li><Check size={16} aria-hidden="true" /> Management access stays separately authenticated.</li>
+              <li><Check size={19} aria-hidden="true" /> Your filesystem remains the source of truth.</li>
+              <li><Check size={19} aria-hidden="true" /> Standard AWS tools point at a custom endpoint.</li>
+              <li><Check size={19} aria-hidden="true" /> Management access stays separately authenticated.</li>
             </ul>
           </div>
           <div className="fs-diamond" aria-hidden="true">
             <div className="fs-diamond-shape" />
             <div className="fs-diamond-stats">
-              <span className="fs-stat-pill"><Database size={14} /> S3-compatible API</span>
-              <span className="fs-stat-pill"><Lock size={14} /> Bearer-token admin</span>
-              <span className="fs-stat-pill"><HardDrive size={14} /> Your disk, your bytes</span>
+              <span className="fs-stat-pill"><Database size={16} /> S3-compatible API</span>
+              <span className="fs-stat-pill"><Lock size={16} /> Bearer-token admin</span>
+              <span className="fs-stat-pill"><HardDrive size={16} /> Your disk, your bytes</span>
             </div>
           </div>
         </section>
 
-        <section className="fs-section soft" ref={fixRef}>
+        <section className="fs-section soft reveal" ref={fixRef}>
           <div className="fs-section-head">
             <p className="fs-kicker">Why OpenBucket</p>
             <h2>Built to fix that</h2>
@@ -154,7 +193,7 @@ export function LandingPage() {
             </article>
             {fixCards.map(({ icon: Icon, title, body }) => (
               <article className="fs-fix-card" key={title}>
-                <span className="fs-fix-icon"><Icon size={17} aria-hidden="true" /></span>
+                <span className="fs-fix-icon"><Icon size={21} aria-hidden="true" /></span>
                 <h3>{title}</h3>
                 <p>{body}</p>
               </article>
@@ -162,7 +201,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-steps-card" ref={stepsRef}>
+        <section className="fs-steps-card reveal" ref={stepsRef}>
           <div className="fs-steps-inner">
             <ol className="fs-steps-list">
               <li className="fs-step"><span>1</span><div><strong>Install the CLI</strong><p>{npmCommand} <CopyCommand value={npmCommand} /></p></div></li>
@@ -175,7 +214,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-section" ref={featuresRef}>
+        <section className="fs-section reveal" ref={featuresRef}>
           <div className="fs-section-head">
             <p className="fs-kicker">Features</p>
             <h2>Features that set OpenBucket apart</h2>
@@ -184,7 +223,7 @@ export function LandingPage() {
           <div className="fs-features-grid">
             {featureCards.map(({ icon: Icon, title, body }) => (
               <article className="fs-feature-card" key={title}>
-                <span className="fs-fix-icon"><Icon size={17} aria-hidden="true" /></span>
+                <span className="fs-fix-icon"><Icon size={21} aria-hidden="true" /></span>
                 <h3>{title}</h3>
                 <p>{body}</p>
                 <a href="/docs">Learn more <ArrowRight size={13} aria-hidden="true" /></a>
@@ -193,7 +232,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-integration" ref={integrationRef}>
+        <section className="fs-integration reveal" ref={integrationRef}>
           <div>
             <p className="section-kicker">CONNECT ANYTHING</p>
             <h2>One node, every S3 tool</h2>
@@ -206,7 +245,7 @@ export function LandingPage() {
           </blockquote>
         </section>
 
-        <section className="fs-section soft" ref={deployRef}>
+        <section className="fs-section soft reveal" ref={deployRef}>
           <div className="fs-section-head">
             <p className="fs-kicker">Deployment</p>
             <h2>Run it wherever your disk is</h2>
@@ -227,7 +266,7 @@ export function LandingPage() {
         </section>
       </main>
 
-      <div className="fs-cta-band" ref={ctaRef}>
+      <div className="fs-cta-band reveal" ref={ctaRef}>
         <p className="section-kicker">READY WHEN YOUR DISK IS</p>
         <h2>Make local storage useful everywhere.</h2>
         <div className="fs-section-actions">
