@@ -6,7 +6,7 @@ OpenBucket writes real object bytes to the directory you choose. The normal prod
 
 > OpenBucket is currently a single-node, self-hosted v0.1 product. It is useful for development, homelabs, local backup targets, and trusted private networks. Read [Security](#security) and [Current limitations](#current-limitations) before exposing it outside a machine you control.
 
-The Node daemon and CLI are published as [`openbucket@0.1.11`](https://www.npmjs.com/package/openbucket/v/0.1.11), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). Release `0.1.11` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
+The Node daemon and CLI are published as [`openbucket@0.1.12`](https://www.npmjs.com/package/openbucket/v/0.1.12), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). Release `0.1.12` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
 
 ## What is included
 
@@ -26,26 +26,26 @@ The desktop application is intentionally deferred. See [the product plan](docs/P
 
 ## 60-second local quickstart
 
-Requirements: Node.js 22.13 or newer and npm. The normal account-connected flow also requires `cloudflared` unless you configure a managed public URL or explicitly disable tunneling.
+Install the CLI once — see [Install the CLI](#install-the-cli) below for npm, an installer script, or a source checkout. The commands below assume `openbucket` is on your PATH; nothing else needs to be installed to use it.
 
-From this repository, log in with the hidden password prompt, then register and serve a DNS-safe node name:
+Log in with the hidden password prompt, then register and serve a DNS-safe node name:
 
 ```bash
-npm ci
-npm run build
-npm run openbucket -- login --email you@example.com
-npm run openbucket -- serve ./openbucket-data --name home-node --detach --no-open
-npm run openbucket -- dashboard
-npm run openbucket -- bucket create photos
-npm run openbucket -- status
+openbucket login --email you@example.com
+openbucket serve ./openbucket-data --name home-node --detach --no-open
+openbucket dashboard
+openbucket bucket create photos
+openbucket status
 ```
 
-`serve` registers the node, stores its node credential in the permission-restricted CLI home, reports heartbeat/storage/request counters, and starts supervised S3 and management Quick Tunnels when no managed public route exists. The account dashboard receives only the public endpoint metadata; daemon and S3 secrets never leave the storage host. Quick Tunnel URLs change on restart and are suitable only for development or preview.
+Or just run `openbucket` with no arguments to open the interactive console instead of memorizing flags.
+
+The normal account-connected flow also requires `cloudflared` unless you configure a managed public URL or explicitly disable tunneling. `serve` registers the node, stores its node credential in the permission-restricted CLI home, reports heartbeat/storage/request counters, and starts supervised S3 and management Quick Tunnels when no managed public route exists. The account dashboard receives only the public endpoint metadata; daemon and S3 secrets never leave the storage host. Quick Tunnel URLs change on restart and are suitable only for development or preview.
 
 For standalone local development with no hosted login, metering, discovery, or tunnel:
 
 ```bash
-npm run openbucket -- serve ./openbucket-data --name dev-node --offline --detach --no-open
+openbucket serve ./openbucket-data --name dev-node --offline --detach --no-open
 ```
 
 `--offline` (or `OPENBUCKET_OFFLINE=true`) is an explicit local-development escape hatch, not the recommended production mode.
@@ -62,7 +62,7 @@ The first start prints an initial S3 access key and secret. Save them in a passw
 When finished:
 
 ```bash
-npm run openbucket -- stop
+openbucket stop
 ```
 
 ## Temporary public HTTPS
@@ -80,28 +80,12 @@ Quick Tunnel URLs change on restart and Cloudflare documents them as development
 
 ## Install the CLI
 
-### From this source checkout
+Requires Node.js 22.13 or newer (npm comes bundled with it) — that's the only prerequisite for using the published CLI. Python is only needed if you also want the separate `openbucket-client` management SDK; it isn't required to install or run OpenBucket itself.
+
+### From npm (recommended)
 
 ```bash
-npm ci
-npm run build
-npm link
-openbucket version
-```
-
-`npm link` installs the local package globally. To test the exact npm artifact without linking:
-
-```bash
-npm pack
-npm install --global ./openbucket-0.1.11.tgz
-```
-
-### From npm
-
-Install the current release from npm:
-
-```bash
-npm install --global openbucket@0.1.11
+npm install --global openbucket@0.1.12
 openbucket version
 openbucket login --email you@example.com
 openbucket serve /path/to/storage --name my-node
@@ -109,7 +93,7 @@ openbucket serve /path/to/storage --name my-node
 
 The password prompt is hidden. Use `OPENBUCKET_CONTROL_PLANE_URL` or `--control-plane-url` when the hosted API is not the default deployment.
 
-Use the explicit version in unattended production and review [all installation methods](docs/INSTALLATION.md). The Python client, GHCR images, and GitHub release assets are not published yet; those begin with the next unified release.
+Use the explicit version in unattended production and review [all installation methods](docs/INSTALLATION.md).
 
 ### Installer scripts
 
@@ -117,25 +101,35 @@ The installers are thin, auditable npm wrappers served by the current Vercel dep
 
 ```bash
 curl -fsSLo openbucket-install.sh https://openbucket-eight.vercel.app/install.sh
-OPENBUCKET_INSTALL_VERSION=0.1.11 sh ./openbucket-install.sh
+OPENBUCKET_INSTALL_VERSION=0.1.12 sh ./openbucket-install.sh
 ```
 
 ```powershell
 Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile openbucket-install.ps1
-& ./openbucket-install.ps1 -Version 0.1.11
-```
-
-From a source checkout, the same installers are available directly:
-
-```bash
-sh scripts/install.sh
-```
-
-```powershell
-& ./scripts/install.ps1
+& ./openbucket-install.ps1 -Version 0.1.12
 ```
 
 Set `OPENBUCKET_NPM_PACKAGE` or pass `--package`/`-Package` to install a tarball, local path, scoped package, or a specific registry version.
+
+### Building from source (contributing)
+
+Only needed if you're modifying OpenBucket itself:
+
+```bash
+git clone https://github.com/Razin-developer/openbucket.git
+cd openbucket
+npm ci
+npm run build
+npm link
+openbucket version
+```
+
+`npm link` installs the local build globally. From a source checkout, `scripts/install.sh` / `scripts/install.ps1` are also available directly (`sh scripts/install.sh` / `& ./scripts/install.ps1`). To test the exact npm artifact without linking:
+
+```bash
+npm pack
+npm install --global ./openbucket-0.1.12.tgz
+```
 
 ## CLI reference
 

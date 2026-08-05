@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.12] - 2026-08-05
+
+### Added
+
+- `openbucket login` now offers an arrow-key choice between "Email & password" (unchanged) and "Continue in browser" (opens the control-plane's login page for convenience), colorized with `chalk`. It also checks for an already-valid saved session first and reports it instead of prompting again.
+
+### Changed
+
+- Docs and README now lead with direct `openbucket <command>` usage instead of `npm run openbucket -- <command>`; the `npm ci`/`npm run build` instructions are scoped to their own "Building from source" sections for contributors, since installed users don't need Node/npm build tooling at all beyond the CLI itself.
+- Reduced landing page type sizes and section padding across the board (hero headline 54px → 42px, section headings 40px → 30px) and fixed the install-steps "Copy" button, which had lost its styling in an earlier rewrite and rendered as unstyled text.
+
 ## [0.1.11] - 2026-08-05
 
 ### Fixed

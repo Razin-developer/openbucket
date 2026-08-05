@@ -38,6 +38,7 @@ import {
 import { startQuickTunnel, type QuickTunnelHandle } from "./tunnel.js";
 import * as prompts from "@clack/prompts";
 import pc from "picocolors";
+import chalk from "chalk";
 
 export const DEFAULT_MANAGEMENT_PORT = 7272;
 export const DEFAULT_S3_PORT = 8333;
@@ -1148,9 +1149,9 @@ async function getProductVersion(io: CLIIO): Promise<string> {
     const packageData = JSON.parse(await readFile(packageUrl, "utf8")) as {
       version?: unknown;
     };
-    return typeof packageData.version === "string" ? packageData.version : "0.1.11";
+    return typeof packageData.version === "string" ? packageData.version : "0.1.12";
   } catch {
-    return "0.1.11";
+    return "0.1.12";
   }
 }
 
@@ -1169,11 +1170,47 @@ async function runLogin(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
       ? { ...io.env, OPENBUCKET_CONTROL_PLANE_URL: controlPlaneOption }
       : io.env,
   );
-  const email = (
-    (parsed.options.email as string | undefined) ??
-    io.env.OPENBUCKET_EMAIL ??
-    await io.prompt("Email: ")
-  ).trim();
+  const forcedEmail = (parsed.options.email as string | undefined) ?? io.env.OPENBUCKET_EMAIL;
+  const interactive =
+    io.stdout.isTTY === true && !forcedEmail && parsed.options.passwordStdin !== true;
+
+  const existing = await readHostedSession(io.env, io.homedir());
+  if (existing) {
+    try {
+      const { user } = await new AuthenticatedControlPlane(existing, io.fetch).getCurrentUser();
+      writeLine(
+        io.stdout,
+        chalk.green(
+          `✓ Already signed in to ${existing.controlPlaneUrl} as ${user.name || user.email} (${chalk.dim(user.email)}).`,
+        ),
+      );
+      return EXIT_SUCCESS;
+    } catch {
+      // The saved session is no longer valid; fall through to a fresh login.
+    }
+  }
+
+  let method: "password" | "browser" = "password";
+  if (interactive) {
+    const picked = await prompts.select({
+      message: chalk.bold("How do you want to sign in?"),
+      options: [
+        { value: "password" as const, label: "Email & password", hint: "type your credentials here" },
+        { value: "browser" as const, label: "Continue in browser", hint: `opens ${controlPlaneUrl}/login` },
+      ],
+    });
+    if (prompts.isCancel(picked)) throw new CLIUsageError("Login cancelled.");
+    method = picked;
+  }
+
+  if (method === "browser") {
+    writeLine(io.stdout, chalk.cyan(`Opening ${controlPlaneUrl}/login in your browser…`));
+    openDashboard(`${controlPlaneUrl}/login`, io);
+    writeLine(io.stdout, chalk.dim("Sign in there, then finish pairing this CLI below."));
+  }
+
+  const emailPrompt = interactive ? chalk.bold("Email: ") : "Email: ";
+  const email = (forcedEmail ?? (await io.prompt(emailPrompt))).trim();
   if (!email) throw new CLIUsageError("Email is required.");
 
   let password = "";
@@ -1181,7 +1218,8 @@ async function runLogin(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
     password = passwordInput(
       parsed.options.passwordStdin === true
         ? await io.readStdin()
-        : io.env.OPENBUCKET_PASSWORD ?? await io.prompt("Password: ", true),
+        : io.env.OPENBUCKET_PASSWORD ??
+          (await io.prompt(interactive ? chalk.bold("Password: ") : "Password: ", true)),
     );
     const session = await loginHostedAccount({
       fetch: io.fetch,
@@ -1190,7 +1228,12 @@ async function runLogin(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
       controlPlaneUrl,
     });
     await writeHostedSession(session, io.env, io.homedir(), io.pid);
-    writeLine(io.stdout, `Logged in to ${session.controlPlaneUrl} as ${session.user.name || session.user.email} (${session.user.email}).`);
+    writeLine(
+      io.stdout,
+      chalk.green(
+        `✓ Logged in to ${session.controlPlaneUrl} as ${session.user.name || session.user.email} (${chalk.dim(session.user.email)}).`,
+      ),
+    );
     return EXIT_SUCCESS;
   } finally {
     password = "";
