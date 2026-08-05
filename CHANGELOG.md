@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.15] - 2026-08-05
+
+### Removed
+
+- Dropped the `ink-spinner` dependency — added earlier alongside `ink` for the interactive console but never actually imported anywhere.
+- Removed two stray empty local directories (`tmpbf2zkl9l`, `tsx-razin`) left over from earlier tooling; never tracked in git.
+
+### Audit notes
+
+Went through the tracked source tree (136 files) and dependency list looking for dead code, orphaned files, and accidentally-committed build artifacts. The repo was already lean: no committed `node_modules`/`.venv`/build output, no orphaned source files, no duplicate/unused example or doc files. The one file that looked like it might be stray — `.openai/hosting.json` — is actually required by `scripts/verify-release.mjs`'s release checklist and was left in place.
+
 ## [0.1.14] - 2026-08-05
 
 ### Added

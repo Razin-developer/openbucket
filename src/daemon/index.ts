@@ -19,7 +19,7 @@ import {
   type RequestLog,
 } from "./store.js";
 
-export const OPENBUCKET_VERSION = "0.1.14";
+export const OPENBUCKET_VERSION = "0.1.15";
 
 export interface DaemonOptions {
   storageRoot: string;
