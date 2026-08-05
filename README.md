@@ -6,10 +6,11 @@ OpenBucket writes real object bytes to the directory you choose. The normal prod
 
 > OpenBucket is currently a single-node, self-hosted v0.1 product. It is useful for development, homelabs, local backup targets, and trusted private networks. Read [Security](#security) and [Current limitations](#current-limitations) before exposing it outside a machine you control.
 
-The Node daemon and CLI are published as [`openbucket@0.1.7`](https://www.npmjs.com/package/openbucket/v/0.1.7), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). Release `0.1.7` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
+The Node daemon and CLI are published as [`openbucket@0.1.10`](https://www.npmjs.com/package/openbucket/v/0.1.10), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). Release `0.1.10` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
 
 ## What is included
 
+- A full-screen interactive console (`openbucket`) for buckets, keys, logs, the tunnel, and the server — no flags to memorize.
 - A foreground or detached daemon with independent management (`7272`) and S3 (`8333`) listeners.
 - Real disk-backed buckets and objects, safe path validation, a per-root single-writer lock, and persistent node state.
 - AWS Signature Version 4 header authentication and presigned-query authentication.
@@ -92,7 +93,7 @@ openbucket version
 
 ```bash
 npm pack
-npm install --global ./openbucket-0.1.7.tgz
+npm install --global ./openbucket-0.1.10.tgz
 ```
 
 ### From npm
@@ -100,7 +101,7 @@ npm install --global ./openbucket-0.1.7.tgz
 Install the current release from npm:
 
 ```bash
-npm install --global openbucket@0.1.7
+npm install --global openbucket@0.1.10
 openbucket version
 openbucket login --email you@example.com
 openbucket serve /path/to/storage --name my-node
@@ -116,12 +117,12 @@ The installers are thin, auditable npm wrappers served by the current Vercel dep
 
 ```bash
 curl -fsSLo openbucket-install.sh https://openbucket-eight.vercel.app/install.sh
-OPENBUCKET_INSTALL_VERSION=0.1.7 sh ./openbucket-install.sh
+OPENBUCKET_INSTALL_VERSION=0.1.10 sh ./openbucket-install.sh
 ```
 
 ```powershell
 Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile openbucket-install.ps1
-& ./openbucket-install.ps1 -Version 0.1.7
+& ./openbucket-install.ps1 -Version 0.1.10
 ```
 
 From a source checkout, the same installers are available directly:
@@ -138,10 +139,13 @@ Set `OPENBUCKET_NPM_PACKAGE` or pass `--package`/`-Package` to install a tarball
 
 ## CLI reference
 
+Running `openbucket` with no command opens an interactive console: a full-screen terminal UI with live status, and screens for buckets, API keys, logs, the tunnel, and the server itself — create/delete/browse buckets, create/revoke keys, and share/delete objects without memorizing flags. Run `openbucket ui` to open it explicitly. In non-interactive contexts (scripts, CI, piped output) it falls back to `openbucket help`.
+
 Run `openbucket help` or `openbucket help <command>` for built-in usage.
 
 | Command | Purpose |
 | --- | --- |
+| `openbucket` / `openbucket ui` | Open the interactive console. |
 | `openbucket serve [directory]` | Start in the foreground; `start` is an alias. |
 | `openbucket serve DIR --detach` | Start a background daemon and wait for health. |
 | `openbucket stop` | Ask the active daemon to stop. |

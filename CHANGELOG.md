@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.10] - 2026-08-04
+
+### Added
+
+- A full-screen interactive console: running `openbucket` with no command (or `openbucket ui` explicitly) opens a terminal UI with live daemon status and navigable screens for buckets (list/create/delete/browse objects/share/delete), API keys (list/create/revoke), logs (live tail), tunnel/endpoint state, server status, and effective config/environment. Falls back to `openbucket help` in non-interactive contexts (scripts, CI, piped output).
+
 ## [0.1.9] - 2026-08-04
 
 ### Changed
