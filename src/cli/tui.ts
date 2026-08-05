@@ -1,7 +1,21 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Box, Text, render, useApp, useInput } from "ink";
+import { Box, Text, render, useApp, useInput, useStdout } from "ink";
 
 const h = React.createElement;
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function ConnectionError({ message }: { message: string }) {
+  return h(
+    Box,
+    { flexDirection: "column", borderStyle: "round", borderColor: "red", paddingX: 1 },
+    h(Text, { color: "red", bold: true }, "Can't reach the daemon"),
+    h(Text, { dimColor: true }, message),
+    h(Text, { dimColor: true }, "Start one from the Server screen, or run: openbucket serve <directory>"),
+  );
+}
 
 export interface TuiApi {
   request<T>(path: string, options?: RequestInit): Promise<T>;
@@ -120,8 +134,13 @@ function BucketsScreen({ api, onBack, onOpenBucket }: { api: TuiApi; onBack: () 
   const [busy, setBusy] = useState(false);
 
   const reload = async () => {
-    const payload = await api.request<{ buckets?: BucketRow[] }>("/v1/buckets");
-    setBuckets(Array.isArray(payload.buckets) ? payload.buckets : []);
+    try {
+      const payload = await api.request<{ buckets?: BucketRow[] }>("/v1/buckets");
+      setBuckets(Array.isArray(payload.buckets) ? payload.buckets : []);
+      setError(null);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
   };
   // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, not a synchronous setState
   useEffect(() => { void reload(); }, []);
@@ -177,6 +196,15 @@ function BucketsScreen({ api, onBack, onOpenBucket }: { api: TuiApi; onBack: () 
   if (mode === "confirm-delete" && buckets?.[selected]) {
     return h(Box, { flexDirection: "column", borderStyle: "round", borderColor: "red", paddingX: 1 }, h(Text, { color: "red" }, `Delete bucket "${buckets[selected].name}"? (y/n)`));
   }
+  if (!buckets && error) {
+    return h(
+      Box,
+      { flexDirection: "column" },
+      h(Text, { bold: true }, "Buckets"),
+      h(ConnectionError, { message: error }),
+      h(StatusBar, { text: "esc back" }),
+    );
+  }
   return h(
     Box,
     { flexDirection: "column" },
@@ -209,8 +237,13 @@ function BucketObjectsScreen({ api, bucket, onBack }: { api: TuiApi; bucket: str
   const [busy, setBusy] = useState(false);
 
   const reload = async () => {
-    const payload = await api.request<{ objects?: ObjectRow[] }>(`/v1/buckets/${encodeURIComponent(bucket)}/objects`);
-    setObjects(Array.isArray(payload.objects) ? payload.objects : []);
+    try {
+      const payload = await api.request<{ objects?: ObjectRow[] }>(`/v1/buckets/${encodeURIComponent(bucket)}/objects`);
+      setObjects(Array.isArray(payload.objects) ? payload.objects : []);
+      setMessage(null);
+    } catch (err) {
+      setMessage(errorMessage(err));
+    }
   };
   // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, not a synchronous setState
   useEffect(() => { void reload(); }, [bucket]);
@@ -237,6 +270,15 @@ function BucketObjectsScreen({ api, bucket, onBack }: { api: TuiApi; bucket: str
     }
   });
 
+  if (!objects && message) {
+    return h(
+      Box,
+      { flexDirection: "column" },
+      h(Text, { bold: true }, `Bucket · ${bucket}`),
+      h(ConnectionError, { message }),
+      h(StatusBar, { text: "esc back" }),
+    );
+  }
   return h(
     Box,
     { flexDirection: "column" },
@@ -275,8 +317,13 @@ function KeysScreen({ api, onBack }: { api: TuiApi; onBack: () => void }) {
   const [busy, setBusy] = useState(false);
 
   const reload = async () => {
-    const payload = await api.request<{ keys?: KeyRow[] }>("/v1/keys");
-    setKeys(Array.isArray(payload.keys) ? payload.keys : []);
+    try {
+      const payload = await api.request<{ keys?: KeyRow[] }>("/v1/keys");
+      setKeys(Array.isArray(payload.keys) ? payload.keys : []);
+      setError(null);
+    } catch (err) {
+      setError(errorMessage(err));
+    }
   };
   // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, not a synchronous setState
   useEffect(() => { void reload(); }, []);
@@ -341,6 +388,15 @@ function KeysScreen({ api, onBack }: { api: TuiApi; onBack: () => void }) {
       h(StatusBar, { text: "tab switch field   enter create   esc cancel" }),
     );
   }
+  if (!keys && error) {
+    return h(
+      Box,
+      { flexDirection: "column" },
+      h(Text, { bold: true }, "API keys"),
+      h(ConnectionError, { message: error }),
+      h(StatusBar, { text: "esc back" }),
+    );
+  }
   return h(
     Box,
     { flexDirection: "column" },
@@ -367,29 +423,43 @@ function KeysScreen({ api, onBack }: { api: TuiApi; onBack: () => void }) {
 }
 
 function LogsScreen({ api, onBack }: { api: TuiApi; onBack: () => void }) {
-  const [logs, setLogs] = useState<LogRow[]>([]);
+  const [logs, setLogs] = useState<LogRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
   useEffect(() => {
     let cancelled = false;
     const poll = async () => {
       try {
         const payload = await api.request<{ logs?: LogRow[] }>("/v1/logs?limit=20");
-        if (!cancelled) setLogs(Array.isArray(payload.logs) ? payload.logs : []);
-      } catch { /* ignore transient poll errors */ }
+        if (!cancelled) { setLogs(Array.isArray(payload.logs) ? payload.logs : []); setError(null); }
+      } catch (err) {
+        if (!cancelled) setError(errorMessage(err));
+      }
     };
     void poll();
     const timer = setInterval(() => void poll(), 2_000);
     return () => { cancelled = true; clearInterval(timer); };
   }, []);
   useInput((_input, key) => { if (key.escape) onBack(); });
+  if (!logs && error) {
+    return h(
+      Box,
+      { flexDirection: "column" },
+      h(Text, { bold: true }, "Recent requests"),
+      h(ConnectionError, { message: error }),
+      h(StatusBar, { text: "esc back" }),
+    );
+  }
   return h(
     Box,
     { flexDirection: "column" },
     h(Text, { bold: true }, "Recent requests"),
-    logs.length === 0
-      ? h(Text, { dimColor: true }, "No requests logged yet.")
-      : h(Box, { flexDirection: "column", marginTop: 1 }, ...logs.map((log, index) =>
-          h(Text, { key: `${log.timestamp}-${index}`, dimColor: true }, `${String(log.method ?? "—").padEnd(6)} ${String(log.status ?? "—").padStart(3)}  ${log.path ?? ""}`),
-        )),
+    !logs
+      ? h(Text, { dimColor: true }, "Loading…")
+      : logs.length === 0
+        ? h(Text, { dimColor: true }, "No requests logged yet.")
+        : h(Box, { flexDirection: "column", marginTop: 1 }, ...logs.map((log, index) =>
+            h(Text, { key: `${log.timestamp}-${index}`, dimColor: true }, `${String(log.method ?? "—").padEnd(6)} ${String(log.status ?? "—").padStart(3)}  ${log.path ?? ""}`),
+          )),
     h(StatusBar, { text: "live · updates every 2s   esc back" }),
   );
 }
@@ -494,9 +564,18 @@ type Screen =
 
 function App({ api, onExitWithCommand }: { api: TuiApi; onExitWithCommand: (command: string | null) => void }) {
   const { exit } = useApp();
+  const { stdout } = useStdout();
   const [stack, setStack] = useState<Screen[]>([{ kind: "home" }]);
   const [status, setStatus] = useState<StatusPayload | null>(null);
+  const [rows, setRows] = useState(stdout?.rows ?? 24);
   const current = stack[stack.length - 1];
+
+  useEffect(() => {
+    if (!stdout) return undefined;
+    const onResize = () => setRows(stdout.rows ?? 24);
+    stdout.on("resize", onResize);
+    return () => { stdout.off("resize", onResize); };
+  }, [stdout]);
 
   useEffect(() => {
     let cancelled = false;
@@ -549,22 +628,38 @@ function App({ api, onExitWithCommand }: { api: TuiApi; onExitWithCommand: (comm
 
   return h(
     Box,
-    { flexDirection: "column" },
-    h(Box, { marginBottom: 1 }, h(Text, { bold: true, color: "cyan" }, "▲ OpenBucket"), h(Text, { dimColor: true }, `  v${api.version} · interactive console`)),
+    { flexDirection: "column", minHeight: Math.max(rows - 1, 10), paddingX: 1, paddingTop: 1 },
+    h(
+      Box,
+      { borderStyle: "round", borderColor: "cyan", paddingX: 1, marginBottom: 1 },
+      h(Text, { bold: true, color: "cyan" }, "▲ OpenBucket"),
+      h(Text, { dimColor: true }, `  v${api.version} · interactive console`),
+    ),
     body,
   );
 }
 
+
 export function runInteractiveConsole(
   api: TuiApi,
-  renderOptions?: Parameters<typeof render>[1],
+  renderOptions?: Extract<Parameters<typeof render>[1], object>,
 ): Promise<string | null> {
   return new Promise((resolve) => {
     let pendingCommand: string | null = null;
+    let settled = false;
+    const finish = (value: string | null) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+
+    process.once("SIGINT", () => finish(null));
+    process.once("SIGTERM", () => finish(null));
+
     const instance = render(
       h(App, { api, onExitWithCommand: (command: string | null) => { pendingCommand = command; } }),
-      renderOptions,
+      { alternateScreen: true, ...renderOptions },
     );
-    void instance.waitUntilExit().then(() => resolve(pendingCommand));
+    void instance.waitUntilExit().then(() => finish(pendingCommand)).catch(() => finish(pendingCommand));
   });
 }

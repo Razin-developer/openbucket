@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.11] - 2026-08-05
+
+### Fixed
+
+- The interactive console (`openbucket`) crashed the whole process with an unhandled `CLIInactiveError` when a screen (Buckets, API keys, Logs) tried to load data while no daemon was running. Every screen now shows a "Can't reach the daemon" message with a hint to start one, instead of crashing.
+- The console now renders in the terminal's alternate screen buffer (the same mechanism vim/htop/opencode use): it clears and takes over the full terminal on start and restores your previous screen on exit, instead of scrolling inline below the shell prompt.
+
 ## [0.1.10] - 2026-08-04
 
 ### Added
