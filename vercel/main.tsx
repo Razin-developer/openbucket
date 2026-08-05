@@ -1,5 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import "../app/globals.css";
 import { HostedApp, routeForPath, routeMetadata } from "./app";
 import "./site.css";
@@ -52,5 +53,6 @@ if (!root) throw new Error("OpenBucket web root element is missing.");
 createRoot(root).render(
   <StrictMode>
     <HostedApp route={route} />
+    <SpeedInsights />
   </StrictMode>,
 );

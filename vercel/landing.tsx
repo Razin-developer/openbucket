@@ -6,6 +6,32 @@ import {
 } from "lucide-react";
 import { SiteHeader, githubUrl } from "./site-shell";
 
+function useParallax<T extends HTMLElement>(factor = 0.25) {
+  const ref = useRef<T | null>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return undefined;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return undefined;
+    let frame = 0;
+    const update = () => {
+      frame = 0;
+      const offset = window.scrollY * factor;
+      node.style.transform = `translate3d(0, ${offset}px, 0)`;
+    };
+    const onScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    update();
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (frame) window.cancelAnimationFrame(frame);
+    };
+  }, [factor]);
+  return ref;
+}
+
 function useReveal<T extends HTMLElement>() {
   const ref = useRef<T | null>(null);
   useEffect(() => {
@@ -82,7 +108,9 @@ const integrationNodes = [
 function IntegrationNodes() {
   return (
     <div className="fs-node-row" aria-label="S3 clients and tools connecting to one OpenBucket node">
-      <span className="fs-node-line" aria-hidden="true" />
+      <svg className="fs-node-svg" viewBox="0 0 400 4" preserveAspectRatio="none" aria-hidden="true">
+        <line className="fs-plotter-line" x1="0" y1="2" x2="400" y2="2" />
+      </svg>
       {integrationNodes.map(({ icon: Icon, label, hub }) => (
         <div className="fs-node-item" key={label}>
           <span className={`fs-node${hub ? " fs-hub" : ""}`}><Icon size={hub ? 32 : 24} aria-hidden="true" /></span>
@@ -94,6 +122,7 @@ function IntegrationNodes() {
 }
 
 export function LandingPage() {
+  const heroShotRef = useParallax<HTMLDivElement>(-0.08);
   const splitRef = useReveal<HTMLElement>();
   const fixRef = useReveal<HTMLElement>();
   const stepsRef = useReveal<HTMLElement>();
@@ -116,7 +145,7 @@ export function LandingPage() {
           </div>
         </div>
         <div className="fs-hero-shot">
-          <div>
+          <div ref={heroShotRef}>
             <img src="/og.png" alt="The OpenBucket dashboard showing buckets, capacity, and live request analytics" />
           </div>
         </div>
@@ -130,7 +159,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-split" id="product" ref={splitRef}>
+        <section className="fs-split reveal" id="product" ref={splitRef}>
           <div>
             <p className="section-kicker">LOCAL BY DESIGN</p>
             <h2>Cloud-shaped storage. Without moving the disk.</h2>
@@ -151,7 +180,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-section soft" ref={fixRef}>
+        <section className="fs-section soft reveal" ref={fixRef}>
           <div className="fs-section-head">
             <p className="fs-kicker">Why OpenBucket</p>
             <h2>Built to fix that</h2>
@@ -172,7 +201,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-steps-card" ref={stepsRef}>
+        <section className="fs-steps-card reveal" ref={stepsRef}>
           <div className="fs-steps-inner">
             <ol className="fs-steps-list">
               <li className="fs-step"><span>1</span><div><strong>Install the CLI</strong><p>{npmCommand} <CopyCommand value={npmCommand} /></p></div></li>
@@ -185,7 +214,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-section" ref={featuresRef}>
+        <section className="fs-section reveal" ref={featuresRef}>
           <div className="fs-section-head">
             <p className="fs-kicker">Features</p>
             <h2>Features that set OpenBucket apart</h2>
@@ -203,7 +232,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-integration" ref={integrationRef}>
+        <section className="fs-integration reveal" ref={integrationRef}>
           <div>
             <p className="section-kicker">CONNECT ANYTHING</p>
             <h2>One node, every S3 tool</h2>
@@ -216,7 +245,7 @@ export function LandingPage() {
           </blockquote>
         </section>
 
-        <section className="fs-section soft" ref={deployRef}>
+        <section className="fs-section soft reveal" ref={deployRef}>
           <div className="fs-section-head">
             <p className="fs-kicker">Deployment</p>
             <h2>Run it wherever your disk is</h2>
@@ -237,7 +266,7 @@ export function LandingPage() {
         </section>
       </main>
 
-      <div className="fs-cta-band" ref={ctaRef}>
+      <div className="fs-cta-band reveal" ref={ctaRef}>
         <p className="section-kicker">READY WHEN YOUR DISK IS</p>
         <h2>Make local storage useful everywhere.</h2>
         <div className="fs-section-actions">

@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.14] - 2026-08-05
+
+### Added
+
+- Vercel Speed Insights wired into the hosted app (`<SpeedInsights />` from `@vercel/speed-insights/react`, mounted alongside the app root — this is a Vite SPA, not Next.js, so the `/react` entry point is used rather than `/next`).
+- Landing page animations: staggered scroll-reveal for card grids and list items (was previously dead code — the `.reveal` class was never actually applied to any section), a hero entrance sequence (badge → headline → body → CTAs → screenshot cascade in on load), a subtle scroll parallax on the hero product screenshot, an SVG "plotter" line-draw animation for the "Connect Anything" diagram (the connecting line draws itself in via `stroke-dashoffset` when scrolled into view), and card hover-lift transitions. All respect `prefers-reduced-motion`.
+- The header nav is now session-aware: shows "Sign in" + "Get started" when signed out, or a single "Dashboard" button when a valid session exists (checks `/api/auth/session` on mount), instead of always showing both regardless of auth state.
+
+### Changed
+
+- Scaled up the header to match the rest of the landing page: 64px → 84px tall, brand mark 27px → 32px, nav links 13px → 15px.
+
+### Fixed
+
+- Fixed a real, unrelated CI regression this round introduced: `@vercel/speed-insights` declares `next` as an optional peer dependency, which resolved to this repo's already-pinned `next` canary build and pulled its vulnerable transitive `postcss`/`sharp` versions into the *production* dependency audit (previously excluded since `next` was only ever a devDependency). Added `postcss`/`sharp` to `package.json` `overrides` to pin safe versions repo-wide without touching the existing `next` pin `vinext` depends on.
+
 ## [0.1.13] - 2026-08-05
 
 ### Added

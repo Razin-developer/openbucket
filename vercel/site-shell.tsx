@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ExternalLink } from "lucide-react";
 
 const githubUrl = "https://github.com/Razin-developer/openbucket";
@@ -10,7 +10,7 @@ type SiteShellProps = {
   compact?: boolean;
 };
 
-export function BrandMark({ size = 27 }: { size?: number }) {
+export function BrandMark({ size = 32 }: { size?: number }) {
   return (
     <svg className="site-brand-mark" width={size} height={size} viewBox="0 0 32 32" aria-hidden="true">
       <rect width="32" height="32" rx="8" fill="#171717" />
@@ -30,7 +30,22 @@ export function Brand({ inverted = false }: { inverted?: boolean }) {
   );
 }
 
+type SessionState = "loading" | "authenticated" | "anonymous";
+
+function useSessionState(): SessionState {
+  const [state, setState] = useState<SessionState>("loading");
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/auth/session", { credentials: "include" })
+      .then((response) => { if (!cancelled) setState(response.ok ? "authenticated" : "anonymous"); })
+      .catch(() => { if (!cancelled) setState("anonymous"); });
+    return () => { cancelled = true; };
+  }, []);
+  return state;
+}
+
 export function SiteHeader({ current, overlay = false }: { current?: SiteShellProps["current"]; overlay?: boolean }) {
+  const session = useSessionState();
   return (
     <header className={`site-header${overlay ? " overlay" : ""}`}>
       <Brand />
@@ -40,8 +55,14 @@ export function SiteHeader({ current, overlay = false }: { current?: SiteShellPr
         <a href={githubUrl} target="_blank" rel="noreferrer">GitHub <ExternalLink size={13} aria-hidden="true" /></a>
       </nav>
       <div className="site-header-actions">
-        <a className="site-login-link" href="/login">Sign in</a>
-        <a className="site-button dark small" href="/dashboard">Open dashboard</a>
+        {session === "authenticated" ? (
+          <a className="site-button dark small" href="/dashboard">Dashboard</a>
+        ) : session === "anonymous" ? (
+          <>
+            <a className="site-login-link" href="/login">Sign in</a>
+            <a className="site-button dark small" href="/login">Get started</a>
+          </>
+        ) : null}
       </div>
     </header>
   );
