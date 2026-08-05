@@ -1,6 +1,9 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 import { useEffect, useState, type ReactNode } from "react";
-import { ExternalLink } from "lucide-react";
+import {
+  BookOpen, Boxes, ChevronDown, Container, ExternalLink, Gauge,
+  HardDrive, KeyRound, LayoutDashboard, Rocket, ShieldCheck, Terminal, Workflow,
+} from "lucide-react";
 
 const githubUrl = "https://github.com/Razin-developer/openbucket";
 
@@ -44,14 +47,56 @@ function useSessionState(): SessionState {
   return state;
 }
 
+type NavLink = { href: string; label: string; description: string; icon: typeof Terminal };
+
+const productLinks: NavLink[] = [
+  { href: "/#product", label: "Overview", description: "How the daemon, CLI, and dashboard operate one real disk.", icon: HardDrive },
+  { href: "/#why", label: "Why OpenBucket", description: "Local-first security and a real operations UI.", icon: ShieldCheck },
+  { href: "/#features", label: "Features", description: "S3 compatibility, scoped keys, live analytics, share links.", icon: Gauge },
+  { href: "/#connect", label: "Connect anything", description: "CLI, SDKs, and infra-as-code over the standard S3 API.", icon: Boxes },
+  { href: "/#deploy", label: "Deployment", description: "Local, Docker/Compose, or the hosted control plane.", icon: Rocket },
+];
+
+const resourceLinks: NavLink[] = [
+  { href: "/docs", label: "Documentation", description: "Install, run a node, and connect S3 clients.", icon: BookOpen },
+  { href: "/docs#installation", label: "Installation", description: "CLI, installer scripts, and Windows PowerShell.", icon: Terminal },
+  { href: "/docs#docker", label: "Docker", description: "Run the daemon as a container with persistent volumes.", icon: Container },
+  { href: "/docs#production", label: "Production", description: "Treat the storage disk as real infrastructure.", icon: Workflow },
+  { href: "/dashboard", label: "Dashboard", description: "Operate buckets, keys, and logs for a live node.", icon: LayoutDashboard },
+  { href: `${githubUrl}/releases`, label: "Releases", description: "Changelog and published versions on GitHub.", icon: KeyRound },
+];
+
+function NavMenu({ label, links, active }: { label: string; links: NavLink[]; active: boolean }) {
+  return (
+    <div className="site-nav-item">
+      <button type="button" className={`site-nav-trigger${active ? " active" : ""}`}>
+        {label} <ChevronDown size={14} aria-hidden="true" />
+      </button>
+      <div className="site-nav-panel">
+        <div className="site-nav-panel-inner">
+          {links.map(({ href, label: linkLabel, description, icon: Icon }) => (
+            <a className="site-nav-panel-link" href={href} key={href}>
+              <span className="site-nav-panel-icon"><Icon size={17} aria-hidden="true" /></span>
+              <span>
+                <strong>{linkLabel}</strong>
+                <small>{description}</small>
+              </span>
+            </a>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function SiteHeader({ current, overlay = false }: { current?: SiteShellProps["current"]; overlay?: boolean }) {
   const session = useSessionState();
   return (
     <header className={`site-header${overlay ? " overlay" : ""}`}>
       <Brand />
       <nav className="site-nav" aria-label="Public navigation">
-        <a className={current === "home" ? "active" : ""} href="/#product">Product</a>
-        <a className={current === "docs" ? "active" : ""} href="/docs">Docs</a>
+        <NavMenu label="Product" links={productLinks} active={current === "home"} />
+        <NavMenu label="Resources" links={resourceLinks} active={current === "docs"} />
         <a href={githubUrl} target="_blank" rel="noreferrer">GitHub <ExternalLink size={13} aria-hidden="true" /></a>
       </nav>
       <div className="site-header-actions">

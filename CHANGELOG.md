@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.1.16] - 2026-08-05
+
+### Fixed
+
+- Fixed a real mobile layout bug on the landing page: the "Connect Anything" integration diagram (`.fs-node-row`) was a non-wrapping flex row of five fixed-width icon nodes that didn't fit inside a phone-width viewport, forcing the entire page ~77px wider than the screen and leaving blank space on the right of every section. On small screens the row now wraps, the connecting line is hidden, and the icon nodes shrink to fit.
+
+### Added
+
+- `/dashboard` (including the admin view, which renders inside the same gate) now requires a viewport at least 900px wide. Below that, it shows a "larger screen is required" message instead of loading the control plane — the session/account fetch is skipped entirely on small screens rather than loading data nobody can use. The public landing and docs pages remain fully available on mobile.
+- The site header's "Product" and "Docs" links are now hover/focus-triggered mega-menus: "Product" links to the landing page's own sections (Overview, Why OpenBucket, Features, Connect anything, Deployment — new anchors added to those sections), and a new "Resources" menu links to documentation sections (Installation, Docker, Production), the dashboard, and GitHub Releases. Built with plain CSS `:hover`/`:focus-within`, matching this project's existing hand-written-CSS convention rather than introducing a component library.
+
+## [0.1.15] - 2026-08-05
+
+### Removed
+
+- Dropped the `ink-spinner` dependency — added earlier alongside `ink` for the interactive console but never actually imported anywhere.
+- Removed two stray empty local directories (`tmpbf2zkl9l`, `tsx-razin`) left over from earlier tooling; never tracked in git.
+
+### Audit notes
+
+Went through the tracked source tree (136 files) and dependency list looking for dead code, orphaned files, and accidentally-committed build artifacts. The repo was already lean: no committed `node_modules`/`.venv`/build output, no orphaned source files, no duplicate/unused example or doc files. The one file that looked like it might be stray — `.openai/hosting.json` — is actually required by `scripts/verify-release.mjs`'s release checklist and was left in place.
+
 ## [0.1.14] - 2026-08-05
 
 ### Added

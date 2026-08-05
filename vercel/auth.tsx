@@ -1,4 +1,4 @@
-/* eslint-disable @next/next/no-img-element */
+/* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages */
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AlertCircle } from "lucide-react";
 import { HostedControlPlane, type AccountUser } from "./control-plane";
@@ -7,6 +7,32 @@ import { BrandMark, SiteShell } from "./site-shell";
 type User = AccountUser;
 type AuthResponse = { user?: User; error?: { code?: string; message?: string } };
 type GateState = { kind: "loading" } | { kind: "ready"; user: User } | { kind: "error"; message: string };
+
+const dashboardMinWidthQuery = "(min-width: 900px)";
+
+function useMeetsDashboardMinWidth(): boolean {
+  const [meets, setMeets] = useState(() =>
+    typeof window === "undefined" ? true : window.matchMedia(dashboardMinWidthQuery).matches,
+  );
+  useEffect(() => {
+    const mql = window.matchMedia(dashboardMinWidthQuery);
+    const onChange = () => setMeets(mql.matches);
+    mql.addEventListener("change", onChange);
+    return () => mql.removeEventListener("change", onChange);
+  }, []);
+  return meets;
+}
+
+function SmallScreenGate() {
+  return (
+    <main className="auth-gate">
+      <span className="auth-gate-mark" aria-hidden="true"><BrandMark size={40} /></span>
+      <h1>A larger screen is required</h1>
+      <p>The OpenBucket dashboard is built for managing storage nodes with room to work — it isn&apos;t available on small screens yet. Please reopen it on a tablet or desktop.</p>
+      <a className="site-button dark" href="/">Return home</a>
+    </main>
+  );
+}
 
 function safeNextPath(): string {
   const candidate = new URLSearchParams(window.location.search).get("next");
@@ -89,6 +115,7 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
 }
 
 export function ProtectedDashboard() {
+  const meetsMinWidth = useMeetsDashboardMinWidth();
   const [state, setState] = useState<GateState>({ kind: "loading" });
   const loadSession = useCallback(async () => {
     try {
@@ -110,6 +137,9 @@ export function ProtectedDashboard() {
     return () => window.clearTimeout(timer);
   }, [loadSession]);
 
+  if (!meetsMinWidth) {
+    return <SmallScreenGate />;
+  }
   if (state.kind === "loading") {
     return <main className="auth-gate"><span className="auth-gate-mark" aria-hidden="true"><BrandMark size={40} /><i /></span><p>Opening your dashboard…</p></main>;
   }

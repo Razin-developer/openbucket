@@ -1,6 +1,6 @@
 {
   "name": "openbucket",
-  "version": "0.1.14",
+  "version": "0.1.16",
   "description": "Turn any local disk or folder into S3-compatible object storage.",
   "author": "Razin",
   "license": "Apache-2.0",
@@ -77,7 +77,6 @@
     "@vercel/speed-insights": "^2.0.0",
     "chalk": "^6.0.0",
     "ink": "^7.1.1",
-    "ink-spinner": "^5.0.0",
     "lucide-react": "^0.468.0",
     "picocolors": "^1.1.1",
     "react": "^19.2.7",

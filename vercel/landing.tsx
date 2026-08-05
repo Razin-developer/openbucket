@@ -180,7 +180,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-section soft reveal" ref={fixRef}>
+        <section className="fs-section soft reveal" id="why" ref={fixRef}>
           <div className="fs-section-head">
             <p className="fs-kicker">Why OpenBucket</p>
             <h2>Built to fix that</h2>
@@ -214,7 +214,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-section reveal" ref={featuresRef}>
+        <section className="fs-section reveal" id="features" ref={featuresRef}>
           <div className="fs-section-head">
             <p className="fs-kicker">Features</p>
             <h2>Features that set OpenBucket apart</h2>
@@ -232,7 +232,7 @@ export function LandingPage() {
           </div>
         </section>
 
-        <section className="fs-integration reveal" ref={integrationRef}>
+        <section className="fs-integration reveal" id="connect" ref={integrationRef}>
           <div>
             <p className="section-kicker">CONNECT ANYTHING</p>
             <h2>One node, every S3 tool</h2>
@@ -245,7 +245,7 @@ export function LandingPage() {
           </blockquote>
         </section>
 
-        <section className="fs-section soft reveal" ref={deployRef}>
+        <section className="fs-section soft reveal" id="deploy" ref={deployRef}>
           <div className="fs-section-head">
             <p className="fs-kicker">Deployment</p>
             <h2>Run it wherever your disk is</h2>
