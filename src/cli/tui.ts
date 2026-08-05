@@ -1,7 +1,30 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Box, Text, render, useApp, useInput, useStdout } from "ink";
+import { readdirSync, readFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
+import { homedir } from "node:os";
 
 const h = React.createElement;
+
+function listPathMatches(current: string, includeFiles: boolean): { dir: string; matches: string[] } {
+  const expanded = current.startsWith("~") ? current.replace(/^~/, homedir()) : current;
+  const hasSlash = expanded.includes("/") || expanded.includes("\\");
+  const dir = hasSlash ? dirname(expanded) || "." : ".";
+  const partial = (hasSlash ? basename(expanded) : expanded).toLowerCase();
+  try {
+    return {
+      dir,
+      matches: readdirSync(dir, { withFileTypes: true })
+        .filter((entry) => (includeFiles ? true : entry.isDirectory()))
+        .filter((entry) => !entry.name.startsWith("."))
+        .map((entry) => (entry.isDirectory() ? `${entry.name}/` : entry.name))
+        .filter((name) => name.toLowerCase().startsWith(partial))
+        .sort(),
+    };
+  } catch {
+    return { dir, matches: [] };
+  }
+}
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -65,6 +88,50 @@ function TextField({ label, value, onChange, mask }: { label: string; value: str
   return h(Box, null, h(Text, { dimColor: true }, `${label}: `), h(Text, null, shown), h(Text, { color: "cyan" }, "▏"));
 }
 
+function PathField({
+  label,
+  value,
+  onChange,
+  includeFiles = false,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  includeFiles?: boolean;
+}) {
+  const tabState = useRef<{ forValue: string; dir: string; matches: string[]; index: number } | null>(null);
+  const [hint, setHint] = useState("");
+
+  useInput((input, key) => {
+    if (key.tab) {
+      let state = tabState.current;
+      if (!state || state.forValue !== value) {
+        const { dir, matches } = listPathMatches(value, includeFiles);
+        if (matches.length === 0) { setHint("No matches here"); tabState.current = null; return; }
+        state = { forValue: value, dir, matches, index: -1 };
+      }
+      state.index = (state.index + 1) % state.matches.length;
+      const picked = state.matches[state.index];
+      const completed = state.dir === "." ? picked : `${join(state.dir, picked)}${picked.endsWith("/") ? "/" : ""}`;
+      state.forValue = completed;
+      tabState.current = state;
+      onChange(completed);
+      setHint(`${state.matches.length} match${state.matches.length === 1 ? "" : "es"} · tab to cycle`);
+      return;
+    }
+    if (key.backspace || key.delete) { onChange(value.slice(0, -1)); tabState.current = null; setHint(""); return; }
+    if (key.return || key.upArrow || key.downArrow || key.escape) return;
+    if (input && !key.ctrl && !key.meta) { onChange(value + input); tabState.current = null; setHint(""); }
+  });
+
+  return h(
+    Box,
+    { flexDirection: "column" },
+    h(Box, null, h(Text, { dimColor: true }, `${label}: `), h(Text, null, value), h(Text, { color: "cyan" }, "▏")),
+    h(Text, { dimColor: true }, hint || "type a path, or press tab to browse folders"),
+  );
+}
+
 function Toggle({ label, value }: { label: string; value: boolean }) {
   return h(Text, null, `${label}: `, h(Text, { color: value ? "green" : undefined }, value ? "[x]" : "[ ]"));
 }
@@ -76,19 +143,25 @@ function StatusBar({ text }: { text: string }) {
 // ---- Screens ---------------------------------------------------------
 
 function HomeScreen({ status, onNavigate }: { status: StatusPayload | null; onNavigate: (screen: Screen) => void }) {
-  const items: { label: string; screen: Screen; hint: string }[] = [
-    { label: "Buckets", screen: { kind: "buckets" }, hint: "List, create, delete, browse objects" },
-    { label: "API keys", screen: { kind: "keys" }, hint: "List, create, revoke" },
-    { label: "Logs", screen: { kind: "logs" }, hint: "Tail recent requests" },
-    { label: "Tunnel", screen: { kind: "tunnel" }, hint: "S3 and management tunnel state" },
-    { label: "Server", screen: { kind: "server" }, hint: "Status, start, stop" },
-    { label: "Config & environment", screen: { kind: "config" }, hint: "Effective endpoints and variables" },
-  ];
+  const items: { label: string; screen: Screen; hint: string }[] = status
+    ? [
+        { label: "Buckets", screen: { kind: "buckets" }, hint: "List, create, delete, browse objects" },
+        { label: "API keys", screen: { kind: "keys" }, hint: "List, create, revoke" },
+        { label: "Logs", screen: { kind: "logs" }, hint: "Tail recent requests" },
+        { label: "Tunnel", screen: { kind: "tunnel" }, hint: "S3 and management tunnel state" },
+        { label: "Server", screen: { kind: "server" }, hint: "Status, start, stop" },
+        { label: "Config & environment", screen: { kind: "config" }, hint: "Effective endpoints and variables" },
+      ]
+    : [
+        { label: "Start a node", screen: { kind: "server", autoStart: true }, hint: "Pick a folder and serve it — no daemon running yet" },
+        { label: "Config & environment", screen: { kind: "config" }, hint: "Effective endpoints and variables" },
+      ];
   const [selected, setSelected] = useState(0);
+  const activeIndex = Math.min(selected, items.length - 1);
   useInput((_input, key) => {
-    if (key.upArrow) setSelected((v) => (v - 1 + items.length) % items.length);
-    if (key.downArrow) setSelected((v) => (v + 1) % items.length);
-    if (key.return) onNavigate(items[selected].screen);
+    if (key.upArrow) setSelected((v) => (Math.min(v, items.length - 1) - 1 + items.length) % items.length);
+    if (key.downArrow) setSelected((v) => (Math.min(v, items.length - 1) + 1) % items.length);
+    if (key.return) onNavigate(items[activeIndex].screen);
   });
   const storage = status?.storage ?? {};
   return h(
@@ -114,7 +187,7 @@ function HomeScreen({ status, onNavigate }: { status: StatusPayload | null; onNa
         h(
           Box,
           { key: item.label, justifyContent: "space-between" },
-          h(Text, { color: index === selected ? "cyan" : undefined, bold: index === selected }, `${index === selected ? "❯ " : "  "}${item.label}`),
+          h(Text, { color: index === activeIndex ? "cyan" : undefined, bold: index === activeIndex }, `${index === activeIndex ? "❯ " : "  "}${item.label}`),
           h(Text, { dimColor: true }, item.hint),
         ),
       ),
@@ -235,6 +308,9 @@ function BucketObjectsScreen({ api, bucket, onBack }: { api: TuiApi; bucket: str
   const [selected, setSelected] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [mode, setMode] = useState<"list" | "upload">("list");
+  const [uploadPath, setUploadPath] = useState("");
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const reload = async () => {
     try {
@@ -250,7 +326,28 @@ function BucketObjectsScreen({ api, bucket, onBack }: { api: TuiApi; bucket: str
 
   useInput((input, key) => {
     if (busy) return;
+    if (mode === "upload") {
+      if (key.escape) { setMode("list"); setUploadError(null); return; }
+      if (key.return) {
+        const trimmed = uploadPath.trim().replace(/\/$/, "");
+        if (!trimmed) { setUploadError("Enter a file path."); return; }
+        setBusy(true);
+        try {
+          const bytes = readFileSync(trimmed);
+          const objectKey = basename(trimmed);
+          const segments = objectKey.split("/").map(encodeURIComponent).join("/");
+          api.request(`/v1/buckets/${encodeURIComponent(bucket)}/objects/${segments}`, { method: "PUT", body: bytes, headers: { "content-type": "application/octet-stream" } })
+            .then(() => { setMode("list"); setBusy(false); void reload(); })
+            .catch((err: unknown) => { setUploadError(errorMessage(err)); setBusy(false); });
+        } catch (err) {
+          setUploadError(errorMessage(err));
+          setBusy(false);
+        }
+      }
+      return;
+    }
     if (key.escape) { onBack(); return; }
+    if (input === "u") { setMode("upload"); setUploadPath(""); setUploadError(null); return; }
     if (!objects || objects.length === 0) return;
     if (key.upArrow) setSelected((v) => (v - 1 + objects.length) % objects.length);
     if (key.downArrow) setSelected((v) => (v + 1) % objects.length);
@@ -270,6 +367,16 @@ function BucketObjectsScreen({ api, bucket, onBack }: { api: TuiApi; bucket: str
     }
   });
 
+  if (mode === "upload") {
+    return h(
+      Box,
+      { flexDirection: "column", borderStyle: "round", borderColor: "cyan", paddingX: 1 },
+      h(Text, { bold: true }, `Upload to ${bucket}`),
+      h(PathField, { label: "Local file", value: uploadPath, onChange: setUploadPath, includeFiles: true }),
+      uploadError ? h(Text, { color: "red" }, uploadError) : null,
+      h(StatusBar, { text: "tab browse files/folders   enter upload   esc cancel" }),
+    );
+  }
   if (!objects && message) {
     return h(
       Box,
@@ -286,7 +393,7 @@ function BucketObjectsScreen({ api, bucket, onBack }: { api: TuiApi; bucket: str
     !objects
       ? h(Text, { dimColor: true }, "Loading…")
       : objects.length === 0
-        ? h(Text, { dimColor: true }, "This bucket is empty.")
+        ? h(Text, { dimColor: true }, "This bucket is empty. Press \"u\" to upload a file.")
         : h(
             Box,
             { flexDirection: "column", marginTop: 1 },
@@ -300,7 +407,7 @@ function BucketObjectsScreen({ api, bucket, onBack }: { api: TuiApi; bucket: str
             ),
           ),
     message ? h(Text, { color: "yellow" }, message) : null,
-    h(StatusBar, { text: "↑↓ select   d delete   s share link (1h)   esc back" }),
+    h(StatusBar, { text: "↑↓ select   u upload   d delete   s share link (1h)   esc back" }),
   );
 }
 
@@ -482,8 +589,8 @@ function TunnelScreen({ status, onBack }: { status: StatusPayload | null; onBack
   );
 }
 
-function ServerScreen({ api, status, onBack, onExitWithCommand }: { api: TuiApi; status: StatusPayload | null; onBack: () => void; onExitWithCommand: (command: string) => void }) {
-  const [mode, setMode] = useState<"idle" | "start-form" | "stopping">("idle");
+function ServerScreen({ api, status, autoStart, onBack, onExitWithCommand }: { api: TuiApi; status: StatusPayload | null; autoStart?: boolean; onBack: () => void; onExitWithCommand: (command: string) => void }) {
+  const [mode, setMode] = useState<"idle" | "start-form" | "stopping">(autoStart && !status ? "start-form" : "idle");
   const [directory, setDirectory] = useState("");
   const [name, setName] = useState("home-node");
   const [field, setField] = useState<0 | 1>(0);
@@ -498,7 +605,7 @@ function ServerScreen({ api, status, onBack, onExitWithCommand }: { api: TuiApi;
     }
     if (mode === "start-form") {
       if (key.escape) { setMode("idle"); return; }
-      if (key.tab) { setField((f) => (f === 0 ? 1 : 0)); return; }
+      if (key.upArrow || key.downArrow) { setField((f) => (f === 0 ? 1 : 0)); return; }
       if (key.return) {
         if (!directory.trim()) { setMessage("Storage directory is required."); return; }
         onExitWithCommand(`openbucket serve ${directory.trim()} --name ${name.trim() || "home-node"} --detach --no-open`);
@@ -511,10 +618,12 @@ function ServerScreen({ api, status, onBack, onExitWithCommand }: { api: TuiApi;
       Box,
       { flexDirection: "column", borderStyle: "round", borderColor: "cyan", paddingX: 1 },
       h(Text, { bold: true }, "Start a node"),
-      field === 0 ? h(TextField, { label: "Storage directory", value: directory, onChange: setDirectory }) : h(Text, { dimColor: true }, `Directory: ${directory}`),
+      field === 0
+        ? h(PathField, { label: "Storage directory", value: directory, onChange: setDirectory })
+        : h(Text, { dimColor: true }, `Directory: ${directory}`),
       field === 1 ? h(TextField, { label: "Node name", value: name, onChange: setName }) : h(Text, { dimColor: true }, `Name: ${name}`),
       h(Box, { marginTop: 1 }, h(Text, { dimColor: true }, "This exits the console and runs the equivalent serve command.")),
-      h(StatusBar, { text: "tab switch field   enter start   esc cancel" }),
+      h(StatusBar, { text: "tab switch field · tab in directory browses folders   enter start   esc cancel" }),
     );
   }
   return h(
@@ -559,7 +668,7 @@ type Screen =
   | { kind: "keys" }
   | { kind: "logs" }
   | { kind: "tunnel" }
-  | { kind: "server" }
+  | { kind: "server"; autoStart?: boolean }
   | { kind: "config" };
 
 function App({ api, onExitWithCommand }: { api: TuiApi; onExitWithCommand: (command: string | null) => void }) {
@@ -618,7 +727,7 @@ function App({ api, onExitWithCommand }: { api: TuiApi; onExitWithCommand: (comm
       case "tunnel":
         return h(TunnelScreen, { status, onBack: pop });
       case "server":
-        return h(ServerScreen, { api, status, onBack: pop, onExitWithCommand: exitWithCommand });
+        return h(ServerScreen, { api, status, autoStart: current.autoStart, onBack: pop, onExitWithCommand: exitWithCommand });
       case "config":
         return h(ConfigScreen, { api, onBack: pop });
       default:

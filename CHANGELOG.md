@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.13] - 2026-08-05
+
+### Added
+
+- The interactive console can now start a node without leaving the TUI: when no daemon is running, the home screen leads with "Start a node" and jumps straight into a form for the storage directory and node name.
+- Text fields for filesystem paths (server start directory, object upload) now support Tab-based autocomplete: press Tab to list and cycle through matching folders (or files, when uploading) in the current directory, the same way a shell completes paths.
+- The Buckets → object browser can now upload a local file into the bucket (`u`), using the same Tab-autocomplete path field.
+
+### Changed
+
+- Scaled up the entire landing page, not just type: buttons (40px → 50px tall, 13px → 16px label), section container widths (1200px → 1360px), card padding (~28px → 36px), icon sizes throughout, and grid gaps, alongside larger headings (hero 68px, section headings 38-44px) and section padding.
+- Redesigned the "Connect Anything" icon row as an actual hub-and-spoke diagram with a connecting line and labels (CLI, SDKs, OpenBucket, Infra as code, Apps) instead of a bare row of unlabeled icons.
+- Confirmed Vercel's GitHub integration is deploying automatically on every commit to main (production is verified to serve the exact latest commit SHA after each merge).
+
 ## [0.1.12] - 2026-08-05
 
 ### Added
