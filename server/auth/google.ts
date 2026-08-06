@@ -1,5 +1,6 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { getAuthConfig } from "./config.js";
+import { keyedHash } from "./crypto.js";
 
 const GOOGLE_AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const GOOGLE_TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
@@ -84,8 +85,7 @@ function safeNext(value: string | null): string {
 
 export function encodeOAuthState(authSecret: Buffer, payload: OAuthStatePayload): string {
   const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
-  // This signs an opaque state/PKCE-verifier cookie value for tamper detection, not a password.
-  const mac = createHmac("sha256", authSecret).update(encoded).digest("base64url"); // codeql[js/insufficient-password-hash]
+  const mac = keyedHash(authSecret, "oauth-state", encoded);
   return `${encoded}.${mac}`;
 }
 
@@ -94,12 +94,9 @@ export function decodeOAuthState(authSecret: Buffer, token: string): OAuthStateP
   if (separator < 1) return null;
   const encoded = token.slice(0, separator);
   const mac = token.slice(separator + 1);
-  // This HMACs an opaque OAuth state/PKCE-verifier cookie value for tamper detection, not a
-  // password — the same keyed-HMAC pattern used for session tokens and rate-limit ids elsewhere
-  // in server/auth. Real passwords are hashed with scrypt in server/auth/crypto.ts.
-  const expectedMac = createHmac("sha256", authSecret).update(encoded).digest("base64url"); // codeql[js/insufficient-password-hash]
-  const suppliedBuffer = Buffer.from(mac, "base64url");
-  const expectedBuffer = Buffer.from(expectedMac, "base64url");
+  const expectedMac = keyedHash(authSecret, "oauth-state", encoded);
+  const suppliedBuffer = Buffer.from(mac, "hex");
+  const expectedBuffer = Buffer.from(expectedMac, "hex");
   if (suppliedBuffer.byteLength !== expectedBuffer.byteLength || !timingSafeEqual(suppliedBuffer, expectedBuffer)) {
     return null;
   }
