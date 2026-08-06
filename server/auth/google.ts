@@ -84,6 +84,8 @@ function safeNext(value: string | null): string {
 
 export function encodeOAuthState(authSecret: Buffer, payload: OAuthStatePayload): string {
   const encoded = Buffer.from(JSON.stringify(payload), "utf8").toString("base64url");
+  // codeql[js/insufficient-password-hash]: see decodeOAuthState below — this signs an opaque
+  // state/PKCE-verifier cookie value, not a user password.
   const mac = createHmac("sha256", authSecret).update(encoded).digest("base64url");
   return `${encoded}.${mac}`;
 }
@@ -93,6 +95,10 @@ export function decodeOAuthState(authSecret: Buffer, token: string): OAuthStateP
   if (separator < 1) return null;
   const encoded = token.slice(0, separator);
   const mac = token.slice(separator + 1);
+  // codeql[js/insufficient-password-hash]: this HMACs an opaque OAuth state/PKCE-verifier cookie
+  // value for tamper detection, not a user password for storage — the same keyed-HMAC pattern
+  // already used for session tokens and rate-limit ids elsewhere in server/auth. Real passwords
+  // are hashed with scrypt in server/auth/crypto.ts.
   const expectedMac = createHmac("sha256", authSecret).update(encoded).digest("base64url");
   const suppliedBuffer = Buffer.from(mac, "base64url");
   const expectedBuffer = Buffer.from(expectedMac, "base64url");
