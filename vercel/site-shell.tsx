@@ -125,12 +125,12 @@ const productLinks: NavLink[] = [
 ];
 
 const resourceLinks: NavLink[] = [
-  { href: "/docs", label: "Documentation", description: "Install, run a node, and connect S3 clients.", icon: BookOpen },
-  { href: "/docs/api", label: "API reference", description: "Every local and hosted endpoint, with JS and Python examples.", icon: Terminal },
-  { href: "/docs#docker", label: "Docker", description: "Run the daemon as a container with persistent volumes.", icon: Container },
-  { href: "/docs#production", label: "Production", description: "Treat the storage disk as real infrastructure.", icon: Workflow },
+  { href: "/docs", label: "Documentation", description: "Start here — quickstart and overview.", icon: BookOpen },
+  { href: "/docs/installation", label: "Installation", description: "npm, installer scripts, Docker, or from source.", icon: Terminal },
+  { href: "/docs/usage", label: "Usage", description: "Day-to-day commands, renaming, the interactive console.", icon: Workflow },
+  { href: "/docs/api", label: "API reference", description: "Every local and hosted endpoint, with JS and Python examples.", icon: Container },
+  { href: "/docs/contributing", label: "Contributing", description: "Report defects, propose features, submit pull requests.", icon: KeyRound },
   { href: "/dashboard", label: "Dashboard", description: "Operate buckets, keys, and logs for a live node.", icon: LayoutDashboard },
-  { href: `${githubUrl}/releases`, label: "Releases", description: "Changelog and published versions on GitHub.", icon: KeyRound },
 ];
 
 function NavMenu({ label, links, active }: { label: string; links: NavLink[]; active: boolean }) {
@@ -192,6 +192,7 @@ export function SiteFooter() {
         <div>
           <strong>Product</strong>
           <a href="/docs">Documentation</a>
+          <a href="/docs/installation">Installation</a>
           <a href="/docs/api">API reference</a>
           <a href="/dashboard">Dashboard</a>
           <a href={`${githubUrl}/releases`}>Releases</a>

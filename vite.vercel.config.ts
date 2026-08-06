@@ -60,8 +60,8 @@ export default defineConfig(({ mode }) => {
 
   const canonicalUrl = publicEnv.NEXT_PUBLIC_APP_URL ?? defaultAppUrl;
   const canonicalRoot = `${canonicalUrl.replace(/\/+$/, "")}/`;
-  const docsUrl = new URL("docs", canonicalRoot).toString();
-  const docsApiUrl = new URL("docs/api", canonicalRoot).toString();
+  const docsSlugs = ["docs", "docs/installation", "docs/usage", "docs/dashboard", "docs/s3-signing", "docs/local-api", "docs/api", "docs/local-development", "docs/contributing"];
+  const docsUrls = docsSlugs.map((slug) => new URL(slug, canonicalRoot).toString());
   const sitemapUrl = new URL("sitemap.xml", canonicalRoot).toString();
   const commitSha = process.env.VERCEL_GIT_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim() || "unknown";
 
@@ -94,7 +94,7 @@ export default defineConfig(({ mode }) => {
           this.emitFile({
             type: "asset",
             fileName: "sitemap.xml",
-            source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${xmlEscape(canonicalRoot)}</loc></url>\n  <url><loc>${xmlEscape(docsUrl)}</loc></url>\n  <url><loc>${xmlEscape(docsApiUrl)}</loc></url>\n</urlset>\n`,
+            source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${xmlEscape(canonicalRoot)}</loc></url>\n${docsUrls.map((url) => `  <url><loc>${xmlEscape(url)}</loc></url>`).join("\n")}\n</urlset>\n`,
           });
           this.emitFile({ type: "asset", fileName: "install.sh", source: installSh });
           this.emitFile({ type: "asset", fileName: "install.ps1", source: installPs1 });
