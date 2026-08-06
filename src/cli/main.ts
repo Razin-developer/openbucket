@@ -1042,7 +1042,7 @@ function printBanner(
   initialCredentials?: Record<string, unknown>,
 ): void {
   const line = (value = "") => writeLine(io.stdout, value);
-  const label = (value: string) => pc.dim(value.padEnd(15));
+  const label = (value: string) => pc.dim(value.padEnd(19));
 
   line("");
   line(`  ${pc.bold("▲ OpenBucket")}${pc.dim("  ·  local disk, cloud interface")}`);
@@ -1050,11 +1050,15 @@ function printBanner(
   line(`  ${pc.green("●")} ${pc.bold("Daemon running")}`);
   line(`  ${label("Node")}${state.node}`);
   line(`  ${label("Storage")}${state.root}`);
-  if (state.nodeApiUrl) line(`  ${label("OpenBucket API")}${pc.cyan(state.nodeApiUrl)}`);
+  line(`  ${label("Local management")}${pc.cyan(state.managementUrl)}`);
+  if (state.s3Url) line(`  ${label("Local S3")}${pc.cyan(state.s3Url)}`);
   if (state.dashboardUrl) {
     line(`  ${label("Local dashboard")}${pc.cyan(state.dashboardUrl.split("?")[0].split("#")[0])}`);
     line(`  ${label("Reopen")}openbucket dashboard`);
   }
+  if (state.publicUrl) line(`  ${label("Public S3")}${pc.cyan(state.publicUrl)}`);
+  if (state.publicManagementUrl) line(`  ${label("Public management")}${pc.cyan(state.publicManagementUrl)}`);
+  if (state.nodeApiUrl) line(`  ${label("Hosted dashboard")}${pc.cyan(state.nodeApiUrl)}`);
   if (initialCredentials) {
     line("");
     line(`  ${pc.bold("Initial S3 credentials")}${pc.dim(" (shown once)")}`);

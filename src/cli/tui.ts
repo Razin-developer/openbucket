@@ -637,15 +637,28 @@ function ServerScreen({ api, status, autoStart, onBack, onExitWithCommand }: { a
         : h(Text, { dimColor: true }, `Directory: ${directory}`),
       field === 1 ? h(TextField, { label: "Node name", value: name, onChange: setName }) : h(Text, { dimColor: true }, `Name: ${name}`),
       h(Box, { marginTop: 1 }, h(Text, { dimColor: true }, "This exits the console and runs the equivalent serve command.")),
-      h(StatusBar, { text: "tab switch field · tab in directory browses folders   enter start   esc cancel" }),
+      h(StatusBar, { text: "↑↓ switch field · tab in directory browses folders   enter start   esc cancel" }),
     );
   }
+  const endpoints = status?.endpoints ?? {};
   return h(
     Box,
     { flexDirection: "column" },
     h(Text, { bold: true }, "Server"),
     status
-      ? h(Box, { flexDirection: "column", marginTop: 1 }, h(Text, { color: "green" }, "● Running"), h(Text, { dimColor: true }, `Uptime ${humanDuration(status.node?.uptimeSeconds)}`))
+      ? h(
+          Box,
+          { flexDirection: "column", marginTop: 1 },
+          h(Text, { color: "green" }, "● Running"),
+          h(Text, { dimColor: true }, `Node ${status.node?.name ?? status.node?.id ?? "—"}  ·  up ${humanDuration(status.node?.uptimeSeconds)}`),
+          h(Box, { flexDirection: "column", marginTop: 1 },
+            h(Text, null, `Local management  ${endpoints.management ?? "—"}`),
+            h(Text, null, `Local S3          ${endpoints.s3 ?? "—"}`),
+            h(Text, null, `Local dashboard   ${endpoints.dashboard ?? "—"}`),
+            h(Text, null, `Public S3         ${endpoints.public ?? "not exposed"}`),
+          ),
+          h(Box, { marginTop: 1 }, h(Text, { dimColor: true }, "Access keys and the management token are not shown here — run \"openbucket key list\" or open the dashboard's Keys view.")),
+        )
       : h(Text, { color: "yellow" }, "○ Not running"),
     message ? h(Text, { color: "yellow" }, message) : null,
     h(StatusBar, { text: status ? "s stop   esc back" : "n start a node   esc back" }),
