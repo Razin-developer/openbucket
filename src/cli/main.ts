@@ -63,6 +63,7 @@ export interface ParsedCLICommand {
     | "whoami"
     | "stop"
     | "status"
+    | "rename"
     | "logs"
     | "doctor"
     | "tunnel"
@@ -465,6 +466,11 @@ export function parseCLIArgs(argv: readonly string[]): ParsedCLICommand {
       parsed = parseOptions(tail, [], ["json"]);
       assertPositionals("status [--json]", parsed.positionals, 0);
       return { command: "status", ...parsed, raw };
+    }
+    case "rename": {
+      parsed = parseOptions(tail, [], []);
+      assertPositionals("rename <new-name>", parsed.positionals, 1);
+      return { command: "rename", ...parsed, raw };
     }
     case "logs": {
       parsed = parseOptions(tail, ["limit"], ["follow"]);
@@ -1042,7 +1048,7 @@ function printBanner(
   initialCredentials?: Record<string, unknown>,
 ): void {
   const line = (value = "") => writeLine(io.stdout, value);
-  const label = (value: string) => pc.dim(value.padEnd(15));
+  const label = (value: string) => pc.dim(value.padEnd(19));
 
   line("");
   line(`  ${pc.bold("▲ OpenBucket")}${pc.dim("  ·  local disk, cloud interface")}`);
@@ -1050,11 +1056,15 @@ function printBanner(
   line(`  ${pc.green("●")} ${pc.bold("Daemon running")}`);
   line(`  ${label("Node")}${state.node}`);
   line(`  ${label("Storage")}${state.root}`);
-  if (state.nodeApiUrl) line(`  ${label("OpenBucket API")}${pc.cyan(state.nodeApiUrl)}`);
+  line(`  ${label("Local management")}${pc.cyan(state.managementUrl)}`);
+  if (state.s3Url) line(`  ${label("Local S3")}${pc.cyan(state.s3Url)}`);
   if (state.dashboardUrl) {
     line(`  ${label("Local dashboard")}${pc.cyan(state.dashboardUrl.split("?")[0].split("#")[0])}`);
     line(`  ${label("Reopen")}openbucket dashboard`);
   }
+  if (state.publicUrl) line(`  ${label("Public S3")}${pc.cyan(state.publicUrl)}`);
+  if (state.publicManagementUrl) line(`  ${label("Public management")}${pc.cyan(state.publicManagementUrl)}`);
+  if (state.nodeApiUrl) line(`  ${label("Hosted dashboard")}${pc.cyan(state.nodeApiUrl)}`);
   if (initialCredentials) {
     line("");
     line(`  ${pc.bold("Initial S3 credentials")}${pc.dim(" (shown once)")}`);
@@ -1074,6 +1084,7 @@ function renderHelp(topic?: string): string {
     start: "Usage: openbucket start <directory> [serve options]",
     stop: "Usage: openbucket stop",
     status: "Usage: openbucket status [--json]",
+    rename: "Usage: openbucket rename <new-name>",
     dashboard: "Usage: openbucket dashboard",
     doctor: "Usage: openbucket doctor [directory]",
     tunnel: "Usage: openbucket tunnel <setup|status|update> [--cloudflared-path PATH] [--yes]",
@@ -1107,6 +1118,7 @@ Daemon
   start <directory>    Alias for serve
   stop                 Stop the active daemon
   status [--json]      Show daemon and storage status
+  rename <new-name>    Rename the running node (local, and hosted if connected)
   dashboard            Securely open or re-pair the local dashboard
   ui                   Interactive console (buckets, keys, tunnel, logs, server). Also the
                        default when you just run "openbucket".
@@ -1149,9 +1161,9 @@ async function getProductVersion(io: CLIIO): Promise<string> {
     const packageData = JSON.parse(await readFile(packageUrl, "utf8")) as {
       version?: unknown;
     };
-    return typeof packageData.version === "string" ? packageData.version : "0.1.16";
+    return typeof packageData.version === "string" ? packageData.version : "0.1.17";
   } catch {
-    return "0.1.16";
+    return "0.1.17";
   }
 }
 
@@ -1190,23 +1202,21 @@ async function runLogin(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
     }
   }
 
-  let method: "password" | "browser" = "password";
   if (interactive) {
     const picked = await prompts.select({
-      message: chalk.bold("How do you want to sign in?"),
+      message: chalk.bold("Do you already have an OpenBucket account?"),
       options: [
-        { value: "password" as const, label: "Email & password", hint: "type your credentials here" },
-        { value: "browser" as const, label: "Continue in browser", hint: `opens ${controlPlaneUrl}/login` },
+        { value: "signin" as const, label: "Yes, sign in", hint: "type your email and password here" },
+        { value: "create" as const, label: "No, I need to create one", hint: `opens ${controlPlaneUrl}/register` },
       ],
     });
     if (prompts.isCancel(picked)) throw new CLIUsageError("Login cancelled.");
-    method = picked;
-  }
-
-  if (method === "browser") {
-    writeLine(io.stdout, chalk.cyan(`Opening ${controlPlaneUrl}/login in your browser…`));
-    openDashboard(`${controlPlaneUrl}/login`, io);
-    writeLine(io.stdout, chalk.dim("Sign in there, then finish pairing this CLI below."));
+    if (picked === "create") {
+      writeLine(io.stdout, chalk.cyan(`Opening ${controlPlaneUrl}/register in your browser…`));
+      openDashboard(`${controlPlaneUrl}/register`, io);
+      writeLine(io.stdout, chalk.dim('Create your account there, then run "openbucket login" again to sign in.'));
+      return EXIT_SUCCESS;
+    }
   }
 
   const emailPrompt = interactive ? chalk.bold("Email: ") : "Email: ";
@@ -2213,6 +2223,75 @@ async function runStatus(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
   return EXIT_SUCCESS;
 }
 
+function assertValidNodeName(name: string): string {
+  const normalized = name.normalize("NFKC").trim().toLowerCase();
+  if (
+    normalized.length < 3 ||
+    normalized.length > 48 ||
+    !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/.test(normalized) ||
+    normalized.includes("--")
+  ) {
+    throw new CLIUsageError("Node name must be a DNS-safe label with 3-48 lowercase letters, numbers, or hyphens.");
+  }
+  return normalized;
+}
+
+async function runRename(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
+  const newName = assertValidNodeName(parsed.positionals[0]!);
+  const target = await getApiTarget(io);
+  const oldName = target.state?.node;
+
+  const result = await apiRequest<{ nodeId: string; nodeName: string }>(io, target, "/v1/node", {
+    method: "PATCH",
+    body: JSON.stringify({ name: newName }),
+  });
+
+  let hostedUpdated = false;
+  if (target.state?.nodeApiUrl && oldName) {
+    try {
+      const controlPlaneUrl = new URL(target.state.nodeApiUrl).origin;
+      const credential = await findNodeCredential(controlPlaneUrl, oldName, io.env, io.homedir());
+      const session = await readHostedSession(io.env, io.homedir());
+      if (credential && session && session.controlPlaneUrl === controlPlaneUrl) {
+        await new AuthenticatedControlPlane(session, io.fetch).request(
+          `/api/nodes/${credential.nodeId}`,
+          { method: "PATCH", body: JSON.stringify({ name: newName }) },
+        );
+        await writeNodeCredential({ ...credential, nodeName: newName }, io.env, io.homedir(), io.pid);
+        hostedUpdated = true;
+      }
+    } catch (error) {
+      writeLine(
+        io.stderr,
+        `Warning: the node was renamed locally, but the hosted control plane could not be updated: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  if (target.state) {
+    const updatedState: ActiveDaemonState = { ...target.state, node: result.nodeName };
+    if (hostedUpdated && updatedState.nodeApiUrl) {
+      try {
+        const url = new URL(updatedState.nodeApiUrl);
+        url.pathname = url.pathname.replace(/\/dashboard\/nodes\/[^/]+$/, `/dashboard/nodes/${encodeURIComponent(result.nodeName)}`);
+        updatedState.nodeApiUrl = url.toString();
+      } catch {
+        // Leave nodeApiUrl as-is if it doesn't match the expected /dashboard/nodes/<name> shape.
+      }
+    }
+    await writeActiveState(updatedState, io);
+  }
+
+  writeLine(io.stdout, chalk.green(`✓ Renamed node to "${result.nodeName}".`));
+  if (target.state?.nodeApiUrl && !hostedUpdated) {
+    writeLine(
+      io.stdout,
+      chalk.dim('This node is hosted-connected, but the hosted control plane wasn\'t updated. Run "openbucket login" then "openbucket rename" again to sync the name there.'),
+    );
+  }
+  return EXIT_SUCCESS;
+}
+
 async function runUi(io: CLIIO): Promise<number> {
   if (!io.stdout.isTTY) {
     io.stdout.write(renderHelp());
@@ -2224,6 +2303,8 @@ async function runUi(io: CLIIO): Promise<number> {
     version,
     home: resolveStatePaths(io.env, io.homedir()).directory,
     env: io.env,
+    homedir: io.homedir(),
+    fetch: io.fetch,
     request: async <T,>(path: string, options?: RequestInit): Promise<T> => {
       const target = await getApiTarget(io);
       return apiRequest<T>(io, target, path, options);
@@ -2799,6 +2880,8 @@ async function executeCommand(parsed: ParsedCLICommand, io: CLIIO): Promise<numb
       return runStop(io);
     case "status":
       return runStatus(parsed, io);
+    case "rename":
+      return runRename(parsed, io);
     case "logs":
       return runLogs(parsed, io);
     case "doctor":

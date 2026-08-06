@@ -57,9 +57,11 @@ export async function verifyPassword(password: string, encoded: string): Promise
   }
 }
 
-export function createSessionToken(): string {
+export function createOpaqueToken(): string {
   return randomBytes(32).toString("base64url");
 }
+
+export const createSessionToken = createOpaqueToken;
 
 export function keyedHash(secret: Buffer, purpose: string, value: string): string {
   return createHmac("sha256", secret).update(purpose).update("\0").update(value).digest("hex");

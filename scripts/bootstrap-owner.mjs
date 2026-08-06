@@ -564,6 +564,12 @@ export async function main(argv = process.argv.slice(2), dependencies = {}) {
     (dependencies.output || process.stdout).write(`${BOOTSTRAP_USAGE}\n`);
     return;
   }
+  (dependencies.errorOutput || process.stderr).write(
+    "Deprecated: the hosted app no longer grants admin through a one-time signup window. " +
+    "Set OPENBUCKET_ADMIN_EMAIL and OPENBUCKET_ADMIN_PASSWORD instead — anyone signing in with " +
+    "those exact credentials gets admin access, and no admin record is ever stored in MongoDB. " +
+    "Regular accounts can now be created directly at /register. This script will be removed in a future release.\n",
+  );
   if (!parsed.manageVercel && !parsed.signupTokenStdin) {
     throw new Error("Vercel deployment management is off. Use --signup-token-stdin for an existing registration window or --manage-vercel to create one.");
   }

@@ -6,8 +6,11 @@ export type AuthConfig = {
   database: string;
   authSecret: Buffer;
   allowSignup: boolean;
-  signupToken: Buffer | null;
   sessionTtlSeconds: number;
+  adminEmail: string | null;
+  adminPassword: Buffer | null;
+  googleClientId: string | null;
+  googleClientSecret: string | null;
 };
 
 class AuthConfigurationError extends Error {
@@ -90,23 +93,40 @@ export function getAuthConfig(): AuthConfig {
     configurationError("AUTH_CONFIG_AUTH_SECRET_TOO_SHORT", "OPENBUCKET_AUTH_SECRET must contain at least 32 UTF-8 bytes.");
   }
 
-  const allowSignup = process.env.OPENBUCKET_ALLOW_SIGNUP?.trim().toLowerCase() === "true";
-  let signupToken: Buffer | null = null;
-  if (allowSignup) {
-    signupToken = Buffer.from(requireValue("OPENBUCKET_SIGNUP_TOKEN"), "utf8");
-    if (signupToken.byteLength < 32) {
-      configurationError("AUTH_CONFIG_SIGNUP_TOKEN_TOO_SHORT", "OPENBUCKET_SIGNUP_TOKEN must contain at least 32 UTF-8 bytes.");
+  // Self-serve account creation is open by default; set OPENBUCKET_ALLOW_SIGNUP=false to close it.
+  const allowSignupRaw = process.env.OPENBUCKET_ALLOW_SIGNUP?.trim().toLowerCase();
+  const allowSignup = allowSignupRaw !== "false";
+
+  const adminEmailRaw = process.env.OPENBUCKET_ADMIN_EMAIL?.trim().toLowerCase() || null;
+  const adminPasswordRaw = process.env.OPENBUCKET_ADMIN_PASSWORD;
+  let adminEmail: string | null = null;
+  let adminPassword: Buffer | null = null;
+  if (adminEmailRaw || adminPasswordRaw) {
+    if (!adminEmailRaw || !adminPasswordRaw) {
+      configurationError(
+        "AUTH_CONFIG_ADMIN_CREDENTIALS_INCOMPLETE",
+        "OPENBUCKET_ADMIN_EMAIL and OPENBUCKET_ADMIN_PASSWORD must both be set to enable the environment-based admin account.",
+      );
     }
-    if (signupToken.equals(authSecret)) {
-      configurationError("AUTH_CONFIG_SECRETS_MUST_DIFFER", "OPENBUCKET_SIGNUP_TOKEN must differ from OPENBUCKET_AUTH_SECRET.");
+    if (adminPasswordRaw.length < 12) {
+      configurationError("AUTH_CONFIG_ADMIN_PASSWORD_TOO_SHORT", "OPENBUCKET_ADMIN_PASSWORD must contain at least 12 characters.");
     }
+    adminEmail = adminEmailRaw;
+    adminPassword = Buffer.from(adminPasswordRaw, "utf8");
   }
+
+  const googleClientId = process.env.OPENBUCKET_GOOGLE_CLIENT_ID?.trim() || null;
+  const googleClientSecret = process.env.OPENBUCKET_GOOGLE_CLIENT_SECRET?.trim() || null;
+
   return {
     mongodbUri,
     database,
     authSecret,
     allowSignup,
-    signupToken,
     sessionTtlSeconds: SESSION_TTL_SECONDS,
+    adminEmail,
+    adminPassword,
+    googleClientId: googleClientId && googleClientSecret ? googleClientId : null,
+    googleClientSecret: googleClientId && googleClientSecret ? googleClientSecret : null,
   };
 }

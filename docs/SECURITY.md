@@ -115,10 +115,10 @@ The dashboard saves the normalized management URL in local storage. Admin tokens
 
 The Vercel `/dashboard` requires a MongoDB-backed account session. It authorizes account-scoped node/usage reads and admin aggregates for admins, but it is not a daemon or S3 credential. The **Live node** browser still pairs with the separate daemon bearer.
 
-MongoDB stores users, password verifiers, sessions, bootstrap/rate-limit records, node registrations, hashed node credentials, endpoint/heartbeat/storage summaries, and aggregate usage events. It must never store object bytes, raw node credentials, management/S3 secrets, share tokens, or authoritative local state. Explicit `--offline` development sends no hosted node/usage/discovery state.
+MongoDB stores users, password verifiers, sessions, rate-limit records, password-reset tokens (HMAC-hashed, single-use, 30-minute TTL), node registrations, hashed node credentials, endpoint/heartbeat/storage summaries, and aggregate usage events. It must never store object bytes, raw node credentials, management/S3 secrets, share tokens, an admin flag, or authoritative local state. Explicit `--offline` development sends no hosted node/usage/discovery state.
 
-Keep `MONGODB_URI` and `OPENBUCKET_AUTH_SECRET` server-only, rotate any disclosed URI immediately, use a unique production database user, and disable public signup after creating the intended owner account.
-Owner bootstrap requires a distinct high-entropy token and an atomic MongoDB claim. Prefer `node scripts/bootstrap-owner.mjs`; it uses a hidden prompt, sends Vercel values over stdin, and always attempts to close signup, remove the token, and redeploy.
+Keep `MONGODB_URI`, `OPENBUCKET_AUTH_SECRET`, `OPENBUCKET_ADMIN_PASSWORD`, and the SMTP/Google OAuth secrets server-only, and rotate any disclosed value immediately.
+Admin access is granted only by matching `OPENBUCKET_ADMIN_EMAIL`/`OPENBUCKET_ADMIN_PASSWORD` at login time (constant-time compared); no admin record is ever written to MongoDB, so a database dump alone cannot grant or reveal admin access. Self-serve registration at `/register` never grants admin, regardless of registration order.
 
 ## S3 authentication and authorization
 

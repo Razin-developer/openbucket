@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.1.17] - 2026-08-06
+
+### Changed
+
+- **Admin access no longer lives in the database.** `role: "admin"` on a user document is now ignored entirely; signing in with `OPENBUCKET_ADMIN_EMAIL`/`OPENBUCKET_ADMIN_PASSWORD` grants a session with `role: "admin"` that has no backing MongoDB row at all. The one-time "owner bootstrap" race (first successful `/register` wins admin) is removed.
+- **Self-serve registration is open by default.** `/register` no longer requires a one-time setup token; `OPENBUCKET_ALLOW_SIGNUP` now defaults to `true` (set it to `"false"` to close signup). `scripts/bootstrap-owner.mjs` is deprecated — it now prints a warning pointing at the env-based admin instead of trying to manage a signup window.
+- Redesigned `/login` and `/register`: removed the decorative left-side image panel in favor of a single centered card, added a "Continue with Google" button, and a "Forgot password?" link.
+- `openbucket login`'s "Continue in browser" option was a stub that opened a page and then still asked for your password in the terminal anyway. Replaced it with an honest "Do you already have an account?" choice — "No" opens `/register` in your browser and exits; "Yes" goes straight to the email/password prompt as before.
+
+### Added
+
+- Forgot/reset password: `/forgot-password` and `/reset-password` pages, backed by new `POST /api/auth/forgot-password` and `POST /api/auth/reset-password` routes. Reset tokens are single-use, HMAC-hashed at rest, expire in 30 minutes, and resetting a password signs out every other session for that account. The forgot-password response is identical whether or not the account exists, to avoid leaking which emails are registered. Requires `OPENBUCKET_SMTP_HOST`/`_PORT`/`_USER`/`_PASS`/`_FROM` to actually send email; without them the request still succeeds but logs that SMTP isn't configured.
+- Optional Google sign-in via a hand-rolled OAuth 2.0 authorization-code + PKCE flow (`GET /api/auth/google/start`, `GET /api/auth/google/callback`) — no framework dependency, since this is a Vite SPA with a custom Vercel Functions router, not Next.js. Configured through `OPENBUCKET_GOOGLE_CLIENT_ID`/`OPENBUCKET_GOOGLE_CLIENT_SECRET`; the button only renders once both are set. Google accounts auto-link to an existing password account with the same verified email.
+- The interactive console (`openbucket`) now has an **Account** screen: sign in or out of the hosted dashboard without leaving the TUI, using the same session file the `login`/`logout`/`whoami` commands read.
+
+### Fixed
+
+- `mongodb`-only fields (`role`, `authControls`) are removed from the auth schema; `sessions.userId` is now nullable to represent the environment-configured admin's session, which has no user document to point at.
+
 ## [0.1.16] - 2026-08-05
 
 ### Fixed

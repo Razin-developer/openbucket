@@ -1,7 +1,19 @@
-import { ObjectId, type ClientSession } from "mongodb";
+import { ObjectId } from "mongodb";
 import { getAuthConfig } from "./config.js";
-import { createSessionToken, hashPassword, keyedHash, secretMatches, verifyPassword } from "./crypto.js";
-import { getAuthCollections, getAuthDatabaseContext, type AuthCollections, type UserDocument } from "./database.js";
+import { createOpaqueToken, createSessionToken, hashPassword, keyedHash, secretMatches, verifyPassword } from "./crypto.js";
+import {
+  buildGoogleAuthorizationUrl,
+  clearedOAuthStateCookie,
+  createPkcePair,
+  decodeOAuthState,
+  encodeOAuthState,
+  exchangeGoogleCode,
+  isGoogleSignInConfigured,
+  oAuthStateCookie,
+  readOAuthStateCookie,
+} from "./google.js";
+import { sendPasswordResetEmail } from "./mailer.js";
+import { getAuthCollections, type AuthCollections, type UserDocument } from "./database.js";
 import {
   ApiError,
   assertMethod,
@@ -21,17 +33,20 @@ const LOGIN_EMAIL_LIMIT = 8;
 const SIGNUP_WINDOW_MS = 60 * 60 * 1000;
 const SIGNUP_IP_LIMIT = 5;
 const SIGNUP_EMAIL_LIMIT = 3;
+const RESET_WINDOW_MS = 60 * 60 * 1000;
+const RESET_IP_LIMIT = 8;
+const RESET_EMAIL_LIMIT = 3;
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000;
 const SESSION_TOUCH_INTERVAL_MS = 15 * 60 * 1000;
-const OWNER_BOOTSTRAP_CONTROL_ID = "owner-bootstrap";
-const OWNER_BOOTSTRAP_LEASE_MS = 10 * 60 * 1000;
 const LOGIN_FAILURE = "Email or password is incorrect.";
-const SIGNUP_FAILURE = "Owner account setup is unavailable.";
+const RESET_GENERIC_OK = "If an account exists for that email, a reset link is on its way.";
 const FAKE_PASSWORD_HASH = "scrypt$v=1$n=65536,r=8,p=2$b3BlbmJ1Y2tldC1mYWtlLXNhbHQtdjEh$_bN6H6xtF0oe903HJCwA8H1W3KHsbTmZcqWwmwimHOvgCGl3Ch0H9zFVua0drEwacEERDzosya2wiopfgGniog";
 
 export type UserRole = "admin" | "member";
 export type PublicUser = { id: string; email: string; name: string | null; handle: string; role: UserRole };
 
 const RESERVED_HANDLES = new Set(["admin", "api", "auth", "dashboard", "docs", "health", "login", "mail", "node", "nodes", "openbucket", "register", "s3", "status", "support", "usage", "www"]);
+const ENV_ADMIN_HANDLE = "admin";
 
 function handleStem(value: string): string {
   const normalized = value.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
@@ -61,26 +76,15 @@ export async function ensureUserHandle(user: UserDocument, collections: AuthColl
   throw new ApiError(503, "HANDLE_UNAVAILABLE", "Unable to assign an account handle. Try again.");
 }
 
-function publicUser(user: UserDocument, role: UserRole): PublicUser {
+function publicUser(user: UserDocument): PublicUser {
   if (!user.handle) throw new Error("User handle was not initialized.");
-  return { id: user._id.toHexString(), email: user.email, name: user.name, handle: user.handle, role };
+  // Admin is decided exclusively by OPENBUCKET_ADMIN_EMAIL/OPENBUCKET_ADMIN_PASSWORD (see publicAdminUser
+  // below) — any legacy `role: "admin"` left over on a database user document is never honored here.
+  return { id: user._id.toHexString(), email: user.email, name: user.name, handle: user.handle, role: "member" };
 }
 
-async function resolveUserRole(user: UserDocument, collections: AuthCollections): Promise<UserRole> {
-  if (user.role === "admin" || user.role === "member") return user.role;
-
-  const ownerControl = await collections.authControls.findOne({
-    _id: OWNER_BOOTSTRAP_CONTROL_ID,
-    status: "claimed",
-    userId: user._id,
-  });
-  const role: UserRole = ownerControl ? "admin" : "member";
-  await collections.users.updateOne(
-    { _id: user._id, role: { $exists: false } },
-    { $set: { role, updatedAt: new Date() } },
-  );
-  user.role = role;
-  return role;
+function publicAdminUser(email: string): PublicUser {
+  return { id: "env-admin", email, name: "Admin", handle: ENV_ADMIN_HANDLE, role: "admin" };
 }
 
 function normalizeEmail(value: unknown): string {
@@ -122,17 +126,6 @@ function validateName(value: unknown): string | null {
     throw new ApiError(400, "INVALID_NAME", "Name must contain 1-80 characters.");
   }
   return name;
-}
-
-function assertSignupToken(value: unknown, authSecret: Buffer, expected: Buffer | null): void {
-  const validShape = typeof value === "string" && Buffer.byteLength(value, "utf8") <= 1024;
-  const supplied = validShape ? value : "";
-  const matches = expected
-    ? secretMatches(authSecret, "owner-bootstrap-token", supplied, expected)
-    : false;
-  if (!validShape || !matches) {
-    throw new ApiError(403, "SIGNUP_UNAVAILABLE", SIGNUP_FAILURE);
-  }
 }
 
 function assertOnlyFields(body: Record<string, unknown>, allowed: readonly string[]): void {
@@ -183,12 +176,15 @@ async function applySignupRateLimits(request: Request, email: string): Promise<v
   await consumeRateLimit("signup-email", email, SIGNUP_EMAIL_LIMIT, SIGNUP_WINDOW_MS);
 }
 
+async function applyResetRateLimits(request: Request, email: string): Promise<void> {
+  await consumeRateLimit("reset-ip", requestIp(request), RESET_IP_LIMIT, RESET_WINDOW_MS);
+  await consumeRateLimit("reset-email", email, RESET_EMAIL_LIMIT, RESET_WINDOW_MS);
+}
+
 async function createSession(
-  request: Request, userId: ObjectId,
-  options: {
-    collections?: AuthCollections;
-    mongoSession?: ClientSession;
-  } = {},
+  request: Request,
+  userId: ObjectId | null,
+  options: { collections?: AuthCollections; isEnvAdmin?: boolean } = {},
 ): Promise<{ id: string; token: string; expiresAt: Date }> {
   const config = getAuthConfig();
   const { sessions } = options.collections ?? await getAuthCollections();
@@ -200,12 +196,13 @@ async function createSession(
   await sessions.insertOne({
     _id: id,
     userId,
+    isEnvAdmin: options.isEnvAdmin || undefined,
     createdAt: now,
     lastSeenAt: now,
     expiresAt,
     ipHash: keyedHash(config.authSecret, "session-ip", requestIp(request)),
     userAgentHash: keyedHash(config.authSecret, "session-agent", userAgent),
-  }, options.mongoSession ? { session: options.mongoSession } : undefined);
+  });
   return { id, token, expiresAt };
 }
 
@@ -219,6 +216,19 @@ export async function authenticateRequest(request: Request): Promise<PublicUser 
   const now = new Date();
   const session = await sessions.findOne({ _id: id, expiresAt: { $gt: now } });
   if (!session) return null;
+
+  if (session.isEnvAdmin) {
+    if (!config.adminEmail) {
+      await sessions.deleteOne({ _id: id });
+      return null;
+    }
+    if (now.getTime() - session.lastSeenAt.getTime() >= SESSION_TOUCH_INTERVAL_MS) {
+      await sessions.updateOne({ _id: id, expiresAt: { $gt: now } }, { $set: { lastSeenAt: now } });
+    }
+    return publicAdminUser(config.adminEmail);
+  }
+
+  if (!session.userId) return null;
   const user = await users.findOne({ _id: session.userId, status: "active" });
   if (!user) {
     await sessions.deleteOne({ _id: id });
@@ -228,23 +238,24 @@ export async function authenticateRequest(request: Request): Promise<PublicUser 
     await sessions.updateOne({ _id: id, expiresAt: { $gt: now } }, { $set: { lastSeenAt: now } });
   }
   const migrated = await ensureUserHandle(user, collections);
-  const role = await resolveUserRole(migrated, collections);
-  return publicUser(migrated, role);
+  return publicUser(migrated);
 }
 
 function signupUnavailable(): ApiError {
-  return new ApiError(403, "SIGNUP_UNAVAILABLE", SIGNUP_FAILURE);
+  return new ApiError(403, "SIGNUP_UNAVAILABLE", "Account creation is currently unavailable.");
 }
 
 export async function handleRegister(request: Request): Promise<Response> {
   try {
     assertSameOriginPost(request);
     const config = getAuthConfig();
-    if (!config.allowSignup || !config.signupToken) throw signupUnavailable();
+    if (!config.allowSignup) throw signupUnavailable();
     const body = await readJsonObject(request);
-    assertOnlyFields(body, ["email", "password", "name", "signupToken"]);
-    assertSignupToken(body.signupToken, config.authSecret, config.signupToken);
+    assertOnlyFields(body, ["email", "password", "name"]);
     const email = normalizeEmail(body.email);
+    if (config.adminEmail && email === config.adminEmail) {
+      throw new ApiError(409, "EMAIL_IN_USE", "An account with that email already exists.");
+    }
     const password = validatePassword(body.password);
     const name = validateName(body.name);
     await applySignupRateLimits(request, email);
@@ -257,88 +268,21 @@ export async function handleRegister(request: Request): Promise<Response> {
       name,
       handle: handleStem(name || email.split("@")[0] || "user"),
       passwordHash,
-      role: "admin",
       status: "active",
       createdAt: now,
       updatedAt: now,
     };
-    const collections = await getAuthCollections();
-    const { client } = await getAuthDatabaseContext();
-    const mongoSession = client.startSession();
-    let created = false;
-    let createdSession: Awaited<ReturnType<typeof createSession>> | undefined;
+    const { users } = await getAuthCollections();
     try {
-      await mongoSession.withTransaction(async () => {
-        created = false;
-        createdSession = undefined;
-        const leaseCutoff = new Date(Date.now() - OWNER_BOOTSTRAP_LEASE_MS);
-        const control = await collections.authControls.findOne(
-          { _id: OWNER_BOOTSTRAP_CONTROL_ID },
-          { session: mongoSession },
-        );
-        let existing = await collections.users.findOne(
-          {},
-          { session: mongoSession, sort: { createdAt: 1 }, projection: { _id: 1 } },
-        );
-
-        if (control?.status === "claimed") return;
-        if (control?.status === "claiming") {
-          if (control.createdAt > leaseCutoff) return;
-          if (existing) {
-            await collections.authControls.updateOne(
-              { _id: OWNER_BOOTSTRAP_CONTROL_ID, status: "claiming", createdAt: control.createdAt },
-              {
-                $set: { status: "claimed", claimedAt: new Date(), userId: existing._id },
-                $unset: { claimId: "" },
-              },
-              { session: mongoSession },
-            );
-            return;
-          }
-          await collections.authControls.deleteOne(
-            { _id: OWNER_BOOTSTRAP_CONTROL_ID, status: "claiming", createdAt: control.createdAt },
-            { session: mongoSession },
-          );
-          existing = null;
-        }
-
-        if (existing) {
-          await collections.authControls.updateOne(
-            { _id: OWNER_BOOTSTRAP_CONTROL_ID },
-            {
-              $setOnInsert: {
-                status: "claimed",
-                createdAt: new Date(),
-                claimedAt: new Date(),
-                userId: existing._id,
-              },
-            },
-            { upsert: true, session: mongoSession },
-          );
-          return;
-        }
-
-        await collections.authControls.insertOne({
-          _id: OWNER_BOOTSTRAP_CONTROL_ID,
-          status: "claimed",
-          createdAt: now,
-          claimedAt: now,
-          userId: user._id,
-        }, { session: mongoSession });
-        await collections.users.insertOne(user, { session: mongoSession });
-        createdSession = await createSession(request, user._id, { collections, mongoSession });
-        created = true;
-      }, {
-        readConcern: { level: "snapshot" },
-        writeConcern: { w: "majority" },
-        readPreference: "primary",
-      });
-    } finally {
-      await mongoSession.endSession();
+      await users.insertOne(user);
+    } catch (error) {
+      if ((error as { code?: number }).code === 11000) {
+        throw new ApiError(409, "EMAIL_IN_USE", "An account with that email already exists.");
+      }
+      throw error;
     }
-    if (!created || !createdSession) throw signupUnavailable();
-    const session = createdSession;
-    const response = jsonResponse({ user: publicUser(user, "admin") }, 201);
+    const session = await createSession(request, user._id);
+    const response = jsonResponse({ user: publicUser(user) }, 201);
     response.headers.append("Set-Cookie", sessionCookie(request, session.token, config.sessionTtlSeconds));
     return response;
   } catch (error) {
@@ -354,6 +298,19 @@ export async function handleLogin(request: Request): Promise<Response> {
     const email = normalizeEmail(body.email);
     const password = validatePassword(body.password);
     await applyLoginRateLimits(request, email);
+    const config = getAuthConfig();
+
+    if (config.adminEmail && config.adminPassword) {
+      const emailMatches = email === config.adminEmail;
+      const passwordMatches = secretMatches(config.authSecret, "admin-password", password, config.adminPassword);
+      if (emailMatches && passwordMatches) {
+        const session = await createSession(request, null, { isEnvAdmin: true });
+        const response = jsonResponse({ user: publicAdminUser(config.adminEmail) });
+        response.headers.append("Set-Cookie", sessionCookie(request, session.token, config.sessionTtlSeconds));
+        return response;
+      }
+    }
+
     const collections = await getAuthCollections();
     const { users } = collections;
     const user = await users.findOne({ emailNormalized: email });
@@ -362,11 +319,9 @@ export async function handleLogin(request: Request): Promise<Response> {
     if (!user || !matches || user.status !== "active") {
       throw new ApiError(401, "INVALID_CREDENTIALS", LOGIN_FAILURE);
     }
-    const config = getAuthConfig();
-    const session = await createSession(request, user._id);
+    const session = await createSession(request, user._id, { collections });
     const migrated = await ensureUserHandle(user, collections);
-    const role = await resolveUserRole(migrated, collections);
-    const response = jsonResponse({ user: publicUser(migrated, role) });
+    const response = jsonResponse({ user: publicUser(migrated) });
     response.headers.append("Set-Cookie", sessionCookie(request, session.token, config.sessionTtlSeconds));
     return response;
   } catch (error) {
@@ -408,5 +363,165 @@ export async function handleHealth(request: Request): Promise<Response> {
     return jsonResponse({ ok: true, service: "openbucket-web" });
   } catch (error) {
     return errorResponse(error);
+  }
+}
+
+export async function handleForgotPassword(request: Request): Promise<Response> {
+  try {
+    assertSameOriginPost(request);
+    const body = await readJsonObject(request);
+    assertOnlyFields(body, ["email"]);
+    const email = normalizeEmail(body.email);
+    await applyResetRateLimits(request, email);
+
+    const config = getAuthConfig();
+    // Never issue a reset link for the env-admin address: it has no password reset flow, credentials
+    // live only in OPENBUCKET_ADMIN_PASSWORD. Still returns the generic OK response below either way.
+    if (!config.adminEmail || email !== config.adminEmail) {
+      const collections = await getAuthCollections();
+      const user = await collections.users.findOne({ emailNormalized: email, status: "active" });
+      if (user && user.passwordHash) {
+        const token = createOpaqueToken();
+        const now = new Date();
+        await collections.passwordResets.insertOne({
+          _id: keyedHash(config.authSecret, "password-reset", token),
+          userId: user._id,
+          createdAt: now,
+          expiresAt: new Date(now.getTime() + RESET_TOKEN_TTL_MS),
+        });
+        const resetUrl = new URL("/reset-password", new URL(request.url).origin);
+        resetUrl.searchParams.set("token", token);
+        await sendPasswordResetEmail(user.email, resetUrl.toString());
+      }
+    }
+    return jsonResponse({ ok: true, message: RESET_GENERIC_OK });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function handleResetPassword(request: Request): Promise<Response> {
+  try {
+    assertSameOriginPost(request);
+    const body = await readJsonObject(request);
+    assertOnlyFields(body, ["token", "password"]);
+    if (typeof body.token !== "string" || body.token.length < 16 || body.token.length > 512) {
+      throw new ApiError(400, "INVALID_TOKEN", "This reset link is invalid or has expired.");
+    }
+    const password = validatePassword(body.password);
+    const config = getAuthConfig();
+    const collections = await getAuthCollections();
+    const resetId = keyedHash(config.authSecret, "password-reset", body.token);
+    const reset = await collections.passwordResets.findOne({ _id: resetId, expiresAt: { $gt: new Date() } });
+    if (!reset) throw new ApiError(400, "INVALID_TOKEN", "This reset link is invalid or has expired.");
+
+    const passwordHash = await hashPassword(password);
+    await collections.users.updateOne(
+      { _id: reset.userId },
+      { $set: { passwordHash, updatedAt: new Date() } },
+    );
+    await collections.passwordResets.deleteOne({ _id: resetId });
+    // A password reset is a credible signal of account compromise recovery — kill every other
+    // session for this user so a leaked cookie doesn't survive the reset.
+    await collections.sessions.deleteMany({ userId: reset.userId });
+    return jsonResponse({ ok: true });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+function googleRedirectUri(request: Request): string {
+  return new URL("/api/auth/google/callback", new URL(request.url).origin).toString();
+}
+
+export async function handleGoogleStart(request: Request): Promise<Response> {
+  try {
+    assertMethod(request, "GET");
+    if (!isGoogleSignInConfigured()) throw new ApiError(503, "GOOGLE_SIGNIN_UNAVAILABLE", "Google sign-in is not configured.");
+    const config = getAuthConfig();
+    const url = new URL(request.url);
+    const next = url.searchParams.get("next");
+    const { verifier, challenge } = createPkcePair();
+    const state = createOpaqueToken();
+    const cookieValue = encodeOAuthState(config.authSecret, { state, verifier, next: next ?? "/dashboard" });
+    const authorizationUrl = buildGoogleAuthorizationUrl({ redirectUri: googleRedirectUri(request), state, codeChallenge: challenge });
+    const secure = new URL(request.url).protocol === "https:";
+    return new Response(null, {
+      status: 302,
+      headers: { Location: authorizationUrl, "Set-Cookie": oAuthStateCookie(secure, cookieValue) },
+    });
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function handleGoogleCallback(request: Request): Promise<Response> {
+  const requestUrl = new URL(request.url);
+  const secure = requestUrl.protocol === "https:";
+  const loginError = (code: string) => {
+    const redirect = new URL("/login", requestUrl.origin);
+    redirect.searchParams.set("error", code);
+    return new Response(null, {
+      status: 302,
+      headers: { Location: redirect.toString(), "Set-Cookie": clearedOAuthStateCookie(secure) },
+    });
+  };
+
+  try {
+    assertMethod(request, "GET");
+    if (!isGoogleSignInConfigured()) throw new ApiError(503, "GOOGLE_SIGNIN_UNAVAILABLE", "Google sign-in is not configured.");
+    const config = getAuthConfig();
+    const code = requestUrl.searchParams.get("code");
+    const state = requestUrl.searchParams.get("state");
+    const cookieValue = readOAuthStateCookie(request);
+    if (!code || !state || !cookieValue) return loginError("google_state_missing");
+    const stored = decodeOAuthState(config.authSecret, cookieValue);
+    if (!stored || stored.state !== state) return loginError("google_state_mismatch");
+
+    const identity = await exchangeGoogleCode({ code, redirectUri: googleRedirectUri(request), codeVerifier: stored.verifier });
+    if (config.adminEmail && identity.email === config.adminEmail) return loginError("google_reserved_email");
+
+    const collections = await getAuthCollections();
+    let user = await collections.users.findOne({ googleId: identity.subject });
+    if (!user) {
+      // Google verified this email address, so linking it to a matching existing password
+      // account is safe — it's the same standard "sign in with Google" linking behavior used
+      // by most apps that support both password and OAuth login on the same address.
+      user = await collections.users.findOne({ emailNormalized: identity.email });
+      if (user) {
+        await collections.users.updateOne({ _id: user._id }, { $set: { googleId: identity.subject, updatedAt: new Date() } });
+      } else {
+        const now = new Date();
+        const created: UserDocument = {
+          _id: new ObjectId(),
+          email: identity.email,
+          emailNormalized: identity.email,
+          name: identity.name,
+          handle: handleStem(identity.name || identity.email.split("@")[0] || "user"),
+          googleId: identity.subject,
+          status: "active",
+          createdAt: now,
+          updatedAt: now,
+        };
+        await collections.users.insertOne(created);
+        user = created;
+      }
+    }
+    if (user.status !== "active") return loginError("google_account_disabled");
+
+    const migrated = await ensureUserHandle(user, collections);
+    const session = await createSession(request, migrated._id, { collections });
+    const redirect = new URL(stored.next, requestUrl.origin);
+    const response = new Response(null, {
+      status: 302,
+      headers: {
+        Location: redirect.toString(),
+        "Set-Cookie": clearedOAuthStateCookie(secure),
+      },
+    });
+    response.headers.append("Set-Cookie", sessionCookie(request, session.token, config.sessionTtlSeconds));
+    return response;
+  } catch {
+    return loginError("google_signin_failed");
   }
 }

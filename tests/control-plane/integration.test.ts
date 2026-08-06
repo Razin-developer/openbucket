@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, before, describe, test } from "node:test";
 import { ObjectId } from "mongodb";
 import { closeAuthDatabaseForTests, getAuthCollections } from "../../server/auth/database";
-import { handleRegister } from "../../server/auth/service";
+import { handleLogin, handleRegister } from "../../server/auth/service";
 import { getControlPlaneCollections, resetControlPlaneIndexesForTests } from "../../server/control-plane/database";
 import {
   handleAdminOverview,
@@ -18,14 +18,16 @@ const requireMongo = process.env.OPENBUCKET_REQUIRE_MONGODB_TEST?.trim().toLower
 if (requireMongo && !testUri) throw new Error("MONGODB_TEST_URI is required for the MongoDB acceptance job.");
 
 const origin = "https://openbucket-control.test";
-const signupToken = "control-plane-owner-bootstrap-token-more-than-thirty-two-bytes";
+const adminEmail = "control-admin@example.com";
+const adminPassword = "control-plane-env-admin-password-value";
 const database = "openbucket_control_test_" + process.pid + "_" + Date.now();
 const originalEnvironment = {
   MONGODB_URI: process.env.MONGODB_URI,
   MONGODB_DATABASE: process.env.MONGODB_DATABASE,
   OPENBUCKET_AUTH_SECRET: process.env.OPENBUCKET_AUTH_SECRET,
-  OPENBUCKET_SIGNUP_TOKEN: process.env.OPENBUCKET_SIGNUP_TOKEN,
   OPENBUCKET_ALLOW_SIGNUP: process.env.OPENBUCKET_ALLOW_SIGNUP,
+  OPENBUCKET_ADMIN_EMAIL: process.env.OPENBUCKET_ADMIN_EMAIL,
+  OPENBUCKET_ADMIN_PASSWORD: process.env.OPENBUCKET_ADMIN_PASSWORD,
   OPENBUCKET_NODE_DOMAIN: process.env.OPENBUCKET_NODE_DOMAIN,
 };
 
@@ -108,8 +110,9 @@ describe("MongoDB-backed control plane", { skip: !testUri }, () => {
     process.env.MONGODB_URI = testUri;
     process.env.MONGODB_DATABASE = database;
     process.env.OPENBUCKET_AUTH_SECRET = "control-plane-auth-secret-with-more-than-thirty-two-bytes";
-    process.env.OPENBUCKET_SIGNUP_TOKEN = signupToken;
     process.env.OPENBUCKET_ALLOW_SIGNUP = "true";
+    process.env.OPENBUCKET_ADMIN_EMAIL = adminEmail;
+    process.env.OPENBUCKET_ADMIN_PASSWORD = adminPassword;
     process.env.OPENBUCKET_NODE_DOMAIN = "openbucket.dev";
     await closeAuthDatabaseForTests();
     resetControlPlaneIndexesForTests();
@@ -122,7 +125,6 @@ describe("MongoDB-backed control plane", { skip: !testUri }, () => {
       auth.users.drop(),
       auth.sessions.drop(),
       auth.rateLimits.drop(),
-      auth.authControls.drop(),
       control.nodes.drop(),
       control.usageEvents.drop(),
       control.rateLimits.drop(),
@@ -140,11 +142,10 @@ describe("MongoDB-backed control plane", { skip: !testUri }, () => {
       email: "control-owner@example.com",
       password: "correct horse battery staple",
       name: "Control Owner",
-      signupToken,
     }));
     assert.equal(registered.status, 201);
     const registeredPayload = await registered.json() as { user: { id: string; role: string } };
-    assert.equal(registeredPayload.user.role, "admin");
+    assert.equal(registeredPayload.user.role, "member");
     const cookie = cookiePair(registered);
 
     const created = await handleCreateNode(sessionRequest("/api/nodes", "POST", { name: "Office-Control" }, cookie));
@@ -296,7 +297,20 @@ describe("MongoDB-backed control plane", { skip: !testUri }, () => {
     const privateDiscovery = await handleResolveNode(sessionRequest("/api/nodes/resolve?name=office-control", "GET"));
     assert.equal(privateDiscovery.status, 404);
 
-    const adminOverview = await handleAdminOverview(sessionRequest("/api/admin/overview", "GET", undefined, cookie));
+    const denied = await handleAdminOverview(sessionRequest("/api/admin/overview", "GET", undefined, cookie));
+    assert.equal(denied.status, 403);
+    assert.equal((await denied.json() as { error: { code: string } }).error.code, "ADMIN_REQUIRED");
+
+    const adminLogin = await handleLogin(sessionRequest("/api/auth/login", "POST", {
+      email: adminEmail,
+      password: adminPassword,
+    }, undefined, "192.0.2.70"));
+    assert.equal(adminLogin.status, 200);
+    const adminLoginPayload = await adminLogin.json() as { user: { role: string; id: string } };
+    assert.equal(adminLoginPayload.user.role, "admin");
+    const adminCookie = cookiePair(adminLogin);
+
+    const adminOverview = await handleAdminOverview(sessionRequest("/api/admin/overview", "GET", undefined, adminCookie));
     assert.equal(adminOverview.status, 200);
     const overviewPayload = await adminOverview.json() as {
       users: { total: number };
@@ -306,11 +320,5 @@ describe("MongoDB-backed control plane", { skip: !testUri }, () => {
     assert.equal(overviewPayload.users.total, 1);
     assert.equal(overviewPayload.nodes.total, 1);
     assert.equal(overviewPayload.usage.requests, 15);
-
-    const { users } = await getAuthCollections();
-    await users.updateOne({ _id: new ObjectId(registeredPayload.user.id) }, { $set: { role: "member" } });
-    const denied = await handleAdminOverview(sessionRequest("/api/admin/overview", "GET", undefined, cookie));
-    assert.equal(denied.status, 403);
-    assert.equal((await denied.json() as { error: { code: string } }).error.code, "ADMIN_REQUIRED");
   });
 });

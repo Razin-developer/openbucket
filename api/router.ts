@@ -1,8 +1,12 @@
 import {
+  handleForgotPassword,
+  handleGoogleCallback,
+  handleGoogleStart,
   handleHealth,
   handleLogin,
   handleLogout,
   handleRegister,
+  handleResetPassword,
   handleSession,
 } from "../server/auth/service.js";
 import { jsonResponse } from "../server/auth/http.js";
@@ -25,9 +29,13 @@ const apiMethods = ["GET", "POST", "PATCH", "DELETE"] as const;
 type ApiMethod = (typeof apiMethods)[number];
 type ApiRouteId =
   | "admin-overview"
+  | "auth-forgot-password"
+  | "auth-google-callback"
+  | "auth-google-start"
   | "auth-login"
   | "auth-logout"
   | "auth-register"
+  | "auth-reset-password"
   | "auth-session"
   | "health"
   | "node"
@@ -49,9 +57,13 @@ type RouteHandlers = Partial<Record<ApiMethod, ApiHandler>>;
 
 const exactRoutes = new Map<string, ApiRouteId>([
   ["/api/admin/overview", "admin-overview"],
+  ["/api/auth/forgot-password", "auth-forgot-password"],
+  ["/api/auth/google/callback", "auth-google-callback"],
+  ["/api/auth/google/start", "auth-google-start"],
   ["/api/auth/login", "auth-login"],
   ["/api/auth/logout", "auth-logout"],
   ["/api/auth/register", "auth-register"],
+  ["/api/auth/reset-password", "auth-reset-password"],
   ["/api/auth/session", "auth-session"],
   ["/api/health", "health"],
   ["/api/node/heartbeat", "node-heartbeat"],
@@ -62,9 +74,13 @@ const exactRoutes = new Map<string, ApiRouteId>([
 
 const routeHandlers: Record<ApiRouteId, RouteHandlers> = {
   "admin-overview": { GET: (request) => handleAdminOverview(request) },
+  "auth-forgot-password": { POST: (request) => handleForgotPassword(request) },
+  "auth-google-callback": { GET: (request) => handleGoogleCallback(request) },
+  "auth-google-start": { GET: (request) => handleGoogleStart(request) },
   "auth-login": { POST: (request) => handleLogin(request) },
   "auth-logout": { POST: (request) => handleLogout(request) },
   "auth-register": { POST: (request) => handleRegister(request) },
+  "auth-reset-password": { POST: (request) => handleResetPassword(request) },
   "auth-session": { GET: (request) => handleSession(request) },
   health: { GET: (request) => handleHealth(request) },
   node: {

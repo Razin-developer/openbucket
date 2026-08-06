@@ -267,6 +267,20 @@ export class DiskStore {
   get createdAt(): string { return this.state.createdAt; }
   get shareSecret(): string { return this.state.shareSecret; }
 
+  async setNodeName(name: string): Promise<string> {
+    return this.serial(async () => {
+      const previous = this.state.nodeName;
+      this.state.nodeName = name;
+      try {
+        await this.save();
+      } catch (error) {
+        this.state.nodeName = previous;
+        throw error;
+      }
+      return this.state.nodeName;
+    });
+  }
+
   private async acquireLock(): Promise<void> {
     const nonce = randomBytes(18).toString("base64url");
     const payload = { pid: process.pid, hostname: hostname(), processInstanceId: PROCESS_INSTANCE_ID, createdAt: new Date().toISOString(), nonce };

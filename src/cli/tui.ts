@@ -3,6 +3,18 @@ import { Box, Text, render, useApp, useInput, useStdout } from "ink";
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
+import {
+  AuthenticatedControlPlane,
+  findNodeCredential,
+  loginHostedAccount,
+  readHostedSession,
+  removeHostedSession,
+  resolveControlPlaneUrl,
+  writeHostedSession,
+  writeNodeCredential,
+  type AuthFetch,
+  type HostedSession,
+} from "./auth-session.js";
 
 const h = React.createElement;
 
@@ -45,6 +57,8 @@ export interface TuiApi {
   version: string;
   home: string;
   env: Record<string, string | undefined>;
+  homedir: string;
+  fetch: AuthFetch;
 }
 
 interface StatusPayload {
@@ -150,10 +164,12 @@ function HomeScreen({ status, onNavigate }: { status: StatusPayload | null; onNa
         { label: "Logs", screen: { kind: "logs" }, hint: "Tail recent requests" },
         { label: "Tunnel", screen: { kind: "tunnel" }, hint: "S3 and management tunnel state" },
         { label: "Server", screen: { kind: "server" }, hint: "Status, start, stop" },
+        { label: "Account", screen: { kind: "account" }, hint: "Hosted dashboard sign-in" },
         { label: "Config & environment", screen: { kind: "config" }, hint: "Effective endpoints and variables" },
       ]
     : [
         { label: "Start a node", screen: { kind: "server", autoStart: true }, hint: "Pick a folder and serve it — no daemon running yet" },
+        { label: "Account", screen: { kind: "account" }, hint: "Hosted dashboard sign-in" },
         { label: "Config & environment", screen: { kind: "config" }, hint: "Effective endpoints and variables" },
       ];
   const [selected, setSelected] = useState(0);
@@ -589,18 +605,52 @@ function TunnelScreen({ status, onBack }: { status: StatusPayload | null; onBack
   );
 }
 
+function isValidNodeName(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length >= 3 && normalized.length <= 48 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/.test(normalized) && !normalized.includes("--");
+}
+
 function ServerScreen({ api, status, autoStart, onBack, onExitWithCommand }: { api: TuiApi; status: StatusPayload | null; autoStart?: boolean; onBack: () => void; onExitWithCommand: (command: string) => void }) {
-  const [mode, setMode] = useState<"idle" | "start-form" | "stopping">(autoStart && !status ? "start-form" : "idle");
+  const [mode, setMode] = useState<"idle" | "start-form" | "stopping" | "rename">(autoStart && !status ? "start-form" : "idle");
   const [directory, setDirectory] = useState("");
   const [name, setName] = useState("home-node");
   const [field, setField] = useState<0 | 1>(0);
   const [message, setMessage] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+
+  const submitRename = () => {
+    const trimmed = renameValue.trim().toLowerCase();
+    if (!isValidNodeName(trimmed)) { setRenameError("Node name must be a DNS-safe label with 3-48 characters."); return; }
+    const oldName = status?.node?.name;
+    setRenaming(true);
+    setRenameError(null);
+    api.request<{ nodeId: string; nodeName: string }>("/v1/node", { method: "PATCH", body: JSON.stringify({ name: trimmed }) })
+      .then(async () => {
+        try {
+          const session = await readHostedSession(api.env, api.homedir);
+          const credential = session && oldName ? await findNodeCredential(session.controlPlaneUrl, oldName, api.env, api.homedir) : undefined;
+          if (session && credential) {
+            await new AuthenticatedControlPlane(session, api.fetch).request(`/api/nodes/${credential.nodeId}`, { method: "PATCH", body: JSON.stringify({ name: trimmed }) });
+            await writeNodeCredential({ ...credential, nodeName: trimmed }, api.env, api.homedir);
+          }
+        } catch {
+          // Local rename already succeeded; the hosted control plane can be synced later via the CLI.
+        }
+        setMode("idle");
+        setMessage(`Renamed to "${trimmed}".`);
+      })
+      .catch((err: unknown) => setRenameError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setRenaming(false));
+  };
 
   useInput((input, key) => {
     if (mode === "idle") {
       if (key.escape) { onBack(); return; }
       if (input === "s" && status) { setMode("stopping"); void api.request("/v1/stop", { method: "POST", body: "{}" }).then(() => setMessage("Stop requested.")).catch((err: unknown) => setMessage(err instanceof Error ? err.message : String(err))).finally(() => setMode("idle")); }
       if (input === "n" && !status) { setMode("start-form"); setDirectory(""); setField(0); }
+      if (input === "r" && status) { setMode("rename"); setRenameValue(status.node?.name ?? ""); setRenameError(null); }
       return;
     }
     if (mode === "start-form") {
@@ -610,8 +660,27 @@ function ServerScreen({ api, status, autoStart, onBack, onExitWithCommand }: { a
         if (!directory.trim()) { setMessage("Storage directory is required."); return; }
         onExitWithCommand(`openbucket serve ${directory.trim()} --name ${name.trim() || "home-node"} --detach --no-open`);
       }
+      return;
+    }
+    if (mode === "rename") {
+      if (renaming) return;
+      if (key.escape) { setMode("idle"); return; }
+      if (key.return) submitRename();
     }
   });
+
+  if (mode === "rename") {
+    return h(
+      Box,
+      { flexDirection: "column", borderStyle: "round", borderColor: "cyan", paddingX: 1 },
+      h(Text, { bold: true }, "Rename node"),
+      h(TextField, { label: "New name", value: renameValue, onChange: setRenameValue }),
+      renameError ? h(Text, { color: "red" }, renameError) : null,
+      renaming ? h(Text, { dimColor: true }, "Renaming…") : null,
+      h(Box, { marginTop: 1 }, h(Text, { dimColor: true }, "Also updates the hosted control plane if this node is signed in and connected.")),
+      h(StatusBar, { text: "enter rename   esc cancel" }),
+    );
+  }
 
   if (mode === "start-form") {
     return h(
@@ -623,18 +692,31 @@ function ServerScreen({ api, status, autoStart, onBack, onExitWithCommand }: { a
         : h(Text, { dimColor: true }, `Directory: ${directory}`),
       field === 1 ? h(TextField, { label: "Node name", value: name, onChange: setName }) : h(Text, { dimColor: true }, `Name: ${name}`),
       h(Box, { marginTop: 1 }, h(Text, { dimColor: true }, "This exits the console and runs the equivalent serve command.")),
-      h(StatusBar, { text: "tab switch field · tab in directory browses folders   enter start   esc cancel" }),
+      h(StatusBar, { text: "↑↓ switch field · tab in directory browses folders   enter start   esc cancel" }),
     );
   }
+  const endpoints = status?.endpoints ?? {};
   return h(
     Box,
     { flexDirection: "column" },
     h(Text, { bold: true }, "Server"),
     status
-      ? h(Box, { flexDirection: "column", marginTop: 1 }, h(Text, { color: "green" }, "● Running"), h(Text, { dimColor: true }, `Uptime ${humanDuration(status.node?.uptimeSeconds)}`))
+      ? h(
+          Box,
+          { flexDirection: "column", marginTop: 1 },
+          h(Text, { color: "green" }, "● Running"),
+          h(Text, { dimColor: true }, `Node ${status.node?.name ?? status.node?.id ?? "—"}  ·  up ${humanDuration(status.node?.uptimeSeconds)}`),
+          h(Box, { flexDirection: "column", marginTop: 1 },
+            h(Text, null, `Local management  ${endpoints.management ?? "—"}`),
+            h(Text, null, `Local S3          ${endpoints.s3 ?? "—"}`),
+            h(Text, null, `Local dashboard   ${endpoints.dashboard ?? "—"}`),
+            h(Text, null, `Public S3         ${endpoints.public ?? "not exposed"}`),
+          ),
+          h(Box, { marginTop: 1 }, h(Text, { dimColor: true }, "Access keys and the management token are not shown here — run \"openbucket key list\" or open the dashboard's Keys view.")),
+        )
       : h(Text, { color: "yellow" }, "○ Not running"),
     message ? h(Text, { color: "yellow" }, message) : null,
-    h(StatusBar, { text: status ? "s stop   esc back" : "n start a node   esc back" }),
+    h(StatusBar, { text: status ? "r rename   s stop   esc back" : "n start a node   esc back" }),
   );
 }
 
@@ -659,6 +741,113 @@ function ConfigScreen({ api, onBack }: { api: TuiApi; onBack: () => void }) {
   );
 }
 
+type AccountState =
+  | { kind: "loading" }
+  | { kind: "signed-out" }
+  | { kind: "signed-in"; session: HostedSession }
+  | { kind: "error"; message: string };
+
+function AccountScreen({ api, onBack }: { api: TuiApi; onBack: () => void }) {
+  const [state, setState] = useState<AccountState>({ kind: "loading" });
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [field, setField] = useState<0 | 1>(0);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      const saved = await readHostedSession(api.env, api.homedir);
+      if (!saved) { setState({ kind: "signed-out" }); return; }
+      const result = await new AuthenticatedControlPlane(saved, api.fetch).getCurrentUser();
+      setState({ kind: "signed-in", session: { ...saved, user: result.user } });
+    } catch {
+      setState({ kind: "signed-out" });
+    }
+  };
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, not a synchronous setState
+  useEffect(() => { void load(); }, []);
+
+  const submit = () => {
+    if (!email.trim() || !password) { setFormError("Email and password are required."); return; }
+    setBusy(true);
+    setFormError(null);
+    loginHostedAccount({ fetch: api.fetch, email: email.trim(), password, controlPlaneUrl: resolveControlPlaneUrl(api.env) })
+      .then(async (session) => {
+        await writeHostedSession(session, api.env, api.homedir);
+        setPassword("");
+        setState({ kind: "signed-in", session });
+        setBusy(false);
+      })
+      .catch((err: unknown) => {
+        setFormError(errorMessage(err));
+        setBusy(false);
+      });
+  };
+
+  const logout = () => {
+    if (state.kind !== "signed-in") return;
+    setBusy(true);
+    new AuthenticatedControlPlane(state.session, api.fetch)
+      .logout()
+      .catch(() => undefined)
+      .finally(() => {
+        void removeHostedSession(api.env, api.homedir).finally(() => {
+          setBusy(false);
+          setState({ kind: "signed-out" });
+        });
+      });
+  };
+
+  useInput((input, key) => {
+    if (busy) return;
+    if (key.escape) { onBack(); return; }
+    if (state.kind === "signed-in") {
+      if (input === "l") logout();
+      return;
+    }
+    if (state.kind === "signed-out" || state.kind === "error") {
+      if (key.upArrow || key.downArrow) { setField((f) => (f === 0 ? 1 : 0)); return; }
+      if (key.return) submit();
+    }
+  });
+
+  if (state.kind === "loading") {
+    return h(Box, { flexDirection: "column" }, h(Text, { bold: true }, "Account"), h(Text, { dimColor: true }, "Checking saved session…"));
+  }
+  if (state.kind === "signed-in") {
+    const { user, controlPlaneUrl } = state.session;
+    return h(
+      Box,
+      { flexDirection: "column" },
+      h(Text, { bold: true }, "Account"),
+      h(Box, { flexDirection: "column", borderStyle: "round", borderColor: "green", paddingX: 1, marginTop: 1 },
+        h(Text, { color: "green" }, `✓ Signed in as ${user.name || user.email}`),
+        h(Text, { dimColor: true }, user.email),
+        h(Text, { dimColor: true }, controlPlaneUrl),
+      ),
+      h(StatusBar, { text: `${busy ? "signing out…   " : ""}l log out   esc back` }),
+    );
+  }
+  return h(
+    Box,
+    { flexDirection: "column" },
+    h(Text, { bold: true }, "Account"),
+    h(Text, { dimColor: true }, "Sign in to the hosted dashboard from here."),
+    h(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyan", paddingX: 1, marginTop: 1 },
+      field === 0
+        ? h(TextField, { label: "Email", value: email, onChange: setEmail })
+        : h(Text, { dimColor: true }, `Email: ${email}`),
+      field === 1
+        ? h(TextField, { label: "Password", value: password, onChange: setPassword, mask: true })
+        : h(Text, { dimColor: true }, `Password: ${"•".repeat(password.length)}`),
+      formError ? h(Text, { color: "red" }, formError) : null,
+      busy ? h(Text, { dimColor: true }, "Signing in…") : null,
+    ),
+    h(StatusBar, { text: "↑↓ switch field   enter sign in   esc back" }),
+  );
+}
+
 // ---- App shell -------------------------------------------------------
 
 type Screen =
@@ -669,6 +858,7 @@ type Screen =
   | { kind: "logs" }
   | { kind: "tunnel" }
   | { kind: "server"; autoStart?: boolean }
+  | { kind: "account" }
   | { kind: "config" };
 
 function App({ api, onExitWithCommand }: { api: TuiApi; onExitWithCommand: (command: string | null) => void }) {
@@ -728,6 +918,8 @@ function App({ api, onExitWithCommand }: { api: TuiApi; onExitWithCommand: (comm
         return h(TunnelScreen, { status, onBack: pop });
       case "server":
         return h(ServerScreen, { api, status, autoStart: current.autoStart, onBack: pop, onExitWithCommand: exitWithCommand });
+      case "account":
+        return h(AccountScreen, { api, onBack: pop });
       case "config":
         return h(ConfigScreen, { api, onBack: pop });
       default:
