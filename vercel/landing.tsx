@@ -1,10 +1,10 @@
-/* eslint-disable @next/next/no-img-element, @next/next/no-html-link-for-pages */
+/* eslint-disable @next/next/no-img-element */
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight, Boxes, Check, Copy, Database, FileKey2, Gauge,
   HardDrive, KeyRound, Lock, Server, ShieldCheck, Terminal, Workflow,
 } from "lucide-react";
-import { SiteHeader, githubUrl } from "./site-shell";
+import { SiteFooter, SiteHeader, githubUrl } from "./site-shell";
 
 function useParallax<T extends HTMLElement>(factor = 0.25) {
   const ref = useRef<T | null>(null);
@@ -275,39 +275,7 @@ export function LandingPage() {
         </div>
       </div>
 
-      <footer className="fs-footer">
-        <div className="fs-footer-top">
-          <div>
-            <a className="site-brand" href="/" aria-label="OpenBucket home">
-              <svg className="site-brand-mark" width={27} height={27} viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="#171717" /><path d="M8 10.5h16l-1.6 12.2a3 3 0 0 1-3 2.6h-6.8a3 3 0 0 1-3-2.6L8 10.5Z" fill="#fff" /><path d="M7 8.5A1.5 1.5 0 0 1 8.5 7h15a1.5 1.5 0 0 1 0 3h-15A1.5 1.5 0 0 1 7 8.5Z" fill="#fff" /><path d="M12 15h8M12.7 19h6.6" stroke="#171717" strokeWidth="2" strokeLinecap="round" /></svg>
-              <span>OpenBucket</span>
-            </a>
-            <p>Your disk. A standard S3 interface. No invented data in between.</p>
-          </div>
-          <div>
-            <strong>Product</strong>
-            <a href="/docs">Documentation</a>
-            <a href="/dashboard">Dashboard</a>
-            <a href={`${githubUrl}/releases`}>Releases</a>
-          </div>
-          <div>
-            <strong>Project</strong>
-            <a href={githubUrl}>Source</a>
-            <a href={`${githubUrl}/issues`}>Issues</a>
-            <a href={`${githubUrl}/blob/main/LICENSE`}>Apache-2.0</a>
-          </div>
-          <div>
-            <strong>Get started</strong>
-            <a href="/login">Sign in</a>
-            <a href="/docs#installation">Installation</a>
-            <a href={githubUrl}>Star on GitHub</a>
-          </div>
-        </div>
-        <div className="fs-footer-bottom">
-          <span>OpenBucket is open-source software. Object bytes remain on storage you control.</span>
-          <span>Apache-2.0</span>
-        </div>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

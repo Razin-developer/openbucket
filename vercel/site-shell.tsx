@@ -39,8 +39,21 @@ function useSessionState(): SessionState {
   const [state, setState] = useState<SessionState>("loading");
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/auth/session", { credentials: "include" })
-      .then((response) => { if (!cancelled) setState(response.ok ? "authenticated" : "anonymous"); })
+    fetch("/api/auth/session", { credentials: "include", headers: { accept: "application/json" } })
+      .then(async (response) => {
+        if (cancelled) return;
+        if (!response.ok) { setState("anonymous"); return; }
+        // A dev server without the Vercel Functions backend (plain `vite dev`) falls back to
+        // serving index.html with a 200 for any unmatched path, including this one — checking
+        // for a real JSON user payload (rather than trusting response.ok alone) keeps that from
+        // reading as "signed in" everywhere.
+        try {
+          const payload = await response.json() as { user?: { id?: unknown } };
+          setState(payload?.user && typeof payload.user.id !== "undefined" ? "authenticated" : "anonymous");
+        } catch {
+          setState("anonymous");
+        }
+      })
       .catch(() => { if (!cancelled) setState("anonymous"); });
     return () => { cancelled = true; };
   }, []);
@@ -160,7 +173,7 @@ export function SiteHeader({ current, overlay = false }: { current?: SiteShellPr
         ) : session === "anonymous" ? (
           <>
             <a className="site-login-link" href="/login">Sign in</a>
-            <a className="site-button dark small" href="/login">Get started</a>
+            <a className="site-button dark small" href="/register">Get started</a>
           </>
         ) : null}
       </div>
@@ -170,15 +183,16 @@ export function SiteHeader({ current, overlay = false }: { current?: SiteShellPr
 
 export function SiteFooter() {
   return (
-    <footer className="site-footer">
-      <div>
-        <Brand inverted />
-        <p>Your disk. A standard S3 interface. No invented data in between.</p>
-      </div>
-      <div className="site-footer-links">
+    <footer className="fs-footer">
+      <div className="fs-footer-top">
+        <div>
+          <Brand inverted />
+          <p>Your disk. A standard S3 interface. No invented data in between.</p>
+        </div>
         <div>
           <strong>Product</strong>
           <a href="/docs">Documentation</a>
+          <a href="/docs/api">API reference</a>
           <a href="/dashboard">Dashboard</a>
           <a href={`${githubUrl}/releases`}>Releases</a>
         </div>
@@ -188,8 +202,17 @@ export function SiteFooter() {
           <a href={`${githubUrl}/issues`}>Issues</a>
           <a href={`${githubUrl}/blob/main/LICENSE`}>Apache-2.0</a>
         </div>
+        <div>
+          <strong>Get started</strong>
+          <a href="/login">Sign in</a>
+          <a href="/docs#installation">Installation</a>
+          <a href={githubUrl}>Star on GitHub</a>
+        </div>
       </div>
-      <p className="site-footer-meta">OpenBucket is open-source software. Object bytes remain on storage you control.</p>
+      <div className="fs-footer-bottom">
+        <span>OpenBucket is open-source software. Object bytes remain on storage you control.</span>
+        <span>Apache-2.0</span>
+      </div>
     </footer>
   );
 }

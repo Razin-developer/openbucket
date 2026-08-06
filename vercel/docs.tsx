@@ -166,13 +166,13 @@ export function DocsPage() {
 
         <DocSection id="installation" eyebrow="01 · INSTALLATION" title="Install the published CLI">
           <p>The npm package contains the CLI, daemon, embedded production dashboard, and management client commands. Install it globally on the storage host.</p>
-          <CodeBlock>{"npm install --global openbucket@0.1.1\nopenbucket version"}</CodeBlock>
-          <p>Account login and hosted metering require version 0.1.1 or newer. Until that trusted release is published, build this repository; npm 0.1.0 supports the earlier local-only flow.</p>
+          <CodeBlock>{"npm install --global openbucket@latest\nopenbucket version"}</CodeBlock>
+          <p>Pin an exact version instead of <code>@latest</code> for unattended production hosts &mdash; see <a href="/docs/api">the API reference</a> for what each release supports, or <a href={`${githubUrl}/releases`}>browse releases</a> directly.</p>
           <h3>Installer script</h3>
           <p>Download and inspect the script before executing it. It verifies Node and npm, then installs the same published package without using sudo.</p>
-          <CodeBlock>{"curl -fsSLO https://openbucket-eight.vercel.app/install.sh\nless install.sh\nOPENBUCKET_INSTALL_VERSION=0.1.1 sh install.sh"}</CodeBlock>
+          <CodeBlock>{"curl -fsSLO https://openbucket-eight.vercel.app/install.sh\nless install.sh\nsh install.sh"}</CodeBlock>
           <h3>Windows PowerShell</h3>
-          <CodeBlock label="PowerShell">{"Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile install.ps1\nGet-Content .\\install.ps1\n.\\install.ps1 -Version 0.1.1"}</CodeBlock>
+          <CodeBlock label="PowerShell">{"Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile install.ps1\nGet-Content .\\install.ps1\n.\\install.ps1"}</CodeBlock>
         </DocSection>
 
         <DocSection id="first-node" eyebrow="02 · FIRST NODE" title="Serve a directory you control">
