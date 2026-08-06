@@ -1,15 +1,16 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 import { AuthPage, ForgotPasswordPage, ProtectedDashboard, ResetPasswordPage } from "./auth";
-import { DocsPage } from "./docs";
+import { ApiReferencePage, DocsPage } from "./docs";
 import { LandingPage } from "./landing";
 import { NodeDiscoveryPage } from "./node-discovery";
 import { SiteShell } from "./site-shell";
 
-export type HostedRoute = "home" | "docs" | "login" | "register" | "forgot-password" | "reset-password" | "dashboard" | "node-discovery" | "not-found";
+export type HostedRoute = "home" | "docs" | "docs-api" | "login" | "register" | "forgot-password" | "reset-password" | "dashboard" | "node-discovery" | "not-found";
 
 export const routeMetadata: Record<HostedRoute, { path: string; title: string; description: string; robots: string }> = {
   home: { path: "/", title: "OpenBucket — your disk, now S3-compatible", description: "Turn a local folder, disk, SSD, or NAS into secure S3-compatible object storage with one daemon and one CLI.", robots: "index, follow" },
   docs: { path: "/docs", title: "Documentation · OpenBucket", description: "Install OpenBucket, run a local storage node, connect S3 clients, and operate the production dashboard.", robots: "index, follow" },
+  "docs-api": { path: "/docs/api", title: "API reference · OpenBucket", description: "Every local daemon and hosted control-plane endpoint, with JavaScript and Python examples.", robots: "index, follow" },
   login: { path: "/login", title: "Sign in · OpenBucket", description: "Sign in to the hosted OpenBucket dashboard.", robots: "noindex, nofollow" },
   register: { path: "/register", title: "Create account · OpenBucket", description: "Create an account for the hosted OpenBucket dashboard.", robots: "noindex, nofollow" },
   "forgot-password": { path: "/forgot-password", title: "Reset your password · OpenBucket", description: "Request a password reset link for your OpenBucket account.", robots: "noindex, nofollow" },
@@ -41,6 +42,7 @@ export function routeForPath(pathname: string): HostedRoute {
   const normalized = pathname.length > 1 ? pathname.replace(/\/+$/, "") : pathname;
   if (normalized === "/") return "home";
   if (normalized === "/docs") return "docs";
+  if (normalized === "/docs/api") return "docs-api";
   if (normalized === "/login") return "login";
   if (normalized === "/register") return "register";
   if (normalized === "/forgot-password") return "forgot-password";
@@ -58,6 +60,7 @@ function NotFoundPage() {
 export function HostedApp({ route }: { route: HostedRoute }) {
   if (route === "home") return <LandingPage />;
   if (route === "docs") return <DocsPage />;
+  if (route === "docs-api") return <ApiReferencePage />;
   if (route === "login") return <AuthPage mode="login" />;
   if (route === "register") return <AuthPage mode="register" />;
   if (route === "forgot-password") return <ForgotPasswordPage />;

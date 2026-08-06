@@ -118,10 +118,11 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
   assert.equal(robots, `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /dashboard\nDisallow: /login\nDisallow: /register\nDisallow: /forgot-password\nDisallow: /reset-password\nSitemap: ${appUrl}/sitemap.xml\n`);
   assert.match(sitemap, new RegExp(`<loc>${appUrl}/<\\/loc>`));
   assert.match(sitemap, new RegExp(`<loc>${appUrl}/docs<\\/loc>`));
+  assert.match(sitemap, new RegExp(`<loc>${appUrl}/docs/api<\\/loc>`));
   assert.doesNotMatch(sitemap, /\/(?:login|register|dashboard)<\/loc>/);
   assert.equal(installSh, checkedInInstallSh);
   assert.equal(installPs1, checkedInInstallPs1);
-  for (const route of ["docs", "login", "register", "dashboard"]) assert.match(hostedApp, new RegExp(`normalized === "\\/${route}"`));
+  for (const route of ["docs", "docs/api", "login", "register", "dashboard"]) assert.match(hostedApp, new RegExp(`normalized === "\\/${route}"`));
   assert.match(hostedAuth, /fetch\("\/api\/auth\/session"/);
   assert.match(hostedAuth, /Create one/);
   assert.match(hostedDocs, /OPENBUCKET_ADMIN_EMAIL/);

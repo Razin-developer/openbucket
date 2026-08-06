@@ -113,7 +113,7 @@ const productLinks: NavLink[] = [
 
 const resourceLinks: NavLink[] = [
   { href: "/docs", label: "Documentation", description: "Install, run a node, and connect S3 clients.", icon: BookOpen },
-  { href: "/docs#installation", label: "Installation", description: "CLI, installer scripts, and Windows PowerShell.", icon: Terminal },
+  { href: "/docs/api", label: "API reference", description: "Every local and hosted endpoint, with JS and Python examples.", icon: Terminal },
   { href: "/docs#docker", label: "Docker", description: "Run the daemon as a container with persistent volumes.", icon: Container },
   { href: "/docs#production", label: "Production", description: "Treat the storage disk as real infrastructure.", icon: Workflow },
   { href: "/dashboard", label: "Dashboard", description: "Operate buckets, keys, and logs for a live node.", icon: LayoutDashboard },
