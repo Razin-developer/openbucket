@@ -3,6 +3,16 @@ import { Box, Text, render, useApp, useInput, useStdout } from "ink";
 import { readdirSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
+import {
+  AuthenticatedControlPlane,
+  loginHostedAccount,
+  readHostedSession,
+  removeHostedSession,
+  resolveControlPlaneUrl,
+  writeHostedSession,
+  type AuthFetch,
+  type HostedSession,
+} from "./auth-session.js";
 
 const h = React.createElement;
 
@@ -45,6 +55,8 @@ export interface TuiApi {
   version: string;
   home: string;
   env: Record<string, string | undefined>;
+  homedir: string;
+  fetch: AuthFetch;
 }
 
 interface StatusPayload {
@@ -150,10 +162,12 @@ function HomeScreen({ status, onNavigate }: { status: StatusPayload | null; onNa
         { label: "Logs", screen: { kind: "logs" }, hint: "Tail recent requests" },
         { label: "Tunnel", screen: { kind: "tunnel" }, hint: "S3 and management tunnel state" },
         { label: "Server", screen: { kind: "server" }, hint: "Status, start, stop" },
+        { label: "Account", screen: { kind: "account" }, hint: "Hosted dashboard sign-in" },
         { label: "Config & environment", screen: { kind: "config" }, hint: "Effective endpoints and variables" },
       ]
     : [
         { label: "Start a node", screen: { kind: "server", autoStart: true }, hint: "Pick a folder and serve it — no daemon running yet" },
+        { label: "Account", screen: { kind: "account" }, hint: "Hosted dashboard sign-in" },
         { label: "Config & environment", screen: { kind: "config" }, hint: "Effective endpoints and variables" },
       ];
   const [selected, setSelected] = useState(0);
@@ -659,6 +673,113 @@ function ConfigScreen({ api, onBack }: { api: TuiApi; onBack: () => void }) {
   );
 }
 
+type AccountState =
+  | { kind: "loading" }
+  | { kind: "signed-out" }
+  | { kind: "signed-in"; session: HostedSession }
+  | { kind: "error"; message: string };
+
+function AccountScreen({ api, onBack }: { api: TuiApi; onBack: () => void }) {
+  const [state, setState] = useState<AccountState>({ kind: "loading" });
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [field, setField] = useState<0 | 1>(0);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = async () => {
+    try {
+      const saved = await readHostedSession(api.env, api.homedir);
+      if (!saved) { setState({ kind: "signed-out" }); return; }
+      const result = await new AuthenticatedControlPlane(saved, api.fetch).getCurrentUser();
+      setState({ kind: "signed-in", session: { ...saved, user: result.user } });
+    } catch {
+      setState({ kind: "signed-out" });
+    }
+  };
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- async fetch, not a synchronous setState
+  useEffect(() => { void load(); }, []);
+
+  const submit = () => {
+    if (!email.trim() || !password) { setFormError("Email and password are required."); return; }
+    setBusy(true);
+    setFormError(null);
+    loginHostedAccount({ fetch: api.fetch, email: email.trim(), password, controlPlaneUrl: resolveControlPlaneUrl(api.env) })
+      .then(async (session) => {
+        await writeHostedSession(session, api.env, api.homedir);
+        setPassword("");
+        setState({ kind: "signed-in", session });
+        setBusy(false);
+      })
+      .catch((err: unknown) => {
+        setFormError(errorMessage(err));
+        setBusy(false);
+      });
+  };
+
+  const logout = () => {
+    if (state.kind !== "signed-in") return;
+    setBusy(true);
+    new AuthenticatedControlPlane(state.session, api.fetch)
+      .logout()
+      .catch(() => undefined)
+      .finally(() => {
+        void removeHostedSession(api.env, api.homedir).finally(() => {
+          setBusy(false);
+          setState({ kind: "signed-out" });
+        });
+      });
+  };
+
+  useInput((input, key) => {
+    if (busy) return;
+    if (key.escape) { onBack(); return; }
+    if (state.kind === "signed-in") {
+      if (input === "l") logout();
+      return;
+    }
+    if (state.kind === "signed-out" || state.kind === "error") {
+      if (key.upArrow || key.downArrow) { setField((f) => (f === 0 ? 1 : 0)); return; }
+      if (key.return) submit();
+    }
+  });
+
+  if (state.kind === "loading") {
+    return h(Box, { flexDirection: "column" }, h(Text, { bold: true }, "Account"), h(Text, { dimColor: true }, "Checking saved session…"));
+  }
+  if (state.kind === "signed-in") {
+    const { user, controlPlaneUrl } = state.session;
+    return h(
+      Box,
+      { flexDirection: "column" },
+      h(Text, { bold: true }, "Account"),
+      h(Box, { flexDirection: "column", borderStyle: "round", borderColor: "green", paddingX: 1, marginTop: 1 },
+        h(Text, { color: "green" }, `✓ Signed in as ${user.name || user.email}`),
+        h(Text, { dimColor: true }, user.email),
+        h(Text, { dimColor: true }, controlPlaneUrl),
+      ),
+      h(StatusBar, { text: `${busy ? "signing out…   " : ""}l log out   esc back` }),
+    );
+  }
+  return h(
+    Box,
+    { flexDirection: "column" },
+    h(Text, { bold: true }, "Account"),
+    h(Text, { dimColor: true }, "Sign in to the hosted dashboard from here."),
+    h(Box, { flexDirection: "column", borderStyle: "round", borderColor: "cyan", paddingX: 1, marginTop: 1 },
+      field === 0
+        ? h(TextField, { label: "Email", value: email, onChange: setEmail })
+        : h(Text, { dimColor: true }, `Email: ${email}`),
+      field === 1
+        ? h(TextField, { label: "Password", value: password, onChange: setPassword, mask: true })
+        : h(Text, { dimColor: true }, `Password: ${"•".repeat(password.length)}`),
+      formError ? h(Text, { color: "red" }, formError) : null,
+      busy ? h(Text, { dimColor: true }, "Signing in…") : null,
+    ),
+    h(StatusBar, { text: "↑↓ switch field   enter sign in   esc back" }),
+  );
+}
+
 // ---- App shell -------------------------------------------------------
 
 type Screen =
@@ -669,6 +790,7 @@ type Screen =
   | { kind: "logs" }
   | { kind: "tunnel" }
   | { kind: "server"; autoStart?: boolean }
+  | { kind: "account" }
   | { kind: "config" };
 
 function App({ api, onExitWithCommand }: { api: TuiApi; onExitWithCommand: (command: string | null) => void }) {
@@ -728,6 +850,8 @@ function App({ api, onExitWithCommand }: { api: TuiApi; onExitWithCommand: (comm
         return h(TunnelScreen, { status, onBack: pop });
       case "server":
         return h(ServerScreen, { api, status, autoStart: current.autoStart, onBack: pop, onExitWithCommand: exitWithCommand });
+      case "account":
+        return h(AccountScreen, { api, onBack: pop });
       case "config":
         return h(ConfigScreen, { api, onBack: pop });
       default:

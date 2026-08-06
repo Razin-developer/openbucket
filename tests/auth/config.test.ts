@@ -7,7 +7,10 @@ const environmentNames = [
   "MONGODB_DATABASE",
   "OPENBUCKET_AUTH_SECRET",
   "OPENBUCKET_ALLOW_SIGNUP",
-  "OPENBUCKET_SIGNUP_TOKEN",
+  "OPENBUCKET_ADMIN_EMAIL",
+  "OPENBUCKET_ADMIN_PASSWORD",
+  "OPENBUCKET_GOOGLE_CLIENT_ID",
+  "OPENBUCKET_GOOGLE_CLIENT_SECRET",
   "NODE_ENV",
   "VERCEL_ENV",
 ] as const;
@@ -20,8 +23,11 @@ function baseline(): void {
   process.env.MONGODB_URI = "mongodb://127.0.0.1:27017";
   process.env.MONGODB_DATABASE = "openbucket_config_test";
   process.env.OPENBUCKET_AUTH_SECRET = "config-auth-secret-with-at-least-thirty-two-bytes";
-  process.env.OPENBUCKET_ALLOW_SIGNUP = "false";
-  delete process.env.OPENBUCKET_SIGNUP_TOKEN;
+  delete process.env.OPENBUCKET_ALLOW_SIGNUP;
+  delete process.env.OPENBUCKET_ADMIN_EMAIL;
+  delete process.env.OPENBUCKET_ADMIN_PASSWORD;
+  delete process.env.OPENBUCKET_GOOGLE_CLIENT_ID;
+  delete process.env.OPENBUCKET_GOOGLE_CLIENT_SECRET;
   mutableEnvironment.NODE_ENV = "test";
   delete process.env.VERCEL_ENV;
 }
@@ -35,21 +41,51 @@ afterEach(() => {
 });
 
 describe("hosted authentication configuration", () => {
-  test("requires an independent high-entropy token only during owner bootstrap", () => {
+  test("self-serve signup is open by default and can be closed explicitly", () => {
     baseline();
-    assert.equal(getAuthConfig().signupToken, null);
+    assert.equal(getAuthConfig().allowSignup, true);
+
+    process.env.OPENBUCKET_ALLOW_SIGNUP = "false";
+    assert.equal(getAuthConfig().allowSignup, false);
 
     process.env.OPENBUCKET_ALLOW_SIGNUP = "true";
-    assert.throws(() => getAuthConfig(), /OPENBUCKET_SIGNUP_TOKEN is required/);
+    assert.equal(getAuthConfig().allowSignup, true);
+  });
 
-    process.env.OPENBUCKET_SIGNUP_TOKEN = "too-short";
-    assert.throws(() => getAuthConfig(), /at least 32 UTF-8 bytes/);
+  test("environment-based admin requires both email and password, and a minimum password length", () => {
+    baseline();
+    assert.equal(getAuthConfig().adminEmail, null);
+    assert.equal(getAuthConfig().adminPassword, null);
 
-    process.env.OPENBUCKET_SIGNUP_TOKEN = process.env.OPENBUCKET_AUTH_SECRET;
-    assert.throws(() => getAuthConfig(), /must differ/);
+    process.env.OPENBUCKET_ADMIN_EMAIL = "admin@example.test";
+    assert.throws(() => getAuthConfig(), (error: unknown) => {
+      assert.equal((error as { code?: string }).code, "AUTH_CONFIG_ADMIN_CREDENTIALS_INCOMPLETE");
+      return true;
+    });
 
-    process.env.OPENBUCKET_SIGNUP_TOKEN = "config-signup-token-with-at-least-thirty-two-bytes";
-    assert.equal(getAuthConfig().signupToken?.toString("utf8"), process.env.OPENBUCKET_SIGNUP_TOKEN);
+    process.env.OPENBUCKET_ADMIN_PASSWORD = "too-short";
+    assert.throws(() => getAuthConfig(), (error: unknown) => {
+      assert.equal((error as { code?: string }).code, "AUTH_CONFIG_ADMIN_PASSWORD_TOO_SHORT");
+      return true;
+    });
+
+    process.env.OPENBUCKET_ADMIN_PASSWORD = "at-least-twelve-characters";
+    const config = getAuthConfig();
+    assert.equal(config.adminEmail, "admin@example.test");
+    assert.equal(config.adminPassword?.toString("utf8"), "at-least-twelve-characters");
+  });
+
+  test("Google sign-in is only enabled once both the client id and secret are set", () => {
+    baseline();
+    assert.equal(getAuthConfig().googleClientId, null);
+
+    process.env.OPENBUCKET_GOOGLE_CLIENT_ID = "client-id";
+    assert.equal(getAuthConfig().googleClientId, null, "requires the secret too");
+
+    process.env.OPENBUCKET_GOOGLE_CLIENT_SECRET = "client-secret";
+    const config = getAuthConfig();
+    assert.equal(config.googleClientId, "client-id");
+    assert.equal(config.googleClientSecret, "client-secret");
   });
 
   test("attaches non-sensitive diagnostic codes to invalid configuration", () => {
@@ -57,14 +93,6 @@ describe("hosted authentication configuration", () => {
     process.env.OPENBUCKET_AUTH_SECRET = "too-short";
     assert.throws(() => getAuthConfig(), (error: unknown) => {
       assert.equal((error as { code?: string }).code, "AUTH_CONFIG_AUTH_SECRET_TOO_SHORT");
-      return true;
-    });
-
-    baseline();
-    process.env.OPENBUCKET_ALLOW_SIGNUP = "true";
-    process.env.OPENBUCKET_SIGNUP_TOKEN = "too-short";
-    assert.throws(() => getAuthConfig(), (error: unknown) => {
-      assert.equal((error as { code?: string }).code, "AUTH_CONFIG_SIGNUP_TOKEN_TOO_SHORT");
       return true;
     });
   });

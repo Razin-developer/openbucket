@@ -115,7 +115,7 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
   ]);
 
   assert.deepEqual(deployment, { schemaVersion: 1, commitSha });
-  assert.equal(robots, `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /dashboard\nDisallow: /login\nDisallow: /register\nSitemap: ${appUrl}/sitemap.xml\n`);
+  assert.equal(robots, `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /dashboard\nDisallow: /login\nDisallow: /register\nDisallow: /forgot-password\nDisallow: /reset-password\nSitemap: ${appUrl}/sitemap.xml\n`);
   assert.match(sitemap, new RegExp(`<loc>${appUrl}/<\\/loc>`));
   assert.match(sitemap, new RegExp(`<loc>${appUrl}/docs<\\/loc>`));
   assert.doesNotMatch(sitemap, /\/(?:login|register|dashboard)<\/loc>/);
@@ -123,10 +123,9 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
   assert.equal(installPs1, checkedInInstallPs1);
   for (const route of ["docs", "login", "register", "dashboard"]) assert.match(hostedApp, new RegExp(`normalized === "\\/${route}"`));
   assert.match(hostedAuth, /fetch\("\/api\/auth\/session"/);
-  assert.match(hostedAuth, /Owner setup guide/);
-  assert.doesNotMatch(hostedAuth, /Create one/);
-  assert.match(hostedDocs, /bootstrap:owner/);
-  assert.doesNotMatch(siteShell, /href="\/register"/);
+  assert.match(hostedAuth, /Create one/);
+  assert.match(hostedDocs, /OPENBUCKET_ADMIN_EMAIL/);
+  assert.match(siteShell, /site-nav-panel/);
   assert.match(hostedAuth, /<HostedControlPlane user=\{state\.user\} \/>/);
   assert.match(hostedApp, /nodeNameForPath/);
   assert.match(hostedApp, /route === "node-discovery"/);

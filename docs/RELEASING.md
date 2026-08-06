@@ -40,7 +40,7 @@ The Python distribution is `openbucket-client`; its import package is `openbucke
 3. Set PyPI project name to `openbucket-client`, owner to `Razin-developer`, repository to `openbucket`, workflow name to `release.yml`, and environment name to `pypi`.
 4. Confirm the GitHub repository has an environment named `pypi`; add a required reviewer and tag deployment protection when the account plan supports them.
 5. Keep the publish job's `id-token: write` permission and do not add a PyPI password or API token.
-6. Publish through the protected `v0.1.16` tag workflow. On first successful use, PyPI creates the project and converts the pending publisher into a normal trusted publisher.
+6. Publish through the protected `v0.1.17` tag workflow. On first successful use, PyPI creates the project and converts the pending publisher into a normal trusted publisher.
 
 A pending publisher does not reserve the project name. Configure it immediately before the release, verify every field exactly, and use the official [pending-publisher guide](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/) and [publishing guide](https://docs.pypi.org/trusted-publishers/using-a-publisher/). TestPyPI uses a separate publisher configuration.
 
@@ -51,11 +51,11 @@ The Vercel project is connected directly to this GitHub repository. Pull request
 The GitHub workflow verifies deployment rather than creating it: `/deployment.json` must report the exact triggering commit before the production check passes. Its default alias is `https://openbucket-eight.vercel.app`; set the non-secret repository variable `VERCEL_PRODUCTION_URL` when that alias changes. Vercel build variables belong in the Vercel project settings, and registry or daemon credentials never belong in dashboard build variables. See [Hosting the web application on Vercel](VERCEL.md).
 
 Hosted authentication uses the server-only Vercel variables `MONGODB_URI`, `MONGODB_DATABASE`, `OPENBUCKET_AUTH_SECRET`, and `OPENBUCKET_ALLOW_SIGNUP`. They are unrelated to registry publishing and must never be copied into `NEXT_PUBLIC_*` values or GitHub release secrets.
-One-time owner bootstrap additionally requires a distinct `OPENBUCKET_SIGNUP_TOKEN`; MongoDB consumes it atomically, and the raw token is never stored.
+Admin access uses `OPENBUCKET_ADMIN_EMAIL`/`OPENBUCKET_ADMIN_PASSWORD` instead of a database record; see [Hosting the web application on Vercel](VERCEL.md).
 
 ## Prepare a version
 
-This release's unified version is `0.1.16`; existing registry versions cannot be republished.
+This release's unified version is `0.1.17`; existing registry versions cannot be republished.
 
 Update every synchronized version location:
 
@@ -96,8 +96,8 @@ Commit the version change through a reviewed pull request.
 Create an annotated tag from the protected, green `main` commit and push it:
 
 ```bash
-git tag -a v0.1.16 -m "OpenBucket v0.1.16"
-git push origin v0.1.16
+git tag -a v0.1.17 -m "OpenBucket v0.1.17"
+git push origin v0.1.17
 ```
 
 The release workflow verifies that the tag and every package version match, then:
@@ -113,9 +113,9 @@ Do not rerun only one registry job after changing source. Fix forward with a new
 ## Verify and rollback
 
 ```bash
-npm view openbucket@0.1.16 version dist.integrity dist.attestations
+npm view openbucket@0.1.17 version dist.integrity dist.attestations
 python -m pip index versions openbucket-client
-docker buildx imagetools inspect ghcr.io/razin-developer/openbucket:0.1.16
+docker buildx imagetools inspect ghcr.io/razin-developer/openbucket:0.1.17
 ```
 
 Install into clean temporary environments and run `openbucket version` plus a real daemon health check. Confirm the Vercel production deployment separately.

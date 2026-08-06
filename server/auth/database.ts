@@ -8,7 +8,11 @@ export type UserDocument = {
   name: string | null;
   /** Immutable public handle used in safe node discovery URLs. */
   handle?: string;
-  passwordHash: string;
+  /** Absent for accounts created through Google sign-in that never set a password. */
+  passwordHash?: string;
+  /** Subject id from Google's ID token, when the account is linked to Google sign-in. */
+  googleId?: string;
+  /** @deprecated Admin is now determined solely by OPENBUCKET_ADMIN_EMAIL/OPENBUCKET_ADMIN_PASSWORD; ignored at runtime. */
   role?: "admin" | "member";
   status: "active" | "disabled";
   createdAt: Date;
@@ -17,7 +21,9 @@ export type UserDocument = {
 
 export type SessionDocument = {
   _id: string;
-  userId: ObjectId;
+  /** Null for the environment-configured admin account, which has no user document. */
+  userId: ObjectId | null;
+  isEnvAdmin?: boolean;
   createdAt: Date;
   lastSeenAt: Date;
   expiresAt: Date;
@@ -32,20 +38,18 @@ export type RateLimitDocument = {
   expiresAt: Date;
 };
 
-export type AuthControlDocument = {
+export type PasswordResetDocument = {
   _id: string;
-  status: "claiming" | "claimed";
-  claimId?: string;
+  userId: ObjectId;
   createdAt: Date;
-  claimedAt?: Date;
-  userId?: ObjectId;
+  expiresAt: Date;
 };
 
 export type AuthCollections = {
   users: Collection<UserDocument>;
   sessions: Collection<SessionDocument>;
   rateLimits: Collection<RateLimitDocument>;
-  authControls: Collection<AuthControlDocument>;
+  passwordResets: Collection<PasswordResetDocument>;
 };
 
 type MongoState = {
@@ -107,6 +111,10 @@ async function ensureIndexes(database: Db): Promise<void> {
         { handle: 1 },
         { name: "users_handle_unique", unique: true, sparse: true },
       ),
+      database.collection<UserDocument>("users").createIndex(
+        { googleId: 1 },
+        { name: "users_google_id_unique", unique: true, sparse: true },
+      ),
       database.collection<SessionDocument>("sessions").createIndex(
         { expiresAt: 1 },
         { name: "sessions_expiry_ttl", expireAfterSeconds: 0 },
@@ -118,6 +126,14 @@ async function ensureIndexes(database: Db): Promise<void> {
       database.collection<RateLimitDocument>("auth_rate_limits").createIndex(
         { expiresAt: 1 },
         { name: "auth_rate_limits_expiry_ttl", expireAfterSeconds: 0 },
+      ),
+      database.collection<PasswordResetDocument>("password_resets").createIndex(
+        { expiresAt: 1 },
+        { name: "password_resets_expiry_ttl", expireAfterSeconds: 0 },
+      ),
+      database.collection<PasswordResetDocument>("password_resets").createIndex(
+        { userId: 1 },
+        { name: "password_resets_user" },
       ),
     ]).then(() => undefined);
     mongoState.indexPromises.set(key, pending);
@@ -140,7 +156,7 @@ export async function getAuthCollections(): Promise<AuthCollections> {
     users: database.collection<UserDocument>("users"),
     sessions: database.collection<SessionDocument>("sessions"),
     rateLimits: database.collection<RateLimitDocument>("auth_rate_limits"),
-    authControls: database.collection<AuthControlDocument>("auth_controls"),
+    passwordResets: database.collection<PasswordResetDocument>("password_resets"),
   };
 }
 

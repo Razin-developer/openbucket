@@ -67,10 +67,12 @@ npx vercel@latest env add OPENBUCKET_NODE_DOMAIN production
 - `MONGODB_DATABASE` defaults to `openbucket_web`.
 - `OPENBUCKET_AUTH_SECRET` is required and must contain at least 32 random bytes. Generate it with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` and store only the result in Vercel.
 - `OPENBUCKET_NODE_DOMAIN` defaults to `openbucket.dev` and produces future names such as `s3.home-node.openbucket.dev`; it does not provision DNS/TLS/routing.
-- `OPENBUCKET_SIGNUP_TOKEN` and `OPENBUCKET_ALLOW_SIGNUP` are short-lived controls managed by the bootstrap helper below.
-The first successful registration atomically consumes the bootstrap record before creating the owner, so concurrent requests and immutable older deployment URLs cannot create another account afterward. The raw setup token is never stored. Disable signup, remove the setup token, and redeploy after bootstrap as defense in depth.
+- `OPENBUCKET_ALLOW_SIGNUP` controls self-serve account creation at `/register`. It's open by default; set it to `false` to close it.
+- `OPENBUCKET_ADMIN_EMAIL` / `OPENBUCKET_ADMIN_PASSWORD` grant admin access without ever writing an admin record to MongoDB. Signing in with this exact email and password (case-insensitive email) opens the admin-only aggregate overview. Leave both unset to disable admin access entirely.
+- `OPENBUCKET_SMTP_HOST` / `OPENBUCKET_SMTP_PORT` / `OPENBUCKET_SMTP_USER` / `OPENBUCKET_SMTP_PASS` / `OPENBUCKET_SMTP_FROM` send password-reset email. Any standard SMTP account works.
+- `OPENBUCKET_GOOGLE_CLIENT_ID` / `OPENBUCKET_GOOGLE_CLIENT_SECRET` enable the optional "Continue with Google" button. Create an OAuth 2.0 Client ID in Google Cloud Console and register `<your-app-url>/api/auth/google/callback` as an authorized redirect URI.
 
-Use distinct database users/databases and secrets for Preview and Production. MongoDB stores users, password verifiers, sessions, bootstrap/rate-limit records, node registrations, hashed node credentials, heartbeat/storage summaries, and aggregate usage events. It never stores object bytes, raw node credentials, daemon admin tokens, or S3 credentials.
+Use distinct database users/databases and secrets for Preview and Production. MongoDB stores users, password verifiers, sessions, rate-limit records, node registrations, hashed node credentials, heartbeat/storage summaries, and aggregate usage events. It never stores object bytes, raw node credentials, daemon admin tokens, S3 credentials, or an admin flag.
 
 For a fork or replacement Vercel project, authenticate, link the directory, and connect its Git repository once:
 
@@ -80,29 +82,15 @@ npx vercel@latest link
 npx vercel@latest git connect
 ```
 
-After the permanent variables are configured and the project is linked, bootstrap the single owner:
+After the permanent variables are configured and the project is linked, set the admin credentials and deploy:
 
 ```bash
-node scripts/bootstrap-owner.mjs \
-  --email owner@example.com \
-  --name "Owner" \
-  --url https://openbucket-eight.vercel.app \
-  --manage-vercel
+npx vercel@latest env add OPENBUCKET_ADMIN_EMAIL production --sensitive
+npx vercel@latest env add OPENBUCKET_ADMIN_PASSWORD production --sensitive
+npx vercel@latest deploy --prod
 ```
 
-Vercel deployment management is **off by default**. Use `--manage-vercel` only for the first setup or when the helper must open and close the short-lived window itself. On Windows it invokes Vercel through `cmd.exe` and the `npx.cmd` shim.
-
-When a trusted operator has already configured `OPENBUCKET_ALLOW_SIGNUP=true` and a distinct `OPENBUCKET_SIGNUP_TOKEN` in Vercel, omit `--manage-vercel` and pass `--signup-token-stdin`; the helper asks for that token in a hidden prompt and makes no Vercel CLI calls, deployments, or environment mutations.
-
-With `--manage-vercel`, the helper:
-
-1. prompts twice for a hidden 12-128 character password;
-2. generates a high-entropy one-time token in memory;
-3. invokes Vercel with argument arrays and `shell: false`, sending environment values over stdin rather than command arguments;
-4. deploys the short registration window and posts registration to the same HTTPS origin; and
-5. always sets signup back to false, removes the token, and redeploys—even after an earlier failure.
-
-It never writes the password/token to disk or environment variables and redacts them from surfaced child-process errors. If cleanup reports a failure, immediately verify `OPENBUCKET_ALLOW_SIGNUP=false`, remove `OPENBUCKET_SIGNUP_TOKEN`, and redeploy manually before doing anything else.
+Sign in with those exact credentials at `/login` to reach the admin-only overview. Everyone else can create a regular account directly at `/register` — no invite, token, or CLI helper required.
 
 Validate the web target locally with `npm ci && npm run build:vercel`. Push a reviewed commit to `main` for production; do not manually promote an unrelated local build to the production alias.
 

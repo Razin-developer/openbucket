@@ -6,7 +6,7 @@ OpenBucket writes real object bytes to the directory you choose. The normal prod
 
 > OpenBucket is currently a single-node, self-hosted v0.1 product. It is useful for development, homelabs, local backup targets, and trusted private networks. Read [Security](#security) and [Current limitations](#current-limitations) before exposing it outside a machine you control.
 
-The Node daemon and CLI are published as [`openbucket@0.1.16`](https://www.npmjs.com/package/openbucket/v/0.1.16), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). Release `0.1.16` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
+The Node daemon and CLI are published as [`openbucket@0.1.17`](https://www.npmjs.com/package/openbucket/v/0.1.17), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). Release `0.1.17` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
 
 ## What is included
 
@@ -85,7 +85,7 @@ Requires Node.js 22.13 or newer (npm comes bundled with it) — that's the only 
 ### From npm (recommended)
 
 ```bash
-npm install --global openbucket@0.1.16
+npm install --global openbucket@0.1.17
 openbucket version
 openbucket login --email you@example.com
 openbucket serve /path/to/storage --name my-node
@@ -101,12 +101,12 @@ The installers are thin, auditable npm wrappers served by the current Vercel dep
 
 ```bash
 curl -fsSLo openbucket-install.sh https://openbucket-eight.vercel.app/install.sh
-OPENBUCKET_INSTALL_VERSION=0.1.16 sh ./openbucket-install.sh
+OPENBUCKET_INSTALL_VERSION=0.1.17 sh ./openbucket-install.sh
 ```
 
 ```powershell
 Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile openbucket-install.ps1
-& ./openbucket-install.ps1 -Version 0.1.16
+& ./openbucket-install.ps1 -Version 0.1.17
 ```
 
 Set `OPENBUCKET_NPM_PACKAGE` or pass `--package`/`-Package` to install a tarball, local path, scoped package, or a specific registry version.
@@ -128,7 +128,7 @@ openbucket version
 
 ```bash
 npm pack
-npm install --global ./openbucket-0.1.16.tgz
+npm install --global ./openbucket-0.1.17.tgz
 ```
 
 ## CLI reference
@@ -270,21 +270,14 @@ If the dashboard and daemon have different origins, set `OPENBUCKET_DASHBOARD_UR
 
 - `/` is the public product landing page;
 - `/docs` is the public documentation page;
-- `/login` and `/register` establish a hosted web session;
-  Registration is a one-time owner bootstrap protected by an independent setup token and an atomic MongoDB claim;
-- `/dashboard` requires that hosted session and shows registered nodes, heartbeat/storage state, metered usage, and an admin-only aggregate overview; its **Live node** console still connects directly to a daemon management API;
+- `/login` and `/register` establish a hosted web session; self-serve account creation is open by default (set `OPENBUCKET_ALLOW_SIGNUP=false` to close it);
+- `/forgot-password` and `/reset-password` handle password resets over SMTP;
+- `/dashboard` requires that hosted session and shows registered nodes, heartbeat/storage state, and metered usage; its **Live node** console still connects directly to a daemon management API;
 - `/<node-name>` is a public, rate-limited discovery document for a discoverable node's current S3 endpoint. It is metadata only: Vercel does not proxy or redirect S3 object traffic.
 
-MongoDB stores hosted users, password verifiers, sessions, bootstrap/rate-limit records, node registrations, hashed node credentials, latest heartbeat/storage summaries, and aggregate usage events. Object bytes remain on the daemon's disk; raw node credentials, daemon management tokens, and S3 credentials are never persisted to MongoDB. The local dashboard can still be used in explicit `--offline` development mode.
-The bootstrap record is retained after success and the raw setup token is never stored, so older immutable deployment URLs cannot register another owner.
+MongoDB stores hosted users, password verifiers, sessions, rate-limit records, node registrations, hashed node credentials, latest heartbeat/storage summaries, and aggregate usage events. Object bytes remain on the daemon's disk; raw node credentials, daemon management tokens, and S3 credentials are never persisted to MongoDB.
 
-After the permanent MongoDB/auth variables are configured and the Vercel project is linked, create the first owner with the guarded helper:
-
-```bash
-node scripts/bootstrap-owner.mjs --email owner@example.com --name "Owner" --url https://openbucket-eight.vercel.app
-```
-
-It prompts twice without echo, sends the temporary token to Vercel over stdin, deploys the registration window, registers against the same origin, and then disables signup, removes the token, and redeploys even when registration fails.
+**Administrator access is not stored in MongoDB at all.** Set `OPENBUCKET_ADMIN_EMAIL` and `OPENBUCKET_ADMIN_PASSWORD` on the deployment; signing in with that exact email and password opens the admin-only aggregate overview. No account row is ever written for it, so there's nothing to lose access to or leak from a database dump. The local dashboard can still be used in explicit `--offline` development mode.
 
 GitHub Actions verifies the exact production commit without storing Vercel credentials. Later domain changes require only environment and DNS updates. Follow [the Vercel deployment guide](docs/VERCEL.md) for server-only authentication variables, CORS, production verification, and the later `openbucket.dev` cutover.
 

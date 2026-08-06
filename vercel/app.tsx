@@ -1,23 +1,25 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
-import { AuthPage, ProtectedDashboard } from "./auth";
+import { AuthPage, ForgotPasswordPage, ProtectedDashboard, ResetPasswordPage } from "./auth";
 import { DocsPage } from "./docs";
 import { LandingPage } from "./landing";
 import { NodeDiscoveryPage } from "./node-discovery";
 import { SiteShell } from "./site-shell";
 
-export type HostedRoute = "home" | "docs" | "login" | "register" | "dashboard" | "node-discovery" | "not-found";
+export type HostedRoute = "home" | "docs" | "login" | "register" | "forgot-password" | "reset-password" | "dashboard" | "node-discovery" | "not-found";
 
 export const routeMetadata: Record<HostedRoute, { path: string; title: string; description: string; robots: string }> = {
   home: { path: "/", title: "OpenBucket — your disk, now S3-compatible", description: "Turn a local folder, disk, SSD, or NAS into secure S3-compatible object storage with one daemon and one CLI.", robots: "index, follow" },
   docs: { path: "/docs", title: "Documentation · OpenBucket", description: "Install OpenBucket, run a local storage node, connect S3 clients, and operate the production dashboard.", robots: "index, follow" },
   login: { path: "/login", title: "Sign in · OpenBucket", description: "Sign in to the hosted OpenBucket dashboard.", robots: "noindex, nofollow" },
   register: { path: "/register", title: "Create account · OpenBucket", description: "Create an account for the hosted OpenBucket dashboard.", robots: "noindex, nofollow" },
+  "forgot-password": { path: "/forgot-password", title: "Reset your password · OpenBucket", description: "Request a password reset link for your OpenBucket account.", robots: "noindex, nofollow" },
+  "reset-password": { path: "/reset-password", title: "Choose a new password · OpenBucket", description: "Set a new password for your OpenBucket account.", robots: "noindex, nofollow" },
   dashboard: { path: "/dashboard", title: "Dashboard · OpenBucket", description: "Connect and operate your authenticated OpenBucket storage node.", robots: "noindex, nofollow" },
   "node-discovery": { path: "/", title: "Node discovery · OpenBucket", description: "Discover the current public S3 connection metadata for an OpenBucket node.", robots: "noindex, follow" },
   "not-found": { path: "/404", title: "Page not found · OpenBucket", description: "The requested OpenBucket page could not be found.", robots: "noindex, nofollow" },
 };
 
-const reservedNodeNames = new Set(["admin", "api", "auth", "dashboard", "docs", "health", "login", "mail", "node", "nodes", "openbucket", "register", "s3", "status", "support", "usage", "www"]);
+const reservedNodeNames = new Set(["admin", "api", "auth", "dashboard", "docs", "forgot-password", "health", "login", "mail", "node", "nodes", "openbucket", "register", "reset-password", "s3", "status", "support", "usage", "www"]);
 
 export function nodeNameForPath(pathname: string): string | null {
   let name: string;
@@ -41,6 +43,8 @@ export function routeForPath(pathname: string): HostedRoute {
   if (normalized === "/docs") return "docs";
   if (normalized === "/login") return "login";
   if (normalized === "/register") return "register";
+  if (normalized === "/forgot-password") return "forgot-password";
+  if (normalized === "/reset-password") return "reset-password";
   if (normalized === "/dashboard" || /^\/dashboard\/nodes\/[a-z0-9][a-z0-9-]{1,47}$/.test(normalized)) return "dashboard";
   if (nodePathForPath(pathname)) return "node-discovery";
   if (nodeNameForPath(pathname)) return "node-discovery";
@@ -56,6 +60,8 @@ export function HostedApp({ route }: { route: HostedRoute }) {
   if (route === "docs") return <DocsPage />;
   if (route === "login") return <AuthPage mode="login" />;
   if (route === "register") return <AuthPage mode="register" />;
+  if (route === "forgot-password") return <ForgotPasswordPage />;
+  if (route === "reset-password") return <ResetPasswordPage />;
   if (route === "dashboard") return <ProtectedDashboard />;
   if (route === "node-discovery") {
     const nodePath = nodePathForPath(window.location.pathname);

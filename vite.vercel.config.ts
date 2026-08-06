@@ -88,7 +88,7 @@ export default defineConfig(({ mode }) => {
           this.emitFile({
             type: "asset",
             fileName: "robots.txt",
-            source: `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /dashboard\nDisallow: /login\nDisallow: /register\nSitemap: ${sitemapUrl}\n`,
+            source: `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /dashboard\nDisallow: /login\nDisallow: /register\nDisallow: /forgot-password\nDisallow: /reset-password\nSitemap: ${sitemapUrl}\n`,
           });
           this.emitFile({
             type: "asset",

@@ -1149,9 +1149,9 @@ async function getProductVersion(io: CLIIO): Promise<string> {
     const packageData = JSON.parse(await readFile(packageUrl, "utf8")) as {
       version?: unknown;
     };
-    return typeof packageData.version === "string" ? packageData.version : "0.1.16";
+    return typeof packageData.version === "string" ? packageData.version : "0.1.17";
   } catch {
-    return "0.1.16";
+    return "0.1.17";
   }
 }
 
@@ -1190,23 +1190,21 @@ async function runLogin(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
     }
   }
 
-  let method: "password" | "browser" = "password";
   if (interactive) {
     const picked = await prompts.select({
-      message: chalk.bold("How do you want to sign in?"),
+      message: chalk.bold("Do you already have an OpenBucket account?"),
       options: [
-        { value: "password" as const, label: "Email & password", hint: "type your credentials here" },
-        { value: "browser" as const, label: "Continue in browser", hint: `opens ${controlPlaneUrl}/login` },
+        { value: "signin" as const, label: "Yes, sign in", hint: "type your email and password here" },
+        { value: "create" as const, label: "No, I need to create one", hint: `opens ${controlPlaneUrl}/register` },
       ],
     });
     if (prompts.isCancel(picked)) throw new CLIUsageError("Login cancelled.");
-    method = picked;
-  }
-
-  if (method === "browser") {
-    writeLine(io.stdout, chalk.cyan(`Opening ${controlPlaneUrl}/login in your browser…`));
-    openDashboard(`${controlPlaneUrl}/login`, io);
-    writeLine(io.stdout, chalk.dim("Sign in there, then finish pairing this CLI below."));
+    if (picked === "create") {
+      writeLine(io.stdout, chalk.cyan(`Opening ${controlPlaneUrl}/register in your browser…`));
+      openDashboard(`${controlPlaneUrl}/register`, io);
+      writeLine(io.stdout, chalk.dim('Create your account there, then run "openbucket login" again to sign in.'));
+      return EXIT_SUCCESS;
+    }
   }
 
   const emailPrompt = interactive ? chalk.bold("Email: ") : "Email: ";
@@ -2224,6 +2222,8 @@ async function runUi(io: CLIIO): Promise<number> {
     version,
     home: resolveStatePaths(io.env, io.homedir()).directory,
     env: io.env,
+    homedir: io.homedir(),
+    fetch: io.fetch,
     request: async <T,>(path: string, options?: RequestInit): Promise<T> => {
       const target = await getApiTarget(io);
       return apiRequest<T>(io, target, path, options);

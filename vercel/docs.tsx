@@ -78,9 +78,8 @@ export function DocsPage() {
 
           <DocSection id="dashboard" eyebrow="04 · DASHBOARD" title="Operate the live node">
             <p><code>openbucket serve</code> hosts and opens the packaged dashboard automatically. It receives a one-time pairing fragment, removes it from the address bar, and keeps the management token in API-scoped session storage.</p>
-            <h3>Bootstrap the production owner</h3>
-            <p>From a reviewed source checkout, run the helper once after configuring the permanent Vercel database and auth variables. It prompts for the password without echo and closes the temporary signup window after creating the owner.</p>
-            <CodeBlock>{"npm run bootstrap:owner -- --email owner@example.com --name \"Owner\" --url https://openbucket-eight.vercel.app"}</CodeBlock>
+            <h3>Sign in to the hosted dashboard</h3>
+            <p>Anyone can <a href="/register">create an account</a> to pair a node with the hosted control plane. Administrator access isn&apos;t stored in the database at all &mdash; set <code>OPENBUCKET_ADMIN_EMAIL</code> and <code>OPENBUCKET_ADMIN_PASSWORD</code> on the deployment, and signing in with that exact email and password opens the admin view.</p>
             <CodeBlock>{"openbucket dashboard"}</CodeBlock>
             <p>The hosted <a href="/dashboard">web dashboard</a> adds an OpenBucket account gate and reads MongoDB-backed node registrations, presence, storage summaries, and aggregate usage. Object bytes, raw node tokens, management credentials, and S3 keys remain on the storage host.</p>
             <p>Your browser may ask for Local Network Access when this public HTTPS site first contacts a loopback or private daemon. Grant it for OpenBucket; if the browser blocks plain HTTP local requests, expose management through an authenticated HTTPS tunnel or reverse proxy.</p>
