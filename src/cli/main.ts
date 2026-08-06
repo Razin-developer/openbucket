@@ -63,6 +63,7 @@ export interface ParsedCLICommand {
     | "whoami"
     | "stop"
     | "status"
+    | "rename"
     | "logs"
     | "doctor"
     | "tunnel"
@@ -465,6 +466,11 @@ export function parseCLIArgs(argv: readonly string[]): ParsedCLICommand {
       parsed = parseOptions(tail, [], ["json"]);
       assertPositionals("status [--json]", parsed.positionals, 0);
       return { command: "status", ...parsed, raw };
+    }
+    case "rename": {
+      parsed = parseOptions(tail, [], []);
+      assertPositionals("rename <new-name>", parsed.positionals, 1);
+      return { command: "rename", ...parsed, raw };
     }
     case "logs": {
       parsed = parseOptions(tail, ["limit"], ["follow"]);
@@ -1078,6 +1084,7 @@ function renderHelp(topic?: string): string {
     start: "Usage: openbucket start <directory> [serve options]",
     stop: "Usage: openbucket stop",
     status: "Usage: openbucket status [--json]",
+    rename: "Usage: openbucket rename <new-name>",
     dashboard: "Usage: openbucket dashboard",
     doctor: "Usage: openbucket doctor [directory]",
     tunnel: "Usage: openbucket tunnel <setup|status|update> [--cloudflared-path PATH] [--yes]",
@@ -1111,6 +1118,7 @@ Daemon
   start <directory>    Alias for serve
   stop                 Stop the active daemon
   status [--json]      Show daemon and storage status
+  rename <new-name>    Rename the running node (local, and hosted if connected)
   dashboard            Securely open or re-pair the local dashboard
   ui                   Interactive console (buckets, keys, tunnel, logs, server). Also the
                        default when you just run "openbucket".
@@ -2215,6 +2223,75 @@ async function runStatus(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
   return EXIT_SUCCESS;
 }
 
+function assertValidNodeName(name: string): string {
+  const normalized = name.normalize("NFKC").trim().toLowerCase();
+  if (
+    normalized.length < 3 ||
+    normalized.length > 48 ||
+    !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/.test(normalized) ||
+    normalized.includes("--")
+  ) {
+    throw new CLIUsageError("Node name must be a DNS-safe label with 3-48 lowercase letters, numbers, or hyphens.");
+  }
+  return normalized;
+}
+
+async function runRename(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
+  const newName = assertValidNodeName(parsed.positionals[0]!);
+  const target = await getApiTarget(io);
+  const oldName = target.state?.node;
+
+  const result = await apiRequest<{ nodeId: string; nodeName: string }>(io, target, "/v1/node", {
+    method: "PATCH",
+    body: JSON.stringify({ name: newName }),
+  });
+
+  let hostedUpdated = false;
+  if (target.state?.nodeApiUrl && oldName) {
+    try {
+      const controlPlaneUrl = new URL(target.state.nodeApiUrl).origin;
+      const credential = await findNodeCredential(controlPlaneUrl, oldName, io.env, io.homedir());
+      const session = await readHostedSession(io.env, io.homedir());
+      if (credential && session && session.controlPlaneUrl === controlPlaneUrl) {
+        await new AuthenticatedControlPlane(session, io.fetch).request(
+          `/api/nodes/${credential.nodeId}`,
+          { method: "PATCH", body: JSON.stringify({ name: newName }) },
+        );
+        await writeNodeCredential({ ...credential, nodeName: newName }, io.env, io.homedir(), io.pid);
+        hostedUpdated = true;
+      }
+    } catch (error) {
+      writeLine(
+        io.stderr,
+        `Warning: the node was renamed locally, but the hosted control plane could not be updated: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  if (target.state) {
+    const updatedState: ActiveDaemonState = { ...target.state, node: result.nodeName };
+    if (hostedUpdated && updatedState.nodeApiUrl) {
+      try {
+        const url = new URL(updatedState.nodeApiUrl);
+        url.pathname = url.pathname.replace(/\/dashboard\/nodes\/[^/]+$/, `/dashboard/nodes/${encodeURIComponent(result.nodeName)}`);
+        updatedState.nodeApiUrl = url.toString();
+      } catch {
+        // Leave nodeApiUrl as-is if it doesn't match the expected /dashboard/nodes/<name> shape.
+      }
+    }
+    await writeActiveState(updatedState, io);
+  }
+
+  writeLine(io.stdout, chalk.green(`✓ Renamed node to "${result.nodeName}".`));
+  if (target.state?.nodeApiUrl && !hostedUpdated) {
+    writeLine(
+      io.stdout,
+      chalk.dim('This node is hosted-connected, but the hosted control plane wasn\'t updated. Run "openbucket login" then "openbucket rename" again to sync the name there.'),
+    );
+  }
+  return EXIT_SUCCESS;
+}
+
 async function runUi(io: CLIIO): Promise<number> {
   if (!io.stdout.isTTY) {
     io.stdout.write(renderHelp());
@@ -2803,6 +2880,8 @@ async function executeCommand(parsed: ParsedCLICommand, io: CLIIO): Promise<numb
       return runStop(io);
     case "status":
       return runStatus(parsed, io);
+    case "rename":
+      return runRename(parsed, io);
     case "logs":
       return runLogs(parsed, io);
     case "doctor":

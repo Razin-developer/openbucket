@@ -5,11 +5,13 @@ import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import {
   AuthenticatedControlPlane,
+  findNodeCredential,
   loginHostedAccount,
   readHostedSession,
   removeHostedSession,
   resolveControlPlaneUrl,
   writeHostedSession,
+  writeNodeCredential,
   type AuthFetch,
   type HostedSession,
 } from "./auth-session.js";
@@ -603,18 +605,52 @@ function TunnelScreen({ status, onBack }: { status: StatusPayload | null; onBack
   );
 }
 
+function isValidNodeName(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  return normalized.length >= 3 && normalized.length <= 48 && /^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/.test(normalized) && !normalized.includes("--");
+}
+
 function ServerScreen({ api, status, autoStart, onBack, onExitWithCommand }: { api: TuiApi; status: StatusPayload | null; autoStart?: boolean; onBack: () => void; onExitWithCommand: (command: string) => void }) {
-  const [mode, setMode] = useState<"idle" | "start-form" | "stopping">(autoStart && !status ? "start-form" : "idle");
+  const [mode, setMode] = useState<"idle" | "start-form" | "stopping" | "rename">(autoStart && !status ? "start-form" : "idle");
   const [directory, setDirectory] = useState("");
   const [name, setName] = useState("home-node");
   const [field, setField] = useState<0 | 1>(0);
   const [message, setMessage] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState(false);
+
+  const submitRename = () => {
+    const trimmed = renameValue.trim().toLowerCase();
+    if (!isValidNodeName(trimmed)) { setRenameError("Node name must be a DNS-safe label with 3-48 characters."); return; }
+    const oldName = status?.node?.name;
+    setRenaming(true);
+    setRenameError(null);
+    api.request<{ nodeId: string; nodeName: string }>("/v1/node", { method: "PATCH", body: JSON.stringify({ name: trimmed }) })
+      .then(async () => {
+        try {
+          const session = await readHostedSession(api.env, api.homedir);
+          const credential = session && oldName ? await findNodeCredential(session.controlPlaneUrl, oldName, api.env, api.homedir) : undefined;
+          if (session && credential) {
+            await new AuthenticatedControlPlane(session, api.fetch).request(`/api/nodes/${credential.nodeId}`, { method: "PATCH", body: JSON.stringify({ name: trimmed }) });
+            await writeNodeCredential({ ...credential, nodeName: trimmed }, api.env, api.homedir);
+          }
+        } catch {
+          // Local rename already succeeded; the hosted control plane can be synced later via the CLI.
+        }
+        setMode("idle");
+        setMessage(`Renamed to "${trimmed}".`);
+      })
+      .catch((err: unknown) => setRenameError(err instanceof Error ? err.message : String(err)))
+      .finally(() => setRenaming(false));
+  };
 
   useInput((input, key) => {
     if (mode === "idle") {
       if (key.escape) { onBack(); return; }
       if (input === "s" && status) { setMode("stopping"); void api.request("/v1/stop", { method: "POST", body: "{}" }).then(() => setMessage("Stop requested.")).catch((err: unknown) => setMessage(err instanceof Error ? err.message : String(err))).finally(() => setMode("idle")); }
       if (input === "n" && !status) { setMode("start-form"); setDirectory(""); setField(0); }
+      if (input === "r" && status) { setMode("rename"); setRenameValue(status.node?.name ?? ""); setRenameError(null); }
       return;
     }
     if (mode === "start-form") {
@@ -624,8 +660,27 @@ function ServerScreen({ api, status, autoStart, onBack, onExitWithCommand }: { a
         if (!directory.trim()) { setMessage("Storage directory is required."); return; }
         onExitWithCommand(`openbucket serve ${directory.trim()} --name ${name.trim() || "home-node"} --detach --no-open`);
       }
+      return;
+    }
+    if (mode === "rename") {
+      if (renaming) return;
+      if (key.escape) { setMode("idle"); return; }
+      if (key.return) submitRename();
     }
   });
+
+  if (mode === "rename") {
+    return h(
+      Box,
+      { flexDirection: "column", borderStyle: "round", borderColor: "cyan", paddingX: 1 },
+      h(Text, { bold: true }, "Rename node"),
+      h(TextField, { label: "New name", value: renameValue, onChange: setRenameValue }),
+      renameError ? h(Text, { color: "red" }, renameError) : null,
+      renaming ? h(Text, { dimColor: true }, "Renaming…") : null,
+      h(Box, { marginTop: 1 }, h(Text, { dimColor: true }, "Also updates the hosted control plane if this node is signed in and connected.")),
+      h(StatusBar, { text: "enter rename   esc cancel" }),
+    );
+  }
 
   if (mode === "start-form") {
     return h(
@@ -661,7 +716,7 @@ function ServerScreen({ api, status, autoStart, onBack, onExitWithCommand }: { a
         )
       : h(Text, { color: "yellow" }, "○ Not running"),
     message ? h(Text, { color: "yellow" }, message) : null,
-    h(StatusBar, { text: status ? "s stop   esc back" : "n start a node   esc back" }),
+    h(StatusBar, { text: status ? "r rename   s stop   esc back" : "n start a node   esc back" }),
   );
 }
 

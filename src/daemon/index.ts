@@ -153,6 +153,24 @@ function decodePart(value: string, label: string): string {
   }
 }
 
+// Mirrors server/control-plane/model.ts's normalizeNodeName so a name accepted locally is
+// also accepted when the node later registers with (or renames on) the hosted control plane.
+function normalizeNodeName(value: unknown): string {
+  if (typeof value !== "string") {
+    throw new StoreError("InvalidNodeName", "Node name must contain 3-48 lowercase letters, numbers, or hyphens.");
+  }
+  const name = value.normalize("NFKC").trim().toLowerCase();
+  if (
+    name.length < 3 ||
+    name.length > 48 ||
+    !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])$/.test(name) ||
+    name.includes("--")
+  ) {
+    throw new StoreError("InvalidNodeName", "Node name must be a DNS-safe label with 3-48 characters.");
+  }
+  return name;
+}
+
 function rejectUnsafeRawPath(rawUrl: string | undefined): void {
   const rawPath = (rawUrl ?? "/").split("?", 1)[0] ?? "/";
   let decoded: string;
@@ -523,6 +541,14 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
         dashboardUrl: config.dashboardUrl ?? null,
         storageRoot: store.root,
       });
+      return;
+    }
+
+    if (path === "/v1/node" && (req.method === "PATCH" || req.method === "PUT")) {
+      const body = await readJson(req, ctx);
+      const name = normalizeNodeName(body.name);
+      const updated = await store.setNodeName(name);
+      sendJson(res, ctx, 200, { nodeId: store.nodeId, nodeName: updated });
       return;
     }
 
