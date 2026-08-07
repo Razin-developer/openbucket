@@ -92,14 +92,18 @@ describe("authentication HTTP boundary", () => {
     );
   });
 
-  test("clears both production and local session cookie names", () => {
+  test("clears production and local session cookie names, and the client-readable signed-in hint", () => {
     const cookies = clearedSessionCookies();
-    assert.equal(cookies.length, 2);
+    assert.equal(cookies.length, 3);
     assert.match(cookies[0], new RegExp(`^${PRODUCTION_SESSION_COOKIE}=;`));
     assert.match(cookies[0], /Max-Age=0/);
     assert.match(cookies[0], /; Secure$/);
     assert.match(cookies[1], new RegExp(`^${DEVELOPMENT_SESSION_COOKIE}=;`));
     assert.match(cookies[1], /Max-Age=0/);
+    assert.match(cookies[2], /^ob_signed_in=;/);
+    assert.match(cookies[2], /Max-Age=0/);
+    // The hint cookie is intentionally not HttpOnly (client JS reads it for optimistic UI state).
+    assert.equal(cookies[2].includes("HttpOnly"), false);
   });
 
   test("redirects an unauthenticated dashboard request before static content", async () => {

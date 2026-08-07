@@ -8,10 +8,12 @@ import {
   assertSameOriginPost,
   errorResponse,
   jsonResponse,
+  parseWithSchema,
   readJsonObject,
   requestIp,
 } from "../auth/http.js";
 import { authenticateRequest, type PublicUser } from "../auth/service.js";
+import { createNodeBodySchema, emptyBodySchema, updateNodeBodySchema } from "./schemas.js";
 import {
   getControlPlaneCollections,
   type ControlPlaneCollections,
@@ -53,12 +55,6 @@ const EMPTY_STORAGE: NodeStorage = Object.freeze({
 
 function isDuplicateKey(error: unknown): boolean {
   return (error as { code?: unknown }).code === 11000;
-}
-
-function onlyFields(body: Record<string, unknown>, allowed: readonly string[]): void {
-  if (Object.keys(body).some((key) => !allowed.includes(key))) {
-    throw new ApiError(400, "INVALID_REQUEST", "Request contains unsupported fields.");
-  }
 }
 
 function objectId(value: string, code = "INVALID_NODE_ID"): ObjectId {
@@ -262,7 +258,7 @@ export async function handleCreateNode(request: Request): Promise<Response> {
     assertSameOriginPost(request);
     const user = await requireUser(request);
     const body = await readJsonObject(request);
-    onlyFields(body, ["name"]);
+    parseWithSchema(createNodeBodySchema, body, "INVALID_REQUEST", "Request contains unsupported fields.");
     const name = normalizeNodeName(body.name);
     const userId = objectId(user.id);
     const collections = await getControlPlaneCollections();
@@ -317,7 +313,7 @@ export async function handleUpdateNode(request: Request, nodeId: string): Promis
     const user = await requireUser(request);
     await consumeRateLimit(await getControlPlaneCollections(), "user-write", user.id, USER_WRITE_LIMIT, USER_WRITE_WINDOW_MS);
     const body = await readJsonObject(request);
-    onlyFields(body, ["name"]);
+    parseWithSchema(updateNodeBodySchema, body, "INVALID_REQUEST", "Request contains unsupported fields.");
     const name = normalizeNodeName(body.name);
     const userId = objectId(user.id);
     const current = await ownedNode(userId, nodeId);
@@ -348,7 +344,7 @@ export async function handleDeleteNode(request: Request, nodeId: string): Promis
     const user = await requireUser(request);
     await consumeRateLimit(await getControlPlaneCollections(), "user-write", user.id, USER_WRITE_LIMIT, USER_WRITE_WINDOW_MS);
     const body = await readJsonObject(request);
-    onlyFields(body, []);
+    parseWithSchema(emptyBodySchema, body, "INVALID_REQUEST", "Request contains unsupported fields.");
     const userId = objectId(user.id);
     const node = await ownedNode(userId, nodeId);
     const { nodes } = await getControlPlaneCollections();
@@ -385,7 +381,7 @@ export async function handleRotateNodeToken(request: Request, nodeId: string): P
     const user = await requireUser(request);
     const body = await readJsonObject(request);
     await consumeRateLimit(await getControlPlaneCollections(), "user-write", user.id, USER_WRITE_LIMIT, USER_WRITE_WINDOW_MS);
-    onlyFields(body, []);
+    parseWithSchema(emptyBodySchema, body, "INVALID_REQUEST", "Request contains unsupported fields.");
     const userId = objectId(user.id);
     const current = await ownedNode(userId, nodeId);
     const credential = issueNodeCredential(current._id);
@@ -421,7 +417,7 @@ export async function handleRevokeNodeToken(request: Request, nodeId: string): P
     const user = await requireUser(request);
     const body = await readJsonObject(request);
     await consumeRateLimit(await getControlPlaneCollections(), "user-write", user.id, USER_WRITE_LIMIT, USER_WRITE_WINDOW_MS);
-    onlyFields(body, []);
+    parseWithSchema(emptyBodySchema, body, "INVALID_REQUEST", "Request contains unsupported fields.");
     const userId = objectId(user.id);
     const current = await ownedNode(userId, nodeId);
     const { nodes } = await getControlPlaneCollections();
@@ -455,7 +451,7 @@ export async function handleManagementSession(request: Request, nodeId: string):
     const user = await requireUser(request);
     await consumeRateLimit(await getControlPlaneCollections(), "user-write", user.id, USER_WRITE_LIMIT, USER_WRITE_WINDOW_MS);
     const body = await readJsonObject(request);
-    onlyFields(body, []);
+    parseWithSchema(emptyBodySchema, body, "INVALID_REQUEST", "Request contains unsupported fields.");
     const node = await ownedNode(objectId(user.id), nodeId);
     const endpoint = node.endpoints?.management;
     if (!endpoint?.url || !endpoint.healthy || endpoint.kind === "none" || endpoint.kind === "local") {

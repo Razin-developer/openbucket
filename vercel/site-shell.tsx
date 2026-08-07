@@ -36,8 +36,25 @@ export function Brand({ inverted = false }: { inverted?: boolean }) {
 
 type SessionState = "loading" | "authenticated" | "anonymous";
 
+/**
+ * Non-HttpOnly, non-secret hint cookie the server sets/clears in lockstep with the real (HttpOnly)
+ * session cookie — see server/auth/http.ts's signedInHintCookie(). Reading it synchronously lets
+ * the header render its final "Sign in" vs "Dashboard" state on the very first paint instead of
+ * showing nothing (or the wrong thing) until the /api/auth/session round-trip resolves.
+ */
+const SIGNED_IN_HINT_COOKIE = "ob_signed_in";
+
+function readSignedInHint(): "authenticated" | "anonymous" | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${SIGNED_IN_HINT_COOKIE}=([^;]*)`));
+  return match?.[1] === "1" ? "authenticated" : null;
+}
+
 function useSessionState(): SessionState {
-  const [state, setState] = useState<SessionState>("loading");
+  // Optimistic initial value from the readable hint cookie (or "loading" if it's absent — a
+  // first-ever anonymous visit has no cookie to read either way, so "loading" briefly is correct
+  // there too). The background fetch below always still runs to catch a stale/expired hint.
+  const [state, setState] = useState<SessionState>(() => readSignedInHint() ?? "loading");
   useEffect(() => {
     let cancelled = false;
     fetch("/api/auth/session", { credentials: "include", headers: { accept: "application/json" } })

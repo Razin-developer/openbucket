@@ -1,5 +1,13 @@
+import type { ZodType } from "zod";
+
 export const PRODUCTION_SESSION_COOKIE = "__Host-openbucket_session";
 export const DEVELOPMENT_SESSION_COOKIE = "openbucket_session";
+/**
+ * Deliberately NOT HttpOnly and carries no secret — it only lets client JS render an optimistic
+ * "signed in" header on first paint instead of waiting on a /api/auth/session round-trip. Always
+ * set/cleared in lockstep with the real (HttpOnly) session cookie; never trusted for authorization.
+ */
+export const SIGNED_IN_HINT_COOKIE = "ob_signed_in";
 
 type ErrorPayload = { error: { code: string; message: string } };
 
@@ -142,7 +150,35 @@ export function clearedSessionCookies(): string[] {
   return [
     `${PRODUCTION_SESSION_COOKIE}=; ${expired}; Secure`,
     `${DEVELOPMENT_SESSION_COOKIE}=; ${expired}`,
+    clearedSignedInHintCookie(),
   ];
+}
+
+/** Set alongside sessionCookie() on every successful login/register/OAuth callback. */
+export function signedInHintCookie(request: Request, maximumAgeSeconds: number): string {
+  const secure = isSecureRequest(request);
+  const expires = new Date(Date.now() + maximumAgeSeconds * 1000).toUTCString();
+  return `${SIGNED_IN_HINT_COOKIE}=1; Path=/; Max-Age=${maximumAgeSeconds}; Expires=${expires}; SameSite=Strict${secure ? "; Secure" : ""}`;
+}
+
+/** Set alongside clearedSessionCookies() on logout — not HttpOnly, so no ";HttpOnly" here either. */
+export function clearedSignedInHintCookie(): string {
+  return `${SIGNED_IN_HINT_COOKIE}=; Path=/; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Strict`;
+}
+
+/**
+ * Parses `body` against a Zod schema, mapping any failure to the existing ApiError contract
+ * (status 400, a caller-chosen stable `code`, and either the caller's message or the first Zod
+ * issue's message) so every existing test asserting `error.code`/`error.status` keeps working
+ * unchanged whether validation was hand-rolled or is now schema-based.
+ */
+export function parseWithSchema<T>(schema: ZodType<T>, body: unknown, code: string, message?: string): T {
+  const result = schema.safeParse(body);
+  if (!result.success) {
+    const firstIssue = result.error.issues[0];
+    throw new ApiError(400, code, message ?? firstIssue?.message ?? "Request is invalid.");
+  }
+  return result.data;
 }
 
 export function requestIp(request: Request): string {

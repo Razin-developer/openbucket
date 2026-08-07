@@ -141,7 +141,7 @@ describe("MongoDB-backed authentication", { skip: !testUri }, () => {
     const loggedOut = await handleLogout(apiRequest("/api/auth/logout", "POST", {}, loginCookie, "192.0.2.13"));
     assert.equal(loggedOut.status, 200);
     const clearedCookies = loggedOut.headers.getSetCookie();
-    assert.equal(clearedCookies.length, 2);
+    assert.equal(clearedCookies.length, 3); // production/dev session cookies + the client-readable signed-in hint
     assert.ok(clearedCookies.every((cookie) => cookie.includes("Max-Age=0")));
     const invalidated = await handleSession(apiRequest("/api/auth/session", "GET", undefined, loginCookie));
     assert.equal(invalidated.status, 401);

@@ -22,10 +22,22 @@ import {
   errorResponse,
   getSessionToken,
   jsonResponse,
+  parseWithSchema,
   readJsonObject,
   requestIp,
   sessionCookie,
+  signedInHintCookie,
 } from "./http.js";
+import {
+  emailSchema,
+  forgotPasswordBodySchema,
+  loginBodySchema,
+  nameSchema,
+  passwordSchema,
+  registerBodySchema,
+  resetPasswordBodySchema,
+  resetTokenSchema,
+} from "./schemas.js";
 
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const LOGIN_IP_LIMIT = 20;
@@ -88,50 +100,15 @@ function publicAdminUser(email: string): PublicUser {
 }
 
 function normalizeEmail(value: unknown): string {
-  if (typeof value !== "string") throw new ApiError(400, "INVALID_EMAIL", "Enter a valid email address.");
-  const email = value.normalize("NFKC").trim().toLowerCase();
-  if (email.length < 3 || email.length > 254 || /[\u0000-\u001f\u007f\s]/.test(email)) {
-    throw new ApiError(400, "INVALID_EMAIL", "Enter a valid email address.");
-  }
-  const parts = email.split("@");
-  if (parts.length !== 2 || !parts[0] || parts[0].length > 64 || !parts[1] || parts[1].length > 253) {
-    throw new ApiError(400, "INVALID_EMAIL", "Enter a valid email address.");
-  }
-  if (!/^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+$/.test(parts[0])) {
-    throw new ApiError(400, "INVALID_EMAIL", "Enter a valid email address.");
-  }
-  if (!/^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(parts[1])) {
-    throw new ApiError(400, "INVALID_EMAIL", "Enter a valid email address.");
-  }
-  return email;
+  return parseWithSchema(emailSchema, value, "INVALID_EMAIL", "Enter a valid email address.");
 }
 
 function validatePassword(value: unknown): string {
-  if (typeof value !== "string") {
-    throw new ApiError(400, "INVALID_PASSWORD", "Password must contain 12-128 characters.");
-  }
-  const characters = Array.from(value).length;
-  const bytes = Buffer.byteLength(value, "utf8");
-  if (characters < 12 || characters > 128 || bytes > 1024 || value.includes("\0")) {
-    throw new ApiError(400, "INVALID_PASSWORD", "Password must contain 12-128 characters.");
-  }
-  return value;
+  return parseWithSchema(passwordSchema, value, "INVALID_PASSWORD", "Password must contain 12-128 characters.");
 }
 
 function validateName(value: unknown): string | null {
-  if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string") throw new ApiError(400, "INVALID_NAME", "Name must contain 1-80 characters.");
-  const name = value.normalize("NFKC").trim().replace(/\s+/g, " ");
-  if (!name || Array.from(name).length > 80 || Buffer.byteLength(name, "utf8") > 320 || /[\u0000-\u001f\u007f]/.test(name)) {
-    throw new ApiError(400, "INVALID_NAME", "Name must contain 1-80 characters.");
-  }
-  return name;
-}
-
-function assertOnlyFields(body: Record<string, unknown>, allowed: readonly string[]): void {
-  if (Object.keys(body).some((key) => !allowed.includes(key))) {
-    throw new ApiError(400, "INVALID_REQUEST", "Request contains unsupported fields.");
-  }
+  return parseWithSchema(nameSchema, value, "INVALID_NAME", "Name must contain 1-80 characters.");
 }
 
 async function consumeRateLimit(
@@ -251,7 +228,7 @@ export async function handleRegister(request: Request): Promise<Response> {
     const config = getAuthConfig();
     if (!config.allowSignup) throw signupUnavailable();
     const body = await readJsonObject(request);
-    assertOnlyFields(body, ["email", "password", "name"]);
+    parseWithSchema(registerBodySchema, body, "INVALID_REQUEST", "Request contains unsupported fields.");
     const email = normalizeEmail(body.email);
     if (config.adminEmail && email === config.adminEmail) {
       throw new ApiError(409, "EMAIL_IN_USE", "An account with that email already exists.");
@@ -284,6 +261,7 @@ export async function handleRegister(request: Request): Promise<Response> {
     const session = await createSession(request, user._id);
     const response = jsonResponse({ user: publicUser(user) }, 201);
     response.headers.append("Set-Cookie", sessionCookie(request, session.token, config.sessionTtlSeconds));
+    response.headers.append("Set-Cookie", signedInHintCookie(request, config.sessionTtlSeconds));
     return response;
   } catch (error) {
     return errorResponse(error);
@@ -294,7 +272,7 @@ export async function handleLogin(request: Request): Promise<Response> {
   try {
     assertSameOriginPost(request);
     const body = await readJsonObject(request);
-    assertOnlyFields(body, ["email", "password"]);
+    parseWithSchema(loginBodySchema, body, "INVALID_REQUEST", "Request contains unsupported fields.");
     const email = normalizeEmail(body.email);
     const password = validatePassword(body.password);
     await applyLoginRateLimits(request, email);
@@ -307,6 +285,7 @@ export async function handleLogin(request: Request): Promise<Response> {
         const session = await createSession(request, null, { isEnvAdmin: true });
         const response = jsonResponse({ user: publicAdminUser(config.adminEmail) });
         response.headers.append("Set-Cookie", sessionCookie(request, session.token, config.sessionTtlSeconds));
+        response.headers.append("Set-Cookie", signedInHintCookie(request, config.sessionTtlSeconds));
         return response;
       }
     }
@@ -323,6 +302,7 @@ export async function handleLogin(request: Request): Promise<Response> {
     const migrated = await ensureUserHandle(user, collections);
     const response = jsonResponse({ user: publicUser(migrated) });
     response.headers.append("Set-Cookie", sessionCookie(request, session.token, config.sessionTtlSeconds));
+    response.headers.append("Set-Cookie", signedInHintCookie(request, config.sessionTtlSeconds));
     return response;
   } catch (error) {
     return errorResponse(error);
@@ -370,7 +350,7 @@ export async function handleForgotPassword(request: Request): Promise<Response> 
   try {
     assertSameOriginPost(request);
     const body = await readJsonObject(request);
-    assertOnlyFields(body, ["email"]);
+    parseWithSchema(forgotPasswordBodySchema, body, "INVALID_REQUEST", "Request contains unsupported fields.");
     const email = normalizeEmail(body.email);
     await applyResetRateLimits(request, email);
 
@@ -404,14 +384,12 @@ export async function handleResetPassword(request: Request): Promise<Response> {
   try {
     assertSameOriginPost(request);
     const body = await readJsonObject(request);
-    assertOnlyFields(body, ["token", "password"]);
-    if (typeof body.token !== "string" || body.token.length < 16 || body.token.length > 512) {
-      throw new ApiError(400, "INVALID_TOKEN", "This reset link is invalid or has expired.");
-    }
+    parseWithSchema(resetPasswordBodySchema, body, "INVALID_REQUEST", "Request contains unsupported fields.");
+    const token = parseWithSchema(resetTokenSchema, body.token, "INVALID_TOKEN", "This reset link is invalid or has expired.");
     const password = validatePassword(body.password);
     const config = getAuthConfig();
     const collections = await getAuthCollections();
-    const resetId = keyedHash(config.authSecret, "password-reset", body.token);
+    const resetId = keyedHash(config.authSecret, "password-reset", token);
     const reset = await collections.passwordResets.findOne({ _id: resetId, expiresAt: { $gt: new Date() } });
     if (!reset) throw new ApiError(400, "INVALID_TOKEN", "This reset link is invalid or has expired.");
 
@@ -520,6 +498,7 @@ export async function handleGoogleCallback(request: Request): Promise<Response> 
       },
     });
     response.headers.append("Set-Cookie", sessionCookie(request, session.token, config.sessionTtlSeconds));
+    response.headers.append("Set-Cookie", signedInHintCookie(request, config.sessionTtlSeconds));
     return response;
   } catch {
     return loginError("google_signin_failed");

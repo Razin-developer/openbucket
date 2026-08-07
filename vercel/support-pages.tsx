@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { AlertCircle, Check } from "lucide-react";
 import { SiteShell, githubUrl } from "./site-shell";
+import { bugReportFormSchema, feedbackFormSchema, validateForm } from "./validation";
 
 function InfoHero({ kicker, title, lead }: { kicker: string; title: string; lead?: string }) {
   return (
@@ -36,13 +37,19 @@ export function FeedbackPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
     setError(null);
     const form = new FormData(event.currentTarget);
-    const result = await postJson("/api/feedback", {
+    const validated = validateForm(feedbackFormSchema, {
       message: String(form.get("message") ?? "").trim(),
-      email: String(form.get("email") ?? "").trim() || undefined,
-      name: String(form.get("name") ?? "").trim() || undefined,
+      email: String(form.get("email") ?? "").trim(),
+      name: String(form.get("name") ?? "").trim(),
+    });
+    if (!validated.ok) { setError(validated.message); return; }
+    setBusy(true);
+    const result = await postJson("/api/feedback", {
+      message: validated.value.message,
+      email: validated.value.email || undefined,
+      name: validated.value.name || undefined,
       path: "/feedback",
     });
     setBusy(false);
@@ -84,15 +91,23 @@ export function BugReportPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
     setError(null);
     const form = new FormData(event.currentTarget);
-    const result = await postJson("/api/bugs", {
+    const validated = validateForm(bugReportFormSchema, {
       title: String(form.get("title") ?? "").trim(),
       message: String(form.get("message") ?? "").trim(),
-      stepsToReproduce: String(form.get("stepsToReproduce") ?? "").trim() || undefined,
-      severity: String(form.get("severity") ?? "").trim() || undefined,
-      email: String(form.get("email") ?? "").trim() || undefined,
+      stepsToReproduce: String(form.get("stepsToReproduce") ?? "").trim(),
+      severity: String(form.get("severity") ?? "").trim(),
+      email: String(form.get("email") ?? "").trim(),
+    });
+    if (!validated.ok) { setError(validated.message); return; }
+    setBusy(true);
+    const result = await postJson("/api/bugs", {
+      title: validated.value.title,
+      message: validated.value.message,
+      stepsToReproduce: validated.value.stepsToReproduce || undefined,
+      severity: validated.value.severity || undefined,
+      email: validated.value.email || undefined,
       path: "/report-bug",
     });
     setBusy(false);
