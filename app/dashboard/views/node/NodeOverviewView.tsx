@@ -2,6 +2,7 @@ import { ArrowRight } from "lucide-react";
 import { CopyButton } from "../../components/CopyButton";
 import { formatBytes, formatDuration, formatNumber } from "../../api/format";
 import { StatCard } from "../../components/StatCard";
+import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import type { NodeViewContext } from "./context";
 
 export function NodeOverviewView({ node, onOpenConnectionSettings }: { node: NodeViewContext; onOpenConnectionSettings: () => void }) {
@@ -37,14 +38,14 @@ export function NodeOverviewView({ node, onOpenConnectionSettings }: { node: Nod
         </div>
       </section>
       {loadState === "disconnected" ? (
-        <section className="ob-connection-alert" role="alert">
-          <div><p className="ob-eyebrow">Daemon not reachable</p><h2>Your files stay untouched until you connect.</h2><p>{lastError}. Start a node, then refresh this page.</p></div>
+        <Alert variant="destructive" className="ob-connection-alert">
+          <div><p className="ob-eyebrow">Daemon not reachable</p><AlertTitle className="text-[18px] leading-normal font-semibold tracking-[-.4px] whitespace-normal">Your files stay untouched until you connect.</AlertTitle><AlertDescription className="mt-[5px] block text-[color:#702b30]">{lastError}. Start a node, then refresh this page.</AlertDescription></div>
           <div className="ob-command-row"><code>openbucket serve D:\OpenBucket</code><CopyButton value="openbucket serve D:\OpenBucket" /></div>
           <div className="ob-alert-actions">
             <button className="ob-button primary compact" type="button" onClick={() => void refresh()}>Try again</button>
             <button className="ob-button secondary compact" type="button" onClick={onOpenConnectionSettings}>Change API URL</button>
           </div>
-        </section>
+        </Alert>
       ) : null}
       <section className="ob-stat-grid" aria-label="Node metrics">
         <StatCard label="Buckets" value={formatNumber(status?.bucketCount ?? 0)} detail="Mapped to real directories" />

@@ -73,7 +73,8 @@ export function useObjectBrowser(apiFetch: NodeApiFetch, apiBase: string, adminT
   }, [adminToken, apiBase, notify, selectedBucket]);
 
   const deleteObject = useCallback(async (object: StorageObject) => {
-    if (!selectedBucket || !window.confirm(`Delete "${object.key}"? This cannot be undone.`)) return;
+    // Confirmation now happens in the view layer (ConfirmDialog / AlertDialog) before this runs.
+    if (!selectedBucket) return;
     try {
       const path = object.key.split("/").map(encodeURIComponent).join("/");
       await apiFetch(`/v1/buckets/${encodeURIComponent(selectedBucket)}/objects/${path}`, { method: "DELETE" });

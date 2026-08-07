@@ -2,7 +2,9 @@ import { useState, type ReactNode } from "react";
 import type { NavSection } from "../api/types";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { ThemeProvider } from "./ThemeProvider";
 import { Toaster } from "../../components/ui/sonner";
+import { TooltipProvider } from "../../components/ui/tooltip";
 import "../dashboard-shell.css";
 
 /**
@@ -27,28 +29,32 @@ export function DashboardShell({
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   return (
-    <div className="ob-shell">
-      <a className="ob-skip-link" href="#ob-main-content">Skip to content</a>
-      <Sidebar
-        navSections={navSections}
-        activeNavId={activeNavId}
-        onNavigate={onNavigate}
-        workspaceSwitcher={workspaceSwitcher}
-        sidebarFooter={sidebarFooter}
-        mobileNavOpen={mobileNavOpen}
-        onCloseMobile={() => setMobileNavOpen(false)}
-      />
-      <div className="ob-workspace">
-        <Topbar
-          breadcrumbs={breadcrumbs}
-          search={search}
-          topbarActions={topbarActions}
-          avatarStack={avatarStack}
-          onOpenMobileNav={() => setMobileNavOpen(true)}
-        />
-        <main id="ob-main-content" className="ob-main-content">{children}</main>
-      </div>
-      <Toaster position="bottom-right" />
-    </div>
+    <ThemeProvider>
+      <TooltipProvider>
+        <div className="ob-shell">
+          <a className="ob-skip-link" href="#ob-main-content">Skip to content</a>
+          <Sidebar
+            navSections={navSections}
+            activeNavId={activeNavId}
+            onNavigate={onNavigate}
+            workspaceSwitcher={workspaceSwitcher}
+            sidebarFooter={sidebarFooter}
+            mobileNavOpen={mobileNavOpen}
+            onCloseMobile={() => setMobileNavOpen(false)}
+          />
+          <div className="ob-workspace">
+            <Topbar
+              breadcrumbs={breadcrumbs}
+              search={search}
+              topbarActions={topbarActions}
+              avatarStack={avatarStack}
+              onOpenMobileNav={() => setMobileNavOpen(true)}
+            />
+            <main id="ob-main-content" className="ob-main-content">{children}</main>
+          </div>
+          <Toaster position="bottom-right" />
+        </div>
+      </TooltipProvider>
+    </ThemeProvider>
   );
 }

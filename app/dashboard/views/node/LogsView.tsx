@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { EmptyState } from "../../components/EmptyState";
 import { StatCard } from "../../components/StatCard";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
 import { formatBytes, formatNumber, methodTone } from "../../api/format";
 import type { NodeViewContext } from "./context";
 
@@ -31,21 +32,21 @@ export function LogsView({ node }: { node: NodeViewContext }) {
       </div>
       {visibleLogs.length ? (
         <div className="ob-table-card ob-logs-table">
-          <table>
-            <thead><tr><th>Time</th><th>Method</th><th>Request</th><th>Status</th><th>Transfer</th><th>Duration</th></tr></thead>
-            <tbody>
+          <Table>
+            <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Method</TableHead><TableHead>Request</TableHead><TableHead>Status</TableHead><TableHead>Transfer</TableHead><TableHead>Duration</TableHead></TableRow></TableHeader>
+            <TableBody>
               {visibleLogs.map((log, index) => (
-                <tr key={log.requestId ?? `${log.timestamp}-${index}`}>
-                  <td>{new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</td>
-                  <td><span className={`ob-method ${methodTone(log.method)}`}>{log.method}</span></td>
-                  <td className="ob-log-path"><code>{log.path}</code>{log.ip ? <small>{log.ip}</small> : null}</td>
-                  <td><span className={`ob-status-code ${log.status >= 400 ? "bad" : "good"}`}>{log.status || "—"}</span></td>
-                  <td>{formatBytes(log.bytesOut || log.bytesIn)}</td>
-                  <td>{log.durationMs.toFixed(log.durationMs < 10 ? 1 : 0)} ms</td>
-                </tr>
+                <TableRow key={log.requestId ?? `${log.timestamp}-${index}`}>
+                  <TableCell>{new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</TableCell>
+                  <TableCell><span className={`ob-method ${methodTone(log.method)}`}>{log.method}</span></TableCell>
+                  <TableCell className="ob-log-path"><code>{log.path}</code>{log.ip ? <small>{log.ip}</small> : null}</TableCell>
+                  <TableCell><span className={`ob-status-code ${log.status >= 400 ? "bad" : "good"}`}>{log.status || "—"}</span></TableCell>
+                  <TableCell>{formatBytes(log.bytesOut || log.bytesIn)}</TableCell>
+                  <TableCell>{log.durationMs.toFixed(log.durationMs < 10 ? 1 : 0)} ms</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <EmptyState title="No matching requests." body="Use the S3 endpoint or upload an object from the Buckets page; handled requests will appear here." />

@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { CopyButton } from "../../components/CopyButton";
+import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import type { NodeViewContext } from "./context";
 
 export function ConnectionsView({ node, onOpenConnectionSettings }: { node: NodeViewContext; onOpenConnectionSettings: () => void }) {
@@ -36,11 +37,19 @@ export function ConnectionsView({ node, onOpenConnectionSettings }: { node: Node
       </div>
       <article className="ob-code-panel">
         <div className="ob-code-panel-head"><div><p className="ob-eyebrow">Copy, paste, connect</p><h2>Client configuration</h2></div><CopyButton value={snippets[snippetTab]} label="Copy snippet" /></div>
-        <div className="ob-tabs" role="tablist" aria-label="Client examples">
-          {(["javascript", "python", "aws", "curl"] as const).map((tab) => (
-            <button key={tab} role="tab" aria-selected={snippetTab === tab} type="button" onClick={() => setSnippetTab(tab)}>{tab === "aws" ? "AWS CLI" : tab[0].toUpperCase() + tab.slice(1)}</button>
-          ))}
-        </div>
+        <Tabs value={snippetTab} onValueChange={(value) => setSnippetTab(value as keyof typeof snippets)}>
+          <TabsList variant="line" className="ob-tabs h-auto bg-transparent p-0 rounded-none" aria-label="Client examples">
+            {(["javascript", "python", "aws", "curl"] as const).map((tab) => (
+              <TabsTrigger
+                key={tab}
+                value={tab}
+                className="h-[39px] rounded-none border-0 bg-transparent px-[11px] py-0 text-[12px] font-normal text-[#999] shadow-none after:hidden data-[state=active]:bg-transparent data-[state=active]:text-white data-[state=active]:shadow-none"
+              >
+                {tab === "aws" ? "AWS CLI" : tab[0].toUpperCase() + tab.slice(1)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <pre><code>{snippets[snippetTab]}</code></pre>
       </article>
       <article className="ob-env-panel">
