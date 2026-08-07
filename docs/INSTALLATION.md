@@ -100,12 +100,12 @@ Compare the printed digest with the corresponding `SHA256SUMS` entry. Run `sha25
 The published installers are small wrappers around npm and accept a version/package override. Download and review the script before running it:
 
 ```bash
-curl -fsSLo openbucket-install.sh https://openbucket-eight.vercel.app/install.sh
+curl -fsSLo openbucket-install.sh https://openbucket.zydcode.in/install.sh
 OPENBUCKET_INSTALL_VERSION=0.1.19 sh ./openbucket-install.sh
 ```
 
 ```powershell
-Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile openbucket-install.ps1
+Invoke-WebRequest https://openbucket.zydcode.in/install.ps1 -OutFile openbucket-install.ps1
 & .\openbucket-install.ps1 -Version 0.1.19
 ```
 

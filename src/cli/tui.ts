@@ -934,7 +934,7 @@ function App({ api, onExitWithCommand }: { api: TuiApi; onExitWithCommand: (comm
       Box,
       { borderStyle: "round", borderColor: "cyan", paddingX: 1, marginBottom: 1 },
       h(Text, { bold: true, color: "cyan" }, "▲ OpenBucket"),
-      h(Text, { dimColor: true }, `  v${api.version} · interactive console`),
+      h(Text, { dimColor: true }, `  v${api.version} · interactive console (beta)`),
     ),
     body,
   );
