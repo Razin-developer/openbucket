@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.21] - 2026-08-07
+
+### Fixed
+
+- The floating Buy Me a Coffee widget was mounted twice (a React component and a static `<script>` tag both injecting the same widget script), showing two floating buttons to every visitor. Consolidated to the single static tag.
+
 ## [0.1.20] - 2026-08-07
 
 ### Changed
