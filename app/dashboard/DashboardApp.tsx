@@ -79,7 +79,11 @@ export function DashboardApp({ initialConnection }: { initialConnection?: Initia
             onSettings={() => setConnectionOpen(true)}
           />
         }
-        breadcrumbs={<><span>OpenBucket</span><b>/</b><strong>{NODE_NAV_ITEMS.find((item) => item.id === activeNavId)?.label}</strong></>}
+        breadcrumbs={[
+          { label: data.status?.nodeName ?? "OpenBucket" },
+          { label: NODE_NAV_ITEMS.find((item) => item.id === activeNavId)?.label ?? "", onClick: activeNavId === "buckets" && objectBrowser.selectedBucket ? () => { objectBrowser.setSelectedBucket(null); objectBrowser.setObjects([]); } : undefined },
+          ...(activeNavId === "buckets" && objectBrowser.selectedBucket ? [{ label: objectBrowser.selectedBucket }] : []),
+        ]}
         topbarActions={<>
           <span className="ob-last-updated">{data.lastUpdated ? `Updated ${data.lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Not connected"}</span>
           <Tooltip>

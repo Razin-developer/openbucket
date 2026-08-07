@@ -1,5 +1,6 @@
 import { CircleAlert, FileUp, X } from "lucide-react";
 import type { UploadItem } from "../../lib/useUploadQueue";
+import { Progress } from "../../components/ui/progress";
 
 function formatBytes(value: number): string {
   if (!Number.isFinite(value) || value <= 0) return "0 B";
@@ -21,7 +22,7 @@ function UploadRow({ item, onCancel }: { item: UploadItem; onCancel: (id: string
         ) : item.status === "cancelled" ? (
           <p className="ob-upload-error">Cancelled</p>
         ) : (
-          <div className="ob-upload-bar"><i style={{ width: `${item.status === "done" ? 100 : percent}%` }} /></div>
+          <Progress className="ob-upload-bar h-1" value={item.status === "done" ? 100 : percent} />
         )}
       </div>
       {item.status === "queued" || item.status === "uploading" ? (

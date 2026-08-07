@@ -1,6 +1,6 @@
 {
   "$schema": "https://ui.shadcn.com/schema.json",
-  "style": "new-york",
+  "style": "radix-nova",
   "rsc": false,
   "tsx": true,
   "tailwind": {
@@ -11,11 +11,15 @@
     "prefix": ""
   },
   "iconLibrary": "lucide",
+  "rtl": false,
   "aliases": {
     "components": "@/app/components/ui",
-    "ui": "@/app/components/ui",
     "utils": "@/app/lib/cn",
+    "ui": "@/app/components/ui",
     "lib": "@/app/lib",
     "hooks": "@/app/hooks"
-  }
+  },
+  "menuColor": "default",
+  "menuAccent": "subtle",
+  "registries": {}
 }
