@@ -46,6 +46,12 @@ export const bugReportFormSchema = z.object({
   email: z.union([clientEmailSchema, z.literal("")]).optional(),
 });
 
+/**
+ * Dashboard form schemas (bucket/key/connection) live in app/lib/validation.ts, not here — the
+ * daemon's standalone Docker image builds only app/ (see .dockerignore excluding vercel/), so
+ * anything reachable from app/page.tsx must not depend on this file.
+ */
+
 /** Runs a schema and returns either the parsed value or the first human-readable error message. */
 export function validateForm<T>(schema: z.ZodType<T>, data: unknown): { ok: true; value: T } | { ok: false; message: string } {
   const result = schema.safeParse(data);
