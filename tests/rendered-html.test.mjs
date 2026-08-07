@@ -128,7 +128,7 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
   }
   assert.match(hostedAuth, /fetch\("\/api\/auth\/session"/);
   assert.match(hostedAuth, /Create one/);
-  assert.match(hostedDocs, /OPENBUCKET_ADMIN_EMAIL/);
+  assert.match(hostedDocs, /server-configured admin/);
   assert.match(siteShell, /site-nav-panel/);
   assert.match(hostedAuth, /<HostedControlPlane user=\{state\.user\} \/>/);
   assert.match(hostedApp, /nodeNameForPath/);
