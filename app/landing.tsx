@@ -5,6 +5,7 @@ import {
   HardDrive, KeyRound, Lock, Rocket, Server, ShieldCheck, Star, Terminal, Workflow,
 } from "lucide-react";
 import { SiteFooter, SiteHeader, buyMeACoffeeUrl, githubUrl } from "./site-shell";
+import { Avatar, AvatarFallback } from "./components/ui/avatar";
 
 function useParallax<T extends HTMLElement>(factor = 0.25) {
   const ref = useRef<T | null>(null);
@@ -97,6 +98,16 @@ const deployOptions = [
   { title: "Hosted dashboard", body: "Pair a local node with the hosted control plane for remote visibility and a Quick Tunnel.", items: ["Account-gated production serve", "S3-only Cloudflare Quick Tunnel", "Usage metering per node"] },
 ];
 
+// Illustrative placeholder testimonials — a template section, not real customer quotes.
+const testimonials = [
+  { initials: "PS", name: "Priya S.", role: "Platform engineer", quote: "Pointed our existing Boto3 scripts at OpenBucket and nothing broke. That's the whole pitch, honestly.", tone: "a" },
+  { initials: "JD", name: "Jordan D.", role: "Homelab tinkerer", quote: "Finally a NAS-friendly S3 endpoint I can run without standing up a whole object storage cluster.", tone: "b" },
+  { initials: "MK", name: "Mateus K.", role: "Backend lead, small SaaS", quote: "The dashboard makes it easy to see what's actually happening on the node — request analytics, capacity, all of it.", tone: "c" },
+  { initials: "AR", name: "Ana R.", role: "DevOps consultant", quote: "One command to serve a folder, and Terraform just works against it. Deploys to client sites in minutes.", tone: "d" },
+  { initials: "TN", name: "Theo N.", role: "Indie developer", quote: "Scoped API keys per app is the feature I didn't know I needed until I stopped sharing one god credential everywhere.", tone: "a" },
+  { initials: "SL", name: "Sam L.", role: "Infra engineer", quote: "Local-first and it shows — loopback by default, a real bearer token for admin, nothing phoning home.", tone: "b" },
+];
+
 const integrationNodes = [
   { icon: Terminal, label: "CLI" },
   { icon: Boxes, label: "SDKs" },
@@ -129,6 +140,7 @@ export function LandingPage() {
   const featuresRef = useReveal<HTMLElement>();
   const integrationRef = useReveal<HTMLElement>();
   const deployRef = useReveal<HTMLElement>();
+  const testimonialsRef = useReveal<HTMLElement>();
   const supportRef = useReveal<HTMLElement>();
   const ctaRef = useReveal<HTMLDivElement>();
 
@@ -268,6 +280,30 @@ export function LandingPage() {
                   {option.items.map((item) => <li key={item}><Check size={14} aria-hidden="true" /> {item}</li>)}
                 </ul>
                 <a className={`site-button ${option.featured ? "light" : "dark"} small`} href="/docs">Read the docs</a>
+              </article>
+            ))}
+          </div>
+        </section>
+
+        <section className="fs-section reveal" id="testimonials" ref={testimonialsRef}>
+          <div className="fs-section-head">
+            <p className="fs-kicker">Testimonials</p>
+            <h2>People running OpenBucket on their own disks</h2>
+            <p className="fs-lead">Illustrative, on-brand examples of the kind of feedback the project aims for — not verified customer quotes.</p>
+          </div>
+          <div className="fs-testimonials-grid">
+            {testimonials.map(({ initials, name, role, quote, tone }) => (
+              <article className="fs-testimonial-card" key={name}>
+                <p className="fs-testimonial-quote">&ldquo;{quote}&rdquo;</p>
+                <div className="fs-testimonial-person">
+                  <Avatar size="lg" className="fs-testimonial-avatar">
+                    <AvatarFallback className={`fs-tone-${tone}`}>{initials}</AvatarFallback>
+                  </Avatar>
+                  <div>
+                    <strong>{name}</strong>
+                    <span>{role}</span>
+                  </div>
+                </div>
               </article>
             ))}
           </div>

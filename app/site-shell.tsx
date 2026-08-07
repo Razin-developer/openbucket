@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   BookOpen, Boxes, ChevronDown, Coffee, Container, ExternalLink, Gauge,
-  HardDrive, KeyRound, LayoutDashboard, LifeBuoy, Rocket, ShieldCheck, Star, Terminal, Workflow,
+  HardDrive, KeyRound, LayoutDashboard, LifeBuoy, MessageSquareQuote, Rocket, ShieldCheck, Star, Terminal, Workflow,
 } from "lucide-react";
 
 const githubUrl = "https://github.com/Razin-developer/openbucket";
@@ -140,6 +140,7 @@ const productLinks: NavLink[] = [
   { href: "/#features", label: "Features", description: "S3 compatibility, scoped keys, live analytics, share links.", icon: Gauge },
   { href: "/#connect", label: "Connect anything", description: "CLI, SDKs, and infra-as-code over the standard S3 API.", icon: Boxes },
   { href: "/#deploy", label: "Deployment", description: "Local, Docker/Compose, or the hosted control plane.", icon: Rocket },
+  { href: "/#testimonials", label: "Testimonials", description: "What people running OpenBucket say about it.", icon: MessageSquareQuote },
 ];
 
 const resourceLinks: NavLink[] = [
