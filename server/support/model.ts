@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { ApiError } from "../auth/http.js";
 import type { SupportSeverity } from "./database.js";
 
@@ -5,57 +6,74 @@ const MAX_MESSAGE_BYTES = 4_000;
 const MAX_SHORT_TEXT_BYTES = 200;
 const MAX_EMAIL_BYTES = 254;
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const SEVERITIES: readonly SupportSeverity[] = ["low", "medium", "high", "critical"];
+const SEVERITIES = ["low", "medium", "high", "critical"] as const satisfies readonly SupportSeverity[];
 
-function onlyFields(value: Record<string, unknown>, allowed: readonly string[]): void {
-  if (Object.keys(value).some((key) => !allowed.includes(key))) {
-    throw new ApiError(400, "INVALID_REQUEST", "Request contains unsupported fields.");
-  }
+function requiredTextSchema(field: string, maxBytes: number) {
+  return z.unknown().optional().transform((value, ctx) => {
+    if (typeof value !== "string" || value.trim().length === 0) {
+      ctx.addIssue({ code: "custom", message: `${field} is required.` });
+      return z.NEVER;
+    }
+    const trimmed = value.trim();
+    if (Buffer.byteLength(trimmed, "utf8") > maxBytes) {
+      ctx.addIssue({ code: "custom", message: `${field} is too long.` });
+      return z.NEVER;
+    }
+    return trimmed;
+  });
 }
 
-function requiredText(value: unknown, field: string, maxBytes: number): string {
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new ApiError(400, "INVALID_REQUEST", `${field} is required.`);
-  }
-  const trimmed = value.trim();
-  if (Buffer.byteLength(trimmed, "utf8") > maxBytes) {
-    throw new ApiError(400, "INVALID_REQUEST", `${field} is too long.`);
-  }
-  return trimmed;
+function optionalTextSchema(field: string, maxBytes: number) {
+  return z.unknown().optional().transform((value, ctx) => {
+    if (value === undefined || value === null || value === "") return null;
+    if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > maxBytes) {
+      ctx.addIssue({ code: "custom", message: `${field} is invalid.` });
+      return z.NEVER;
+    }
+    return value.trim() || null;
+  });
 }
 
-function optionalText(value: unknown, field: string, maxBytes: number): string | null {
+const optionalEmailSchema = optionalTextSchema("email", MAX_EMAIL_BYTES).transform((value, ctx) => {
+  if (value === null) return null;
+  if (!EMAIL_PATTERN.test(value)) {
+    ctx.addIssue({ code: "custom", message: "email is invalid." });
+    return z.NEVER;
+  }
+  return value.toLowerCase();
+});
+
+const optionalPathSchema = optionalTextSchema("path", 512).transform((value, ctx) => {
+  if (value === null) return null;
+  if (!value.startsWith("/")) {
+    ctx.addIssue({ code: "custom", message: "path is invalid." });
+    return z.NEVER;
+  }
+  return value;
+});
+
+const severitySchema = z.unknown().optional().transform((value, ctx) => {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || Buffer.byteLength(value, "utf8") > maxBytes) {
-    throw new ApiError(400, "INVALID_REQUEST", `${field} is invalid.`);
+  if (typeof value !== "string" || !SEVERITIES.includes(value as SupportSeverity)) {
+    ctx.addIssue({ code: "custom", message: "severity must be one of low, medium, high, critical." });
+    return z.NEVER;
   }
-  return value.trim() || null;
-}
-
-function optionalEmail(value: unknown): string | null {
-  const text = optionalText(value, "email", MAX_EMAIL_BYTES);
-  if (text === null) return null;
-  if (!EMAIL_PATTERN.test(text)) throw new ApiError(400, "INVALID_REQUEST", "email is invalid.");
-  return text.toLowerCase();
-}
-
-function optionalPath(value: unknown): string | null {
-  const text = optionalText(value, "path", 512);
-  if (text === null) return null;
-  if (!text.startsWith("/")) throw new ApiError(400, "INVALID_REQUEST", "path is invalid.");
-  return text;
-}
+  return value as SupportSeverity;
+});
 
 export type FeedbackInput = { message: string; email: string | null; name: string | null; path: string | null };
 
+const feedbackBodySchema = z.object({
+  message: requiredTextSchema("message", MAX_MESSAGE_BYTES),
+  email: optionalEmailSchema,
+  name: optionalTextSchema("name", MAX_SHORT_TEXT_BYTES),
+  path: optionalPathSchema,
+}).strict();
+
 export function validateFeedbackInput(body: Record<string, unknown>): FeedbackInput {
-  onlyFields(body, ["message", "email", "name", "path"]);
-  return {
-    message: requiredText(body.message, "message", MAX_MESSAGE_BYTES),
-    email: optionalEmail(body.email),
-    name: optionalText(body.name, "name", MAX_SHORT_TEXT_BYTES),
-    path: optionalPath(body.path),
-  };
+  const result = feedbackBodySchema.safeParse(body);
+  if (!result.success) throw invalidRequest(result.error);
+  return result.data;
 }
 
 export type BugReportInput = {
@@ -67,21 +85,22 @@ export type BugReportInput = {
   path: string | null;
 };
 
+const bugReportBodySchema = z.object({
+  title: requiredTextSchema("title", MAX_SHORT_TEXT_BYTES),
+  message: requiredTextSchema("message", MAX_MESSAGE_BYTES),
+  stepsToReproduce: optionalTextSchema("stepsToReproduce", MAX_MESSAGE_BYTES),
+  severity: severitySchema,
+  email: optionalEmailSchema,
+  path: optionalPathSchema,
+}).strict();
+
 export function validateBugReportInput(body: Record<string, unknown>): BugReportInput {
-  onlyFields(body, ["title", "message", "stepsToReproduce", "severity", "email", "path"]);
-  let severity: SupportSeverity | null = null;
-  if (body.severity !== undefined && body.severity !== null && body.severity !== "") {
-    if (typeof body.severity !== "string" || !SEVERITIES.includes(body.severity as SupportSeverity)) {
-      throw new ApiError(400, "INVALID_REQUEST", "severity must be one of low, medium, high, critical.");
-    }
-    severity = body.severity as SupportSeverity;
-  }
-  return {
-    title: requiredText(body.title, "title", MAX_SHORT_TEXT_BYTES),
-    message: requiredText(body.message, "message", MAX_MESSAGE_BYTES),
-    stepsToReproduce: optionalText(body.stepsToReproduce, "stepsToReproduce", MAX_MESSAGE_BYTES),
-    severity,
-    email: optionalEmail(body.email),
-    path: optionalPath(body.path),
-  };
+  const result = bugReportBodySchema.safeParse(body);
+  if (!result.success) throw invalidRequest(result.error);
+  return result.data;
+}
+
+function invalidRequest(error: z.ZodError): Error {
+  const message = error.issues[0]?.message ?? "Request is invalid.";
+  return new ApiError(400, "INVALID_REQUEST", message);
 }

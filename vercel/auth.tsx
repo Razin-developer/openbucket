@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { HostedControlPlane, type AccountUser } from "./control-plane";
 import { BrandMark, SiteShell } from "./site-shell";
+import { forgotPasswordFormSchema, loginFormSchema, registerFormSchema, resetPasswordFormSchema, validateForm } from "./validation";
 
 type User = AccountUser;
 type AuthResponse = { user?: User; ok?: boolean; message?: string; error?: { code?: string; message?: string } };
@@ -84,16 +85,24 @@ export function AuthPage({ mode }: { mode: "login" | "register" }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
     setError("");
     const form = new FormData(event.currentTarget);
-    const body: Record<string, string> = {
-      email: String(form.get("email") ?? "").trim(),
-      password: String(form.get("password") ?? ""),
-    };
+    const rawEmail = String(form.get("email") ?? "").trim();
+    const rawPassword = String(form.get("password") ?? "");
+    const body: Record<string, string> = {};
     if (registering) {
-      body.name = String(form.get("name") ?? "").trim();
+      const validated = validateForm(registerFormSchema, { email: rawEmail, password: rawPassword, name: String(form.get("name") ?? "").trim() });
+      if (!validated.ok) { setError(validated.message); return; }
+      body.email = validated.value.email;
+      body.password = validated.value.password;
+      if (validated.value.name) body.name = validated.value.name;
+    } else {
+      const validated = validateForm(loginFormSchema, { email: rawEmail, password: rawPassword });
+      if (!validated.ok) { setError(validated.message); return; }
+      body.email = validated.value.email;
+      body.password = validated.value.password;
     }
+    setBusy(true);
 
     try {
       const response = await fetch(`/api/auth/${mode}`, {
@@ -186,8 +195,13 @@ export function ForgotPasswordPage() {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const targetEmail = String(form.get("email") ?? "").trim();
-    setEmail(targetEmail);
-    void requestReset(targetEmail);
+    const validated = validateForm(forgotPasswordFormSchema, { email: targetEmail });
+    if (!validated.ok) {
+      setError(validated.message);
+      return;
+    }
+    setEmail(validated.value.email);
+    void requestReset(validated.value.email);
   }
 
   return (
@@ -237,22 +251,22 @@ export function ResetPasswordPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setBusy(true);
     setError("");
     const form = new FormData(event.currentTarget);
     const password = String(form.get("password") ?? "");
     const confirm = String(form.get("confirm") ?? "");
-    if (password !== confirm) {
-      setError("Passwords don't match.");
-      setBusy(false);
+    const validated = validateForm(resetPasswordFormSchema, { password, confirm });
+    if (!validated.ok) {
+      setError(validated.message);
       return;
     }
+    setBusy(true);
     try {
       const response = await fetch("/api/auth/reset-password", {
         method: "POST",
         credentials: "same-origin",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ token, password: validated.value.password }),
       });
       const payload = await readAuthResponse(response);
       if (!response.ok || !payload.ok) {
