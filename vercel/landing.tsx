@@ -4,7 +4,7 @@ import {
   ArrowRight, Boxes, Check, Coffee, Copy, Database, FileKey2, Gauge,
   HardDrive, KeyRound, Lock, Rocket, Server, ShieldCheck, Star, Terminal, Workflow,
 } from "lucide-react";
-import { BuyMeACoffeeWidget, SiteFooter, SiteHeader, buyMeACoffeeUrl, githubUrl } from "./site-shell";
+import { SiteFooter, SiteHeader, buyMeACoffeeUrl, githubUrl } from "./site-shell";
 
 function useParallax<T extends HTMLElement>(factor = 0.25) {
   const ref = useRef<T | null>(null);
@@ -300,7 +300,6 @@ export function LandingPage() {
       </div>
 
       <SiteFooter />
-      <BuyMeACoffeeWidget />
     </div>
   );
 }
