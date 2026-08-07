@@ -120,10 +120,10 @@
 
 /* Features 2x3 grid */
 .fs-features-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; max-width: 1360px; margin: 50px auto 0; padding: 0 24px; }
-.fs-feature-card { padding: 34px; border-radius: 24px; background: #fff; box-shadow: var(--fs-shadow); }
+.fs-feature-card { display: flex; flex-direction: column; padding: 34px; border-radius: 24px; background: #fff; box-shadow: var(--fs-shadow); }
 .fs-feature-card h3 { margin: 22px 0 10px; font-size: 22px; font-weight: 700; color: var(--fs-ink); }
-.fs-feature-card p { margin: 0 0 16px; color: #6a6a78; font-size: 16px; line-height: 1.6; }
-.fs-feature-card a { display: inline-flex; align-items: center; gap: 6px; color: var(--fs-accent); text-decoration: none; font-size: 14px; font-weight: 700; }
+.fs-feature-card p { margin: 0 0 16px; color: #6a6a78; font-size: 16px; line-height: 1.6; flex: 1; }
+.fs-feature-card a { display: inline-flex; align-items: center; gap: 6px; margin-top: auto; align-self: flex-start; color: var(--fs-accent); text-decoration: none; font-size: 14px; font-weight: 700; }
 
 /* Integration + quote */
 .fs-integration { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center; max-width: 1360px; margin: 0 auto; padding: clamp(48px, 6vw, 84px) 24px; }
@@ -164,9 +164,12 @@
 .fs-footer-top a:hover { color: var(--fs-ink); }
 .fs-footer-support { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 16px; max-width: 1360px; margin: 36px auto 0; }
 .fs-footer-support img { display: block; border-radius: 8px; }
-.fs-footer-github { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border: 1px solid var(--fs-line); border-radius: 999px; color: var(--fs-ink); text-decoration: none; font-size: 13px; font-weight: 600; transition: border-color .2s var(--site-ease), background .2s var(--site-ease); }
-.fs-footer-github:hover { border-color: rgb(20 20 43 / 24%); background: #f5f5f7; }
+.fs-footer-github, .fs-footer-bmc-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px; border: 1px solid var(--fs-line); border-radius: 999px; color: var(--fs-ink); text-decoration: none; font-size: 13px; font-weight: 600; transition: border-color .2s var(--site-ease), background .2s var(--site-ease); }
+.fs-footer-github:hover, .fs-footer-bmc-btn:hover { border-color: rgb(20 20 43 / 24%); background: #f5f5f7; }
 .fs-footer-github svg { color: #e3a008; fill: #e3a008; }
+.fs-footer-bmc-btn svg { color: #BD5FFF; }
+.fs-support-actions { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; margin-top: 32px; }
+.docs-support-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; margin-top: 16px; }
 .fs-footer-bottom { display: flex; justify-content: space-between; max-width: 1360px; margin: 40px auto 0; padding-top: 20px; border-top: 1px solid var(--fs-line); color: #55555f; font-size: 12px; }
 
 .docs-layout { max-width: 1560px; display: grid; grid-template-columns: 240px minmax(0, 760px) 220px; gap: clamp(36px, 5vw, 72px); margin: 0 auto; padding: 75px clamp(24px, 5vw, 80px) 140px; align-items: start; }

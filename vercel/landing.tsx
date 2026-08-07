@@ -1,10 +1,10 @@
 /* eslint-disable @next/next/no-img-element */
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowRight, Boxes, Check, Copy, Database, FileKey2, Gauge,
-  HardDrive, KeyRound, Lock, Server, ShieldCheck, Terminal, Workflow,
+  ArrowRight, Boxes, Check, Coffee, Copy, Database, FileKey2, Gauge,
+  HardDrive, KeyRound, Lock, Rocket, Server, ShieldCheck, Star, Terminal, Workflow,
 } from "lucide-react";
-import { SiteFooter, SiteHeader, githubUrl } from "./site-shell";
+import { BuyMeACoffeeWidget, SiteFooter, SiteHeader, buyMeACoffeeUrl, githubUrl } from "./site-shell";
 
 function useParallax<T extends HTMLElement>(factor = 0.25) {
   const ref = useRef<T | null>(null);
@@ -129,6 +129,7 @@ export function LandingPage() {
   const featuresRef = useReveal<HTMLElement>();
   const integrationRef = useReveal<HTMLElement>();
   const deployRef = useReveal<HTMLElement>();
+  const supportRef = useReveal<HTMLElement>();
   const ctaRef = useReveal<HTMLDivElement>();
 
   return (
@@ -140,7 +141,7 @@ export function LandingPage() {
           <h1>Your disk. Now S3-compatible.</h1>
           <p>OpenBucket turns any folder, SSD, or NAS into a real S3-compatible endpoint — and gives you a live dashboard to operate it.</p>
           <div className="fs-hero-actions">
-            <a className="site-button dark" href="/register">Get started</a>
+            <a className="site-button dark" href="/register"><Rocket size={15} aria-hidden="true" /> Get started</a>
             <a className="site-button light" href="/docs">Read the docs</a>
           </div>
         </div>
@@ -271,18 +272,35 @@ export function LandingPage() {
             ))}
           </div>
         </section>
+
+        <section className="fs-section soft reveal" id="support" ref={supportRef}>
+          <div className="fs-section-head">
+            <p className="fs-kicker">Support</p>
+            <h2>Back the project</h2>
+            <p className="fs-lead">OpenBucket is free, open-source, and self-hosted. Stars help other people find it; coffee helps keep it maintained.</p>
+          </div>
+          <div className="fs-support-actions">
+            <a className="site-button dark" href={githubUrl} target="_blank" rel="noreferrer">
+              <Star size={15} aria-hidden="true" /> Star on GitHub
+            </a>
+            <a className="site-button light" href={buyMeACoffeeUrl} target="_blank" rel="noreferrer">
+              <Coffee size={15} aria-hidden="true" /> Buy me a coffee
+            </a>
+          </div>
+        </section>
       </main>
 
       <div className="fs-cta-band reveal" ref={ctaRef}>
         <p className="section-kicker">READY WHEN YOUR DISK IS</p>
         <h2>Make local storage useful everywhere.</h2>
         <div className="fs-section-actions">
-          <a className="site-button dark" href="/register">Get started</a>
-          <a className="site-button ghost" href={githubUrl}>View source</a>
+          <a className="site-button dark" href="/register"><Rocket size={15} aria-hidden="true" /> Get started</a>
+          <a className="site-button ghost" href={githubUrl}><Star size={15} aria-hidden="true" /> View source</a>
         </div>
       </div>
 
       <SiteFooter />
+      <BuyMeACoffeeWidget />
     </div>
   );
 }

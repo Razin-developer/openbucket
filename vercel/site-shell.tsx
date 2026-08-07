@@ -1,11 +1,12 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  BookOpen, Boxes, ChevronDown, Container, ExternalLink, Gauge,
+  BookOpen, Boxes, ChevronDown, Coffee, Container, ExternalLink, Gauge,
   HardDrive, KeyRound, LayoutDashboard, Rocket, ShieldCheck, Star, Terminal, Workflow,
 } from "lucide-react";
 
 const githubUrl = "https://github.com/Razin-developer/openbucket";
+const buyMeACoffeeUrl = "https://www.buymeacoffee.com/razin.dev";
 
 type SiteShellProps = {
   children: ReactNode;
@@ -114,6 +115,30 @@ function GithubStarBadge() {
   );
 }
 
+const BMC_WIDGET_ID = "bmc-wbtn";
+
+function BuyMeACoffeeWidget() {
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (mounted.current || document.getElementById(BMC_WIDGET_ID)) return;
+    mounted.current = true;
+    const script = document.createElement("script");
+    script.id = BMC_WIDGET_ID;
+    script.src = "https://cdnjs.buymeacoffee.com/1.0.0/widget.prod.min.js";
+    script.dataset.name = "BMC-Widget";
+    script.dataset.cfasync = "false";
+    script.dataset.id = "razin.dev";
+    script.dataset.description = "Support me on Buy me a coffee!";
+    script.dataset.message = "Thanks for checking out OpenBucket! If it saved you time, a coffee helps keep it going.";
+    script.dataset.color = "#BD5FFF";
+    script.dataset.position = "Right";
+    script.dataset.x_margin = "18";
+    script.dataset.y_margin = "18";
+    document.body.appendChild(script);
+  }, []);
+  return null;
+}
+
 type NavLink = { href: string; label: string; description: string; icon: typeof Terminal };
 
 const productLinks: NavLink[] = [
@@ -164,6 +189,7 @@ export function SiteHeader({ current, overlay = false }: { current?: SiteShellPr
       <nav className="site-nav" aria-label="Public navigation">
         <NavMenu label="Product" links={productLinks} active={current === "home"} />
         <NavMenu label="Resources" links={resourceLinks} active={current === "docs"} />
+        <a href="/#support">Support <Coffee size={13} aria-hidden="true" /></a>
         <a href={githubUrl} target="_blank" rel="noreferrer">GitHub <ExternalLink size={13} aria-hidden="true" /></a>
       </nav>
       <div className="site-header-actions">
@@ -215,6 +241,10 @@ export function SiteFooter() {
           <Star size={15} aria-hidden="true" />
           Star OpenBucket on GitHub
         </a>
+        <a href={buyMeACoffeeUrl} target="_blank" rel="noreferrer" className="fs-footer-bmc-btn">
+          <Coffee size={15} aria-hidden="true" />
+          Buy me a coffee
+        </a>
         <a href="https://www.buymeacoffee.com/razin.dev" target="_blank" rel="noreferrer" aria-label="Buy Razin a coffee">
           {/* eslint-disable-next-line @next/next/no-img-element -- external image, not a build-time optimizable local asset */}
           <img
@@ -235,14 +265,17 @@ export function SiteFooter() {
   );
 }
 
+export { BuyMeACoffeeWidget };
+
 export function SiteShell({ children, current, compact = false }: SiteShellProps) {
   return (
     <div className={`site-shell${compact ? " compact" : ""}`}>
       <SiteHeader current={current} />
       {children}
       {!compact ? <SiteFooter /> : null}
+      <BuyMeACoffeeWidget />
     </div>
   );
 }
 
-export { githubUrl };
+export { buyMeACoffeeUrl, githubUrl };

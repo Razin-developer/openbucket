@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, Check, Copy, ExternalLink, Info, Search, X } from "lucide-react";
-import { SiteShell, githubUrl } from "./site-shell";
+import { ArrowRight, Check, Coffee, Copy, ExternalLink, Info, Search, Star, X } from "lucide-react";
+import { SiteShell, buyMeACoffeeUrl, githubUrl } from "./site-shell";
 
 function CodeBlock({ children, label = "Terminal" }: { children: string; label?: string }) {
   const [copied, setCopied] = useState(false);
@@ -78,7 +78,7 @@ const docPages: DocPageDef[] = [
   { path: "/docs/local-api", id: "local-api", label: "Local API", sections: [["auth-token", "Finding your management token"], ["quick-examples", "Quick examples"]] },
   { path: "/docs/api", id: "api", label: "API reference", sections: [["local-management", "Local management API"], ["local-s3", "Local S3 API"], ["hosted-auth", "Hosted: accounts"], ["hosted-nodes", "Hosted: nodes"], ["hosted-usage", "Hosted: usage & admin"]] },
   { path: "/docs/local-development", id: "local-development", label: "Local development", sections: [["setup", "Development setup"], ["repo-map", "Repository map"], ["commands", "Common commands"], ["tests", "Test principles"]] },
-  { path: "/docs/contributing", id: "contributing", label: "Contributing", sections: [["before-starting", "Before starting"], ["guidelines", "Code guidelines"], ["pr-scope", "Pull request scope"], ["security-checklist", "Security checklist"]] },
+  { path: "/docs/contributing", id: "contributing", label: "Contributing", sections: [["before-starting", "Before starting"], ["guidelines", "Code guidelines"], ["pr-scope", "Pull request scope"], ["security-checklist", "Security checklist"], ["support", "Support the project"]] },
 ];
 
 type SearchEntry = { href: string; title: string; page: string };
@@ -196,9 +196,9 @@ function DocsShell({ current, children }: { current: string; children: ReactNode
               <a key={entry.path} href={entry.path} className={entry.id === current ? "active" : ""}>{entry.label}</a>
             ))}
           </nav>
-          <nav aria-label="Sections on this page">
+          {/* <nav aria-label="Sections on this page">
             {page.sections.map(([id, label]) => <a href={`#${id}`} key={id}>{label}</a>)}
-          </nav>
+          </nav> */}
           <div className="docs-sidebar-callout">
             <strong>Need every detail?</strong>
             <p>The repository includes operations, security, S3 compatibility, and contribution references.</p>
@@ -329,9 +329,9 @@ export function DashboardPage() {
           <p>Anyone can <a href="/register">create an account</a> to pair a node with the hosted control plane. The hosted <a href="/dashboard">web dashboard</a> reads MongoDB-backed node registrations, presence, storage summaries, and aggregate usage. Object bytes, raw node tokens, management credentials, and S3 keys remain on the storage host. Everything it calls is documented in the <a href="/docs/api#hosted-nodes">hosted API reference</a>.</p>
         </DocSection>
 
-        <DocSection id="admin" eyebrow="ADMINISTRATION" title="Admin access">
+        {/* <DocSection id="admin" eyebrow="ADMINISTRATION" title="Admin access">
           <p>Administrator access isn&apos;t stored in the database at all &mdash; set <code>OPENBUCKET_ADMIN_EMAIL</code> and <code>OPENBUCKET_ADMIN_PASSWORD</code> on the deployment, and signing in with that exact email and password opens the admin-only aggregate overview. No account row is ever written for it, so there&apos;s nothing in a database dump that could reveal or grant admin access.</p>
-        </DocSection>
+        </DocSection> */}
       </article>
     </DocsShell>
   );
@@ -719,6 +719,18 @@ export function ContributingPage() {
           <div className="docs-next-links">
             <a href={`${githubUrl}/blob/main/docs/CONTRIBUTING.md`}><span>Full guide</span><strong>CONTRIBUTING.md <ArrowRight size={13} /></strong></a>
             <a href={`${githubUrl}/blob/main/docs/SECURITY.md`}><span>Related</span><strong>Security model <ArrowRight size={13} /></strong></a>
+          </div>
+        </DocSection>
+
+        <DocSection id="support" eyebrow="SUPPORT" title="Support the project">
+          <p>Code, tests, and bug reports are the highest-value contribution. If OpenBucket is already useful to you and you&apos;d rather back it directly, both of these help.</p>
+          <div className="docs-support-actions">
+            <a className="site-button dark small" href={githubUrl} target="_blank" rel="noreferrer">
+              <Star size={15} aria-hidden="true" /> Star on GitHub
+            </a>
+            <a className="site-button light small" href={buyMeACoffeeUrl} target="_blank" rel="noreferrer">
+              <Coffee size={15} aria-hidden="true" /> Buy me a coffee
+            </a>
           </div>
         </DocSection>
       </article>
