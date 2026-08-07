@@ -20,11 +20,17 @@ const ApiReferencePage = lazy(() => import("./docs").then((m) => ({ default: m.A
 const LocalDevelopmentPage = lazy(() => import("./docs").then((m) => ({ default: m.LocalDevelopmentPage })));
 const ContributingPage = lazy(() => import("./docs").then((m) => ({ default: m.ContributingPage })));
 const NodeDiscoveryPage = lazy(() => import("./node-discovery").then((m) => ({ default: m.NodeDiscoveryPage })));
+const FeedbackPage = lazy(() => import("./support-pages").then((m) => ({ default: m.FeedbackPage })));
+const BugReportPage = lazy(() => import("./support-pages").then((m) => ({ default: m.BugReportPage })));
+const FaqPage = lazy(() => import("./support-pages").then((m) => ({ default: m.FaqPage })));
+const PrivacyPolicyPage = lazy(() => import("./support-pages").then((m) => ({ default: m.PrivacyPolicyPage })));
+const TermsPage = lazy(() => import("./support-pages").then((m) => ({ default: m.TermsPage })));
 
 export type HostedRoute =
   | "home" | "docs" | "docs-installation" | "docs-usage" | "docs-dashboard" | "docs-s3-signing"
   | "docs-local-api" | "docs-api" | "docs-local-development" | "docs-contributing"
-  | "login" | "register" | "forgot-password" | "reset-password" | "dashboard" | "node-discovery" | "not-found";
+  | "login" | "register" | "forgot-password" | "reset-password" | "dashboard" | "node-discovery"
+  | "feedback" | "report-bug" | "faq" | "privacy" | "terms" | "not-found";
 
 export const routeMetadata: Record<HostedRoute, { path: string; title: string; description: string; keywords: string; robots: string }> = {
   home: {
@@ -123,6 +129,36 @@ export const routeMetadata: Record<HostedRoute, { path: string; title: string; d
     keywords: "OpenBucket node discovery, S3 endpoint discovery",
     robots: "noindex, follow",
   },
+  feedback: {
+    path: "/feedback", title: "Feedback · OpenBucket",
+    description: "Send feedback and feature ideas straight to the people building OpenBucket.",
+    keywords: "OpenBucket feedback, feature request, contact OpenBucket",
+    robots: "index, follow",
+  },
+  "report-bug": {
+    path: "/report-bug", title: "Report a bug · OpenBucket",
+    description: "Report a defect in the OpenBucket daemon, CLI, or dashboard.",
+    keywords: "OpenBucket bug report, report an issue, OpenBucket support",
+    robots: "index, follow",
+  },
+  faq: {
+    path: "/faq", title: "FAQ · OpenBucket",
+    description: "Frequently asked questions about OpenBucket, self-hosted S3-compatible storage.",
+    keywords: "OpenBucket FAQ, OpenBucket questions, self hosted S3 FAQ",
+    robots: "index, follow",
+  },
+  privacy: {
+    path: "/privacy", title: "Privacy policy · OpenBucket",
+    description: "What OpenBucket's hosted dashboard collects, and what it never sees.",
+    keywords: "OpenBucket privacy policy",
+    robots: "index, follow",
+  },
+  terms: {
+    path: "/terms", title: "Terms of service · OpenBucket",
+    description: "Terms for using OpenBucket's open-source software and hosted dashboard.",
+    keywords: "OpenBucket terms of service",
+    robots: "index, follow",
+  },
   "not-found": {
     path: "/404", title: "Page not found · OpenBucket",
     description: "The requested OpenBucket page could not be found.",
@@ -131,7 +167,7 @@ export const routeMetadata: Record<HostedRoute, { path: string; title: string; d
   },
 };
 
-const reservedNodeNames = new Set(["admin", "api", "auth", "dashboard", "docs", "forgot-password", "health", "login", "mail", "node", "nodes", "openbucket", "register", "reset-password", "s3", "status", "support", "usage", "www"]);
+const reservedNodeNames = new Set(["admin", "api", "auth", "dashboard", "docs", "faq", "feedback", "forgot-password", "health", "login", "mail", "node", "nodes", "openbucket", "privacy", "register", "report-bug", "reset-password", "s3", "status", "support", "terms", "usage", "www"]);
 
 export function nodeNameForPath(pathname: string): string | null {
   let name: string;
@@ -166,6 +202,11 @@ export function routeForPath(pathname: string): HostedRoute {
   if (normalized === "/forgot-password") return "forgot-password";
   if (normalized === "/reset-password") return "reset-password";
   if (normalized === "/dashboard" || /^\/dashboard\/nodes\/[a-z0-9][a-z0-9-]{1,47}$/.test(normalized)) return "dashboard";
+  if (normalized === "/feedback") return "feedback";
+  if (normalized === "/report-bug") return "report-bug";
+  if (normalized === "/faq") return "faq";
+  if (normalized === "/privacy") return "privacy";
+  if (normalized === "/terms") return "terms";
   if (nodePathForPath(pathname)) return "node-discovery";
   if (nodeNameForPath(pathname)) return "node-discovery";
   return "not-found";
@@ -195,6 +236,11 @@ function RoutedPage({ route }: { route: HostedRoute }) {
     const nodePath = nodePathForPath(window.location.pathname);
     return <NodeDiscoveryPage nodeName={nodePath?.nodeName ?? nodeNameForPath(window.location.pathname) ?? ""} handle={nodePath?.handle} />;
   }
+  if (route === "feedback") return <FeedbackPage />;
+  if (route === "report-bug") return <BugReportPage />;
+  if (route === "faq") return <FaqPage />;
+  if (route === "privacy") return <PrivacyPolicyPage />;
+  if (route === "terms") return <TermsPage />;
   return <NotFoundPage />;
 }
 

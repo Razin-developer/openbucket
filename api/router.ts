@@ -24,12 +24,20 @@ import {
   handleUpdateNode,
   handleUsage,
 } from "../server/control-plane/service.js";
+import {
+  handleListSupportSubmissions,
+  handleSubmitBugReport,
+  handleSubmitFeedback,
+  handleUpdateSupportStatus,
+} from "../server/support/service.js";
 
 const apiMethods = ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"] as const;
 
 type ApiMethod = (typeof apiMethods)[number];
 type ApiRouteId =
   | "admin-overview"
+  | "admin-support"
+  | "admin-support-item"
   | "auth-forgot-password"
   | "auth-google-callback"
   | "auth-google-start"
@@ -38,6 +46,8 @@ type ApiRouteId =
   | "auth-register"
   | "auth-reset-password"
   | "auth-session"
+  | "bugs"
+  | "feedback"
   | "health"
   | "node"
   | "node-heartbeat"
@@ -52,6 +62,7 @@ type ApiRouteId =
 export type ApiRouteMatch = {
   id: ApiRouteId;
   nodeId?: string;
+  submissionId?: string;
   kind?: "s3" | "api";
   routeSlug?: string;
   subpath?: string;
@@ -62,6 +73,7 @@ type RouteHandlers = Partial<Record<ApiMethod, ApiHandler>>;
 
 const exactRoutes = new Map<string, ApiRouteId>([
   ["/api/admin/overview", "admin-overview"],
+  ["/api/admin/support", "admin-support"],
   ["/api/auth/forgot-password", "auth-forgot-password"],
   ["/api/auth/google/callback", "auth-google-callback"],
   ["/api/auth/google/start", "auth-google-start"],
@@ -70,6 +82,8 @@ const exactRoutes = new Map<string, ApiRouteId>([
   ["/api/auth/register", "auth-register"],
   ["/api/auth/reset-password", "auth-reset-password"],
   ["/api/auth/session", "auth-session"],
+  ["/api/bugs", "bugs"],
+  ["/api/feedback", "feedback"],
   ["/api/health", "health"],
   ["/api/node/heartbeat", "node-heartbeat"],
   ["/api/nodes", "nodes"],
@@ -79,6 +93,12 @@ const exactRoutes = new Map<string, ApiRouteId>([
 
 const routeHandlers: Record<ApiRouteId, RouteHandlers> = {
   "admin-overview": { GET: (request) => handleAdminOverview(request) },
+  "admin-support": { GET: (request) => handleListSupportSubmissions(request) },
+  "admin-support-item": {
+    PATCH: (request, route) => handleUpdateSupportStatus(request, route.submissionId ?? ""),
+  },
+  bugs: { POST: (request) => handleSubmitBugReport(request) },
+  feedback: { POST: (request) => handleSubmitFeedback(request) },
   "auth-forgot-password": { POST: (request) => handleForgotPassword(request) },
   "auth-google-callback": { GET: (request) => handleGoogleCallback(request) },
   "auth-google-start": { GET: (request) => handleGoogleStart(request) },
@@ -139,6 +159,13 @@ export function matchApiRoute(pathname: string): ApiRouteMatch | null {
     if (nodeMatch[2] === "revoke-token") return { id: "node-revoke-token", nodeId };
     if (nodeMatch[2] === "management-session") return { id: "node-management-session", nodeId };
     return { id: "node", nodeId };
+  }
+
+  const supportMatch = path.match(/^\/api\/admin\/support\/([a-f0-9]{24})$/);
+  if (supportMatch) {
+    const submissionId = supportMatch[1];
+    if (!submissionId) return null;
+    return { id: "admin-support-item", submissionId };
   }
 
   // Anything under /api/ that isn't one of the control plane's own known routes above is treated

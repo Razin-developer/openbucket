@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { Activity, ArrowLeft, ArrowRight, Box, Check, Copy, ExternalLink, LayoutDashboard, Network, RefreshCw, ShieldCheck, UserRound, UsersRound } from "lucide-react";
+import { Activity, ArrowLeft, ArrowRight, Bug, Box, Check, Copy, ExternalLink, LayoutDashboard, MessageSquare, Network, RefreshCw, ShieldCheck, UserRound, UsersRound } from "lucide-react";
 import { Dashboard } from "../app/dashboard";
 import { Brand, BrandMark } from "./site-shell";
 import "./control-plane.css";
@@ -59,7 +59,23 @@ type NodesResponse = { nodes: AccountNode[] };
 type CreateNodeRequest = { name: string };
 type CreateNodeResponse = { created: boolean; node: AccountNode; credential: { token: string; createdAt: string } | null };
 type ApiErrorBody = { error?: { code?: string; message?: string } };
-type CloudView = "overview" | "nodes" | "usage" | "account" | "admin" | "node-console";
+type CloudView = "overview" | "nodes" | "usage" | "account" | "admin" | "support" | "node-console";
+
+export type SupportSubmission = {
+  id: string;
+  kind: "feedback" | "bug";
+  status: "new" | "reviewed" | "resolved";
+  message: string;
+  title: string | null;
+  stepsToReproduce: string | null;
+  severity: "low" | "medium" | "high" | "critical" | null;
+  email: string | null;
+  name: string | null;
+  path: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+type SupportListResponse = { submissions: SupportSubmission[]; newCount: number; totalCount: number };
 
 type FleetSummary = { nodeCount: number; onlineNodeCount: number; bucketCount: number; objectCount: number;
   storedBytes: number; capacityBytes: number; requestCount: number; bytesIn: number; bytesOut: number;
@@ -84,6 +100,15 @@ export const controlPlaneApi = {
   createNode: (input: CreateNodeRequest) => apiRequest<CreateNodeResponse>("/api/nodes", { method: "POST", body: JSON.stringify(input) }),
   usage: () => apiRequest<UsageSummary>("/api/usage"),
   adminOverview: () => apiRequest<AdminOverview>("/api/admin/overview"),
+  listSupport: (kind?: "feedback" | "bug", status?: "new" | "reviewed" | "resolved") => {
+    const params = new URLSearchParams();
+    if (kind) params.set("kind", kind);
+    if (status) params.set("status", status);
+    const query = params.toString();
+    return apiRequest<SupportListResponse>(`/api/admin/support${query ? `?${query}` : ""}`);
+  },
+  updateSupportStatus: (id: string, status: "new" | "reviewed" | "resolved") =>
+    apiRequest<{ submission: SupportSubmission }>(`/api/admin/support/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ status }) }),
   managementSession: (nodeId: string) => apiRequest<{ managementUrl: string; token: string; expiresIn: number }>(`/api/nodes/${encodeURIComponent(nodeId)}/management-session`, { method: "POST", body: "{}" }),
 };
 function summarizeFleet(nodes: AccountNode[], usage: UsageSummary): FleetSummary {
@@ -219,6 +244,90 @@ function AdminView({ overview }: { overview: AdminOverview }) {
   return <><header className="cp-page-heading"><div><p className="cp-eyebrow">AUTHORIZED ADMINISTRATION</p><h1>System overview</h1><p>Global totals returned by the admin-only API.</p></div><span className="cp-generated">Generated {formatDate(overview.generatedAt)}</span></header><section className="cp-metrics admin"><Metric label="Users" value={formatCount(overview.users.total)} note={`${overview.users.active} active · ${overview.users.disabled} disabled`} /><Metric label="Nodes" value={formatCount(overview.nodes.total)} note={`${overview.nodes.online} online · ${overview.nodes.revoked} revoked`} /><Metric label="Stored" value={formatBytes(overview.storage.usedBytes)} note={`${formatBytes(overview.storage.capacityBytes)} capacity`} /><Metric label="Objects" value={formatCount(overview.storage.objectCount)} note={`${formatCount(overview.storage.bucketCount)} buckets`} /><Metric label="Requests" value={formatCount(overview.usage.requests)} note={`${formatCount(overview.usage.errors)} errors`} /></section><section className="cp-admin-note"><strong>Read-only overview</strong><p>This page deliberately exposes aggregate operational state only. Account credentials, node bearer tokens, daemon management tokens, and S3 secrets are never returned here.</p></section></>;
 }
 
+function SupportView() {
+  const [kindFilter, setKindFilter] = useState<"" | "feedback" | "bug">("");
+  const [statusFilter, setStatusFilter] = useState<"" | "new" | "reviewed" | "resolved">("");
+  const [data, setData] = useState<SupportListResponse | null>(null);
+  const [error, setError] = useState("");
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError("");
+    try {
+      setData(await controlPlaneApi.listSupport(kindFilter || undefined, statusFilter || undefined));
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not load submissions.");
+    }
+  }, [kindFilter, statusFilter]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void load(), 0);
+    return () => window.clearTimeout(timer);
+  }, [load]);
+
+  async function setStatus(id: string, status: "new" | "reviewed" | "resolved") {
+    setUpdatingId(id);
+    try {
+      await controlPlaneApi.updateSupportStatus(id, status);
+      await load();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Could not update submission.");
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  return (
+    <>
+      <header className="cp-page-heading">
+        <div><p className="cp-eyebrow">FEEDBACK &amp; BUG REPORTS</p><h1>Support inbox</h1><p>Submitted through the public feedback and bug report forms.</p></div>
+        {data ? <span className="cp-generated">{data.newCount} new · {data.totalCount} total</span> : null}
+      </header>
+      <div className="cp-support-filters">
+        <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as typeof kindFilter)}>
+          <option value="">All types</option>
+          <option value="feedback">Feedback</option>
+          <option value="bug">Bug reports</option>
+        </select>
+        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
+          <option value="">All statuses</option>
+          <option value="new">New</option>
+          <option value="reviewed">Reviewed</option>
+          <option value="resolved">Resolved</option>
+        </select>
+      </div>
+      {error ? <StatePanel tone="error" title="Support data unavailable"><p>{error}</p></StatePanel> : null}
+      {!error && !data ? <div className="cp-loading" aria-live="polite"><span /><span /><span /><p>Loading submissions…</p></div> : null}
+      {!error && data && data.submissions.length === 0 ? <StatePanel title="No submissions"><p>Nothing matches this filter yet.</p></StatePanel> : null}
+      {!error && data && data.submissions.length > 0 ? (
+        <div className="cp-support-list">
+          {data.submissions.map((item) => (
+            <article className={`cp-support-item ${item.status}`} key={item.id}>
+              <div className="cp-support-item-head">
+                <span className={`cp-support-kind ${item.kind}`}>{item.kind === "bug" ? <Bug size={13} /> : <MessageSquare size={13} />} {item.kind === "bug" ? "Bug" : "Feedback"}</span>
+                {item.severity ? <span className={`cp-support-severity ${item.severity}`}>{item.severity}</span> : null}
+                <span className="cp-support-status">{item.status}</span>
+                <span className="cp-support-date">{formatDate(item.createdAt)}</span>
+              </div>
+              {item.title ? <h3>{item.title}</h3> : null}
+              <p>{item.message}</p>
+              {item.stepsToReproduce ? <p className="cp-support-steps"><strong>Steps to reproduce</strong><br />{item.stepsToReproduce}</p> : null}
+              <div className="cp-support-item-foot">
+                <span>{item.name || item.email || "Anonymous"}{item.path ? ` · ${item.path}` : ""}</span>
+                <div className="cp-support-actions">
+                  {(["new", "reviewed", "resolved"] as const).filter((status) => status !== item.status).map((status) => (
+                    <button key={status} type="button" disabled={updatingId === item.id} onClick={() => void setStatus(item.id, status)}>Mark {status}</button>
+                  ))}
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
 function LiveNodeConsole({ user, node, onBack, onLogout }: { user: AccountUser; node: AccountNode | null; onBack: () => void; onLogout: () => void }) {
   const [connection, setConnection] = useState<{ apiBase: string; token: string } | null>(null);
   const [error, setError] = useState("");
@@ -284,7 +393,7 @@ export function HostedControlPlane({ user }: { user: AccountUser }) {
 
   const navigation = useMemo(() => [
     ["overview", "Overview", LayoutDashboard], ["nodes", "Nodes", Network], ["usage", "Usage", Activity], ["node-console", "Live node", Box], ["account", "Account", UserRound],
-    ...(user.role === "admin" ? [["admin", "Admin", UsersRound]] : []),
+    ...(user.role === "admin" ? [["admin", "Admin", UsersRound], ["support", "Support", MessageSquare]] : []),
   ] as Array<[CloudView, string, typeof LayoutDashboard]>, [user.role]);
 
   const openNode = (node: AccountNode) => { setSelectedNode(node); window.history.pushState({}, "", `/dashboard/nodes/${encodeURIComponent(node.name)}`); setView("node-console"); };
@@ -302,6 +411,7 @@ export function HostedControlPlane({ user }: { user: AccountUser }) {
       {!error && view === "account" ? <AccountView user={user} /> : null}
       {!error && view === "admin" && user.role === "admin" && admin ? <AdminView overview={admin} /> : null}
       {!error && view === "admin" && user.role === "admin" && !admin ? <div className="cp-loading" aria-live="polite"><span /><span /><span /><p>Loading authorized overview…</p></div> : null}
+      {!error && view === "support" && user.role === "admin" ? <SupportView /> : null}
     </main></div>
     <button className="cp-mobile-signout" type="button" onClick={() => void logout()}>Sign out</button>
   </div>;
