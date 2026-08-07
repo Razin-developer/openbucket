@@ -137,6 +137,14 @@ export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogou
     ? NODE_NAV_ITEMS.find((item) => item.id === nodeNavId)?.label
     : [...ACCOUNT_NAV_ITEMS, ...ACCOUNT_ADMIN_NAV_ITEMS].find((item) => item.id === accountNavId)?.label;
 
+  const inBucketObjectList = selectedNode && nodeNavId === "buckets" && objectBrowser.selectedBucket;
+  const breadcrumbs = [
+    { label: "Home", onClick: selectedNode ? backToAccount : undefined },
+    ...(selectedNode ? [{ label: selectedNode.name, onClick: inBucketObjectList ? () => { objectBrowser.setSelectedBucket(null); objectBrowser.setObjects([]); setNodeNavId("buckets"); } : undefined }] : []),
+    { label: breadcrumbLabel ?? "", onClick: inBucketObjectList ? () => { objectBrowser.setSelectedBucket(null); objectBrowser.setObjects([]); } : undefined },
+    ...(inBucketObjectList ? [{ label: objectBrowser.selectedBucket! }] : []),
+  ];
+
   return (
     <>
       <DashboardShell
@@ -163,7 +171,7 @@ export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogou
           </WorkspaceSwitcher>
         }
         sidebarFooter={<button className="ob-text-button" type="button" onClick={onLogout}>Sign out</button>}
-        breadcrumbs={<><span>OpenBucket</span><b>/</b>{selectedNode ? <><span>{selectedNode.name}</span><b>/</b></> : null}<strong>{breadcrumbLabel}</strong></>}
+        breadcrumbs={breadcrumbs}
         topbarActions={
           <Tooltip>
             <TooltipTrigger asChild>
