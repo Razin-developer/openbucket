@@ -1,7 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { SpeedInsights } from "@vercel/speed-insights/react";
-import "../app/globals.css";
+import "./globals.css";
 import { HostedApp, routeForPath, routeMetadata } from "./app";
 import "./site.css";
 

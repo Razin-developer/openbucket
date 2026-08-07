@@ -5,7 +5,10 @@ import path from "node:path";
 import { defineConfig, loadEnv } from "vite";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
-const vercelRoot = path.join(projectRoot, "vercel");
+// The hosted site's entry (index.html/main.tsx) and pages live under app/ alongside the
+// standalone-local dashboard's own vinext build — the two builds share that directory but
+// never share entries, since Vite's build here only follows index.html's own module graph.
+const vercelRoot = path.join(projectRoot, "app");
 const defaultAppUrl = "https://openbucket.zydcode.in";
 
 const publicUrlNames = [
