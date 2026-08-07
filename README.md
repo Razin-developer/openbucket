@@ -6,11 +6,11 @@ OpenBucket writes real object bytes to the directory you choose. The normal prod
 
 > OpenBucket is currently a single-node, self-hosted v0.1 product. It is useful for development, homelabs, local backup targets, and trusted private networks. Read [Security](#security) and [Current limitations](#current-limitations) before exposing it outside a machine you control.
 
-The Node daemon and CLI are published as [`openbucket@0.1.19`](https://www.npmjs.com/package/openbucket/v/0.1.19), and the web application is live at [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app). Release `0.1.19` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
+The Node daemon and CLI are published as [`openbucket@0.1.19`](https://www.npmjs.com/package/openbucket/v/0.1.19), and the web application is live at [openbucket.zydcode.in](https://openbucket.zydcode.in). Release `0.1.19` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
 
 ## What is included
 
-- A full-screen interactive console (`openbucket`) for buckets, keys, logs, the tunnel, and the server — no flags to memorize.
+- A full-screen interactive console (`openbucket`, beta) for buckets, keys, logs, the tunnel, and the server — no flags to memorize.
 - A foreground or detached daemon with independent management (`7272`) and S3 (`8333`) listeners.
 - Real disk-backed buckets and objects, safe path validation, a per-root single-writer lock, and persistent node state.
 - AWS Signature Version 4 header authentication and presigned-query authentication.
@@ -38,7 +38,7 @@ openbucket bucket create photos
 openbucket status
 ```
 
-Or just run `openbucket` with no arguments to open the interactive console instead of memorizing flags.
+Or just run `openbucket` with no arguments to open the interactive console (beta) instead of memorizing flags.
 
 The normal account-connected flow also requires `cloudflared` unless you configure a managed public URL or explicitly disable tunneling. `serve` registers the node, stores its node credential in the permission-restricted CLI home, reports heartbeat/storage/request counters, and starts supervised S3 and management Quick Tunnels when no managed public route exists. The account dashboard receives only the public endpoint metadata; daemon and S3 secrets never leave the storage host. Quick Tunnel URLs change on restart and are suitable only for development or preview.
 
@@ -100,12 +100,12 @@ Use the explicit version in unattended production and review [all installation m
 The installers are thin, auditable npm wrappers served by the current Vercel deployment. They never add a service, open ports, or change firewall rules. Download and review a script before running it in production:
 
 ```bash
-curl -fsSLo openbucket-install.sh https://openbucket-eight.vercel.app/install.sh
+curl -fsSLo openbucket-install.sh https://openbucket.zydcode.in/install.sh
 OPENBUCKET_INSTALL_VERSION=0.1.19 sh ./openbucket-install.sh
 ```
 
 ```powershell
-Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile openbucket-install.ps1
+Invoke-WebRequest https://openbucket.zydcode.in/install.ps1 -OutFile openbucket-install.ps1
 & ./openbucket-install.ps1 -Version 0.1.19
 ```
 
@@ -133,13 +133,13 @@ npm install --global ./openbucket-0.1.19.tgz
 
 ## CLI reference
 
-Running `openbucket` with no command opens an interactive console: a full-screen terminal UI with live status, and screens for buckets, API keys, logs, the tunnel, and the server itself — create/delete/browse buckets, create/revoke keys, and share/delete objects without memorizing flags. Run `openbucket ui` to open it explicitly. In non-interactive contexts (scripts, CI, piped output) it falls back to `openbucket help`.
+Running `openbucket` with no command opens an interactive console (beta): a full-screen terminal UI with live status, and screens for buckets, API keys, logs, the tunnel, and the server itself — create/delete/browse buckets, create/revoke keys, and share/delete objects without memorizing flags. Run `openbucket ui` to open it explicitly. In non-interactive contexts (scripts, CI, piped output) it falls back to `openbucket help`.
 
 Run `openbucket help` or `openbucket help <command>` for built-in usage.
 
 | Command | Purpose |
 | --- | --- |
-| `openbucket` / `openbucket ui` | Open the interactive console. |
+| `openbucket` / `openbucket ui` | Open the interactive console (beta). |
 | `openbucket serve [directory]` | Start in the foreground; `start` is an alias. |
 | `openbucket serve DIR --detach` | Start a background daemon and wait for health. |
 | `openbucket stop` | Ask the active daemon to stop. |
@@ -266,7 +266,7 @@ If the dashboard and daemon have different origins, set `OPENBUCKET_DASHBOARD_UR
 
 ### Vercel
 
-`npm run build:vercel` validates the Vercel application in `vercel-dist`. The Git-connected project deploys pull-request previews and promotes `main` to [openbucket-eight.vercel.app](https://openbucket-eight.vercel.app):
+`npm run build:vercel` validates the Vercel application in `vercel-dist`. The Git-connected project deploys pull-request previews and promotes `main` to [openbucket.zydcode.in](https://openbucket.zydcode.in):
 
 - `/` is the public product landing page;
 - `/docs` is the public documentation page;
@@ -473,7 +473,7 @@ Tests use temporary directories and ephemeral ports for real management/S3 I/O. 
 - S3 compatibility is deliberately partial; test each client/workload against the matrix.
 - Object content type and custom S3 metadata are not persisted; downloads are `application/octet-stream`.
 - No quotas, lifecycle cleanup, checksummed background scrub, garbage collection UI, or multipart resume/list APIs.
-- npm `openbucket@0.1.0` and the `openbucket-eight.vercel.app` web deployment are live. PyPI, GHCR, GitHub release assets, `openbucket.dev` ownership/DNS, stable named-tunnel provisioning, and a managed relay still require their documented owner-controlled release or infrastructure steps.
+- npm `openbucket@0.1.0` and the `openbucket.zydcode.in` web deployment are live. PyPI, GHCR, GitHub release assets, `openbucket.dev` ownership/DNS, stable named-tunnel provisioning, and a managed relay still require their documented owner-controlled release or infrastructure steps.
 - The desktop application is planned after the daemon/CLI/web foundation, not included in v0.1.
 
 ## Roadmap

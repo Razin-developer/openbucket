@@ -307,9 +307,9 @@ export function InstallationPage() {
 
         <DocSection id="installer-script" eyebrow="ALTERNATIVE" title="Installer script">
           <p>Download and inspect the script before executing it. It verifies Node and npm, then installs the same published package without using sudo.</p>
-          <CodeBlock>{"curl -fsSLO https://openbucket-eight.vercel.app/install.sh\nless install.sh\nsh install.sh"}</CodeBlock>
+          <CodeBlock>{"curl -fsSLO https://openbucket.zydcode.in/install.sh\nless install.sh\nsh install.sh"}</CodeBlock>
           <h3>Windows PowerShell</h3>
-          <CodeBlock label="PowerShell">{"Invoke-WebRequest https://openbucket-eight.vercel.app/install.ps1 -OutFile install.ps1\nGet-Content .\\install.ps1\n.\\install.ps1"}</CodeBlock>
+          <CodeBlock label="PowerShell">{"Invoke-WebRequest https://openbucket.zydcode.in/install.ps1 -OutFile install.ps1\nGet-Content .\\install.ps1\n.\\install.ps1"}</CodeBlock>
         </DocSection>
 
         <DocSection id="docker" eyebrow="CONTAINERS" title="Run with persistent volumes">
@@ -352,8 +352,9 @@ export function UsagePage() {
           <p>This updates the running daemon immediately and, if the node is hosted-connected (signed in with a saved credential), also updates the control plane&apos;s registration &mdash; heartbeat and usage history stay attached since the hosted side keys nodes by a stable id, not by name.</p>
         </DocSection>
 
-        <DocSection id="interactive-console" eyebrow="TUI" title="The interactive console">
+        <DocSection id="interactive-console" eyebrow="TUI · BETA" title="The interactive console (beta)">
           <p>Run <code>openbucket</code> with no arguments (or <code>openbucket ui</code> explicitly) to open a full-screen terminal UI: buckets, keys, logs, tunnel state, server start/stop/rename, an Account screen for hosted sign-in, and effective config &mdash; no flags to memorize. It falls back to <code>openbucket help</code> when output isn&apos;t an interactive terminal (scripts, CI, piped output).</p>
+          <div className="docs-warning"><strong>This is a beta screen.</strong><p>Every command is also available as a plain, scriptable flag (see the sections above) if you&apos;d rather not depend on it yet.</p></div>
           <CodeBlock>{"openbucket"}</CodeBlock>
         </DocSection>
       </article>

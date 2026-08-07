@@ -5,7 +5,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { randomUUID } from "node:crypto";
 import { createInterface } from "node:readline/promises";
 
-export const DEFAULT_CONTROL_PLANE_URL = "https://openbucket-eight.vercel.app";
+export const DEFAULT_CONTROL_PLANE_URL = "https://openbucket.zydcode.in";
 
 export interface HostedUser {
   id: string;

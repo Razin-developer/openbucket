@@ -6,7 +6,7 @@ import { defineConfig, loadEnv } from "vite";
 
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 const vercelRoot = path.join(projectRoot, "vercel");
-const defaultAppUrl = "https://openbucket-eight.vercel.app";
+const defaultAppUrl = "https://openbucket.zydcode.in";
 
 const publicUrlNames = [
   "NEXT_PUBLIC_OPENBUCKET_API_URL",

@@ -1100,7 +1100,7 @@ function renderHelp(topic?: string): string {
     logs: "Usage: openbucket logs [--follow] [--limit N]",
     config: "Usage: openbucket config",
     version: "Usage: openbucket version",
-    ui: "Usage: openbucket ui (also launched by running \"openbucket\" with no command)",
+    ui: "Usage: openbucket ui (beta; also launched by running \"openbucket\" with no command)",
     help: "Usage: openbucket help [command]",
   };
   if (topic && commandHelp[topic]) return `${commandHelp[topic]}\n`;
@@ -1120,8 +1120,8 @@ Daemon
   status [--json]      Show daemon and storage status
   rename <new-name>    Rename the running node (local, and hosted if connected)
   dashboard            Securely open or re-pair the local dashboard
-  ui                   Interactive console (buckets, keys, tunnel, logs, server). Also the
-                       default when you just run "openbucket".
+  ui                   Interactive console (beta) — buckets, keys, tunnel, logs, server. Also
+                       the default when you just run "openbucket".
   logs [--follow]      Show daemon request and lifecycle logs
   doctor [directory]   Check the runtime, storage, and network
   tunnel status         Show S3 and management tunnel state

@@ -9,7 +9,7 @@ The repository contains a Vite target plus Vercel Functions for authentication, 
 The `openbucket` Vercel project is connected directly to the GitHub repository. Vercel creates preview deployments for pull requests and deploys every push to `main` to the production alias:
 
 ```text
-https://openbucket-eight.vercel.app
+https://openbucket.zydcode.in
 ```
 
 This Git integration is the only deployment mechanism. Do not add `VERCEL_TOKEN`, `VERCEL_ORG_ID`, or `VERCEL_PROJECT_ID` to GitHub Actions; a second CLI-based deployment path would create duplicate previews and race the production alias.
@@ -42,8 +42,8 @@ npx vercel@latest env add NEXT_PUBLIC_DOCS_URL preview
 Recommended initial values:
 
 ```dotenv
-NEXT_PUBLIC_APP_URL=https://openbucket-eight.vercel.app
-NEXT_PUBLIC_DOCS_URL=https://openbucket-eight.vercel.app/docs
+NEXT_PUBLIC_APP_URL=https://openbucket.zydcode.in
+NEXT_PUBLIC_DOCS_URL=https://openbucket.zydcode.in/docs
 ```
 
 `NEXT_PUBLIC_OPENBUCKET_API_URL` is optional. Leave it unset to default each browser to its own local daemon at `http://127.0.0.1:7272`, or set it to a stable HTTPS management origin. Users can always select another endpoint in **Connection settings**.
@@ -117,7 +117,7 @@ Current Chrome versions may show a Local Network Access prompt when the public H
 
 GitHub Actions does not deploy to Vercel. After a push to `main`, `.github/workflows/vercel.yml` polls the production `/deployment.json` until its `commitSha` equals the triggering `GITHUB_SHA`. The check fails if Vercel never promotes that exact source commit, so a skipped or stale deployment cannot appear green.
 
-The default verified URL is `https://openbucket-eight.vercel.app`. If the production alias changes, set the non-secret GitHub repository variable `VERCEL_PRODUCTION_URL` to the new HTTPS origin. No Vercel account token is needed by GitHub.
+The default verified URL is `https://openbucket.zydcode.in`. If the production alias changes, set the non-secret GitHub repository variable `VERCEL_PRODUCTION_URL` to the new HTTPS origin. No Vercel account token is needed by GitHub.
 
 ## Later: `openbucket.dev`
 
@@ -133,13 +133,13 @@ Follow the returned DNS records, update `NEXT_PUBLIC_APP_URL`, GitHub's `VERCEL_
 ## Verify a deployment
 
 ```bash
-curl --fail https://openbucket-eight.vercel.app/
-curl --fail https://openbucket-eight.vercel.app/docs
-curl --fail https://openbucket-eight.vercel.app/install.sh
-curl --fail https://openbucket-eight.vercel.app/install.ps1
-curl --fail https://openbucket-eight.vercel.app/deployment.json
-curl --fail https://openbucket-eight.vercel.app/robots.txt
-curl --fail https://openbucket-eight.vercel.app/sitemap.xml
+curl --fail https://openbucket.zydcode.in/
+curl --fail https://openbucket.zydcode.in/docs
+curl --fail https://openbucket.zydcode.in/install.sh
+curl --fail https://openbucket.zydcode.in/install.ps1
+curl --fail https://openbucket.zydcode.in/deployment.json
+curl --fail https://openbucket.zydcode.in/robots.txt
+curl --fail https://openbucket.zydcode.in/sitemap.xml
 npx vercel@latest logs --environment production --level error --since 5m
 ```
 

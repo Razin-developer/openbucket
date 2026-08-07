@@ -48,7 +48,7 @@ A pending publisher does not reserve the project name. Configure it immediately 
 
 The Vercel project is connected directly to this GitHub repository. Pull requests receive previews and `main` deploys to production without Vercel credentials in GitHub. Keep `VERCEL_TOKEN`, `VERCEL_ORG_ID`, and `VERCEL_PROJECT_ID` out of repository secrets.
 
-The GitHub workflow verifies deployment rather than creating it: `/deployment.json` must report the exact triggering commit before the production check passes. Its default alias is `https://openbucket-eight.vercel.app`; set the non-secret repository variable `VERCEL_PRODUCTION_URL` when that alias changes. Vercel build variables belong in the Vercel project settings, and registry or daemon credentials never belong in dashboard build variables. See [Hosting the web application on Vercel](VERCEL.md).
+The GitHub workflow verifies deployment rather than creating it: `/deployment.json` must report the exact triggering commit before the production check passes. Its default alias is `https://openbucket.zydcode.in`; set the non-secret repository variable `VERCEL_PRODUCTION_URL` when that alias changes. Vercel build variables belong in the Vercel project settings, and registry or daemon credentials never belong in dashboard build variables. See [Hosting the web application on Vercel](VERCEL.md).
 
 Hosted authentication uses the server-only Vercel variables `MONGODB_URI`, `MONGODB_DATABASE`, `OPENBUCKET_AUTH_SECRET`, and `OPENBUCKET_ALLOW_SIGNUP`. They are unrelated to registry publishing and must never be copied into `NEXT_PUBLIC_*` values or GitHub release secrets. Admin access is configured separately; see [Hosting the web application on Vercel](VERCEL.md).
 
