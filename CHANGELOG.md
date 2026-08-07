@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.20] - 2026-08-07
+
+### Changed
+
+- The default hosted control-plane URL (CLI, docs, Docker Compose default, CI production-verification target, build-time canonical URL) now points at `openbucket.zydcode.in` instead of the old `openbucket-eight.vercel.app` Vercel-assigned alias, matching what's actually live.
+- The interactive console (`openbucket` with no arguments, or `openbucket ui`) is now labeled "(beta)" everywhere it's introduced — CLI help, its own in-app header, README, and the docs site — since it's newer and less exercised than the plain scriptable commands it wraps.
+
+### Fixed
+
+- `server/control-plane/model.ts`'s reserved node-name list was missing `forgot-password`/`reset-password`, which the client-side copy of the same list already reserved. A node with one of those names could previously be registered despite colliding with a real hosted route.
+
 ## [0.1.19] - 2026-08-07
 
 ### Changed
