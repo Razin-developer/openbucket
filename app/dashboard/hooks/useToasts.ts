@@ -1,12 +1,12 @@
-import { useCallback, useState } from "react";
+import { useCallback } from "react";
+import { toast } from "sonner";
 import type { Toast } from "../api/types";
 
+/** Thin wrapper so every view keeps calling notify(message, tone) — the shadcn/sonner Toaster (mounted once in DashboardShell) renders them. */
 export function useToasts() {
-  const [toasts, setToasts] = useState<Toast[]>([]);
   const notify = useCallback((message: string, tone: Toast["tone"] = "success") => {
-    const id = Date.now() + Math.random();
-    setToasts((current) => [...current, { id, tone, message }]);
-    window.setTimeout(() => setToasts((current) => current.filter((toast) => toast.id !== id)), 3600);
+    if (tone === "error") toast.error(message);
+    else toast.success(message);
   }, []);
-  return { toasts, notify };
+  return { notify };
 }

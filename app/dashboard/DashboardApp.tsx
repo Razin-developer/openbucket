@@ -9,7 +9,6 @@ import { useNodeConnection, type InitialConnectionHint } from "./hooks/useNodeCo
 import { useNodeData } from "./hooks/useNodeData";
 import { useObjectBrowser } from "./hooks/useObjectBrowser";
 import { useToasts } from "./hooks/useToasts";
-import { ToastRegion } from "./components/ToastRegion";
 import { ConnectionModal } from "./components/ConnectionModal";
 import { NodeOverviewView } from "./views/node/NodeOverviewView";
 import { BucketsView } from "./views/node/BucketsView";
@@ -27,7 +26,7 @@ type NodeViewId = "overview" | "buckets" | "keys" | "connections" | "logs";
 export function DashboardApp({ initialConnection }: { initialConnection?: InitialConnectionHint } = {}) {
   const [activeNavId, setActiveNavId] = useState<NodeViewId>("overview");
   const [connectionOpen, setConnectionOpen] = useState(false);
-  const { toasts, notify } = useToasts();
+  const { notify } = useToasts();
   const connection = useNodeConnection(initialConnection);
   const data = useNodeData(connection.apiBase, connection.adminToken, connection.connectionGeneration);
   const objectBrowser = useObjectBrowser(data.apiFetch, connection.apiBase, connection.adminToken, notify);
@@ -92,7 +91,6 @@ export function DashboardApp({ initialConnection }: { initialConnection?: Initia
         {activeNavId === "logs" ? <LogsView node={nodeView} /> : null}
       </DashboardShell>
       {connectionOpen ? <ConnectionModal apiBase={connection.apiBase} adminToken={connection.adminToken} onSave={saveConnection} onClose={() => setConnectionOpen(false)} /> : null}
-      <ToastRegion toasts={toasts} />
     </>
   );
 }

@@ -2,6 +2,7 @@ import { useState, type ReactNode } from "react";
 import type { NavSection } from "../api/types";
 import { Sidebar } from "./Sidebar";
 import { Topbar } from "./Topbar";
+import { Toaster } from "../../components/ui/sonner";
 import "../dashboard-shell.css";
 
 /**
@@ -47,6 +48,7 @@ export function DashboardShell({
         />
         <main id="ob-main-content" className="ob-main-content">{children}</main>
       </div>
+      <Toaster position="bottom-right" />
     </div>
   );
 }

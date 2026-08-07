@@ -11,6 +11,35 @@
   --shadow-1: 0 0 0 1px rgb(0 0 0 / 6%) inset;
   --shadow-2: 0 1px 2px rgb(0 0 0 / 3%), var(--shadow-1);
   --shadow-4: 0 4px 12px -4px rgb(0 0 0 / 6%), var(--shadow-1);
+
+  /*
+   * shadcn/ui bridge: shadcn components (app/components/ui/*) reference Tailwind's
+   * `--color-*` theme keys, which we point at this app's EXISTING tokens above (not
+   * shadcn's own gray/black defaults) so new primitives match the built design instead
+   * of clashing with it. Prefixed --sc-* names avoid colliding with the plain names
+   * above — only the values are shared, via var().
+   */
+  --sc-background: var(--canvas); --sc-foreground: var(--ink);
+  --sc-card: var(--canvas); --sc-card-foreground: var(--ink);
+  --sc-popover: var(--canvas); --sc-popover-foreground: var(--ink);
+  --sc-primary: var(--accent); --sc-primary-foreground: #fff;
+  --sc-secondary: var(--canvas-soft); --sc-secondary-foreground: var(--ink);
+  --sc-muted: var(--canvas-soft-2); --sc-muted-foreground: var(--mute);
+  --sc-accent: var(--canvas-soft-2); --sc-accent-foreground: var(--ink);
+  --sc-destructive: var(--error);
+  --sc-border: var(--hairline); --sc-input: var(--hairline); --sc-ring: var(--accent);
+  --radius: 10px;
+}
+@theme inline {
+  --color-background: var(--sc-background); --color-foreground: var(--sc-foreground);
+  --color-card: var(--sc-card); --color-card-foreground: var(--sc-card-foreground);
+  --color-popover: var(--sc-popover); --color-popover-foreground: var(--sc-popover-foreground);
+  --color-primary: var(--sc-primary); --color-primary-foreground: var(--sc-primary-foreground);
+  --color-secondary: var(--sc-secondary); --color-secondary-foreground: var(--sc-secondary-foreground);
+  --color-muted: var(--sc-muted); --color-muted-foreground: var(--sc-muted-foreground);
+  --color-accent: var(--sc-accent); --color-accent-foreground: var(--sc-accent-foreground);
+  --color-destructive: var(--sc-destructive);
+  --color-border: var(--sc-border); --color-input: var(--sc-input); --color-ring: var(--sc-ring);
 }
 * { box-sizing: border-box; }
 html { background: var(--canvas-soft); color: var(--ink); }

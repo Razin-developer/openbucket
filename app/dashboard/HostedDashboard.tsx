@@ -7,7 +7,6 @@ import { useAccountData } from "./hooks/useAccountData";
 import { useNodeData } from "./hooks/useNodeData";
 import { useObjectBrowser } from "./hooks/useObjectBrowser";
 import { useToasts } from "./hooks/useToasts";
-import { ToastRegion } from "./components/ToastRegion";
 import { controlPlaneApi, nodeApiUrl, type AccountNode, type AccountUser } from "./api/account-api";
 import type { NavSection } from "./api/types";
 import { AccountOverviewView } from "./views/account/AccountOverviewView";
@@ -35,7 +34,7 @@ const NODE_NAME_PATH = /^\/dashboard\/nodes\/([a-z0-9][a-z0-9-]{1,47})$/;
  */
 export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogout: () => void }) {
   const account = useAccountData(user);
-  const { toasts, notify } = useToasts();
+  const { notify } = useToasts();
   const [selectedNode, setSelectedNode] = useState<AccountNode | null>(null);
   const [accountNavId, setAccountNavId] = useState<AccountNavId>("account-overview");
   const [nodeNavId, setNodeNavId] = useState<NodeNavId>("overview");
@@ -181,7 +180,6 @@ export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogou
           )
         ) : null}
       </DashboardShell>
-      <ToastRegion toasts={toasts} />
     </>
   );
 }
