@@ -163,6 +163,77 @@ test("management API persists real buckets, objects, keys, shares, logs, and sta
   assert.equal(daemon.config.nodeId, state.nodeId);
 });
 
+test("management API supports client-driven multipart uploads with bearer auth", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "openbucket-management-multipart-"));
+  let daemon;
+  t.after(async () => {
+    await daemon?.stop();
+    await rm(root, { recursive: true, force: true });
+  });
+
+  daemon = await startDaemon({
+    storageRoot: root,
+    nodeName: "multipart-node",
+    managementPort: 0,
+    s3Port: 0,
+    adminToken: "multipart-management-token-0123456789ab",
+  });
+  const base = daemon.config.managementUrl;
+  const auth = { authorization: "Bearer multipart-management-token-0123456789ab" };
+
+  assert.equal((await fetch(`${base}/v1/buckets`, {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json" },
+    body: JSON.stringify({ name: "uploads" }),
+  })).status, 201);
+
+  const initiate = await fetch(`${base}/v1/buckets/uploads/objects/big.bin?uploads`, { method: "POST", headers: auth });
+  assert.equal(initiate.status, 201, await initiate.clone().text());
+  const { uploadId } = await json(initiate);
+  assert.ok(uploadId);
+
+  const partOne = "A".repeat(5 * 1024 * 1024);
+  const partTwo = "B".repeat(1024);
+  const uploadPart = async (partNumber, body) => {
+    const response = await fetch(`${base}/v1/buckets/uploads/objects/big.bin?uploadId=${uploadId}&partNumber=${partNumber}`, {
+      method: "PUT",
+      headers: auth,
+      body,
+    });
+    assert.equal(response.status, 200, await response.clone().text());
+    return json(response);
+  };
+  const uploaded1 = await uploadPart(1, partOne);
+  const uploaded2 = await uploadPart(2, partTwo);
+  assert.ok(uploaded1.etag);
+  assert.ok(uploaded2.etag);
+
+  const complete = await fetch(`${base}/v1/buckets/uploads/objects/big.bin?uploadId=${uploadId}`, {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json" },
+    body: JSON.stringify({ parts: [{ partNumber: 1, etag: uploaded1.etag }, { partNumber: 2, etag: uploaded2.etag }] }),
+  });
+  assert.equal(complete.status, 201, await complete.clone().text());
+  const { object } = await json(complete);
+  assert.equal(object.size, partOne.length + partTwo.length);
+
+  const downloaded = await fetch(`${base}/v1/buckets/uploads/objects/big.bin`, { headers: auth });
+  const downloadedBody = await downloaded.text();
+  assert.equal(downloadedBody.length, partOne.length + partTwo.length);
+  assert.equal(downloadedBody.slice(0, 10), "AAAAAAAAAA");
+  assert.equal(downloadedBody.slice(-10), "BBBBBBBBBB");
+
+  const abortInitiate = await fetch(`${base}/v1/buckets/uploads/objects/aborted.bin?uploads`, { method: "POST", headers: auth });
+  const { uploadId: abortUploadId } = await json(abortInitiate);
+  assert.equal((await fetch(`${base}/v1/buckets/uploads/objects/aborted.bin?uploadId=${abortUploadId}`, { method: "DELETE", headers: auth })).status, 204);
+  const abortedComplete = await fetch(`${base}/v1/buckets/uploads/objects/aborted.bin?uploadId=${abortUploadId}`, {
+    method: "POST",
+    headers: { ...auth, "content-type": "application/json" },
+    body: JSON.stringify({ parts: [{ partNumber: 1 }] }),
+  });
+  assert.equal(abortedComplete.status, 404);
+});
+
 test("rejects short admin tokens before opening storage", async (t) => {
   const parent = await mkdtemp(join(tmpdir(), "openbucket-short-admin-token-"));
   const root = join(parent, "storage");

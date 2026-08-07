@@ -598,6 +598,36 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
       if (tail?.startsWith("objects/")) {
         const rawKey = tail.slice("objects/".length);
         const key = rawKey.split("/").map((part) => decodePart(part, "Object key")).join("/");
+        const uploadId = url.searchParams.get("uploadId");
+        if (req.method === "POST" && url.searchParams.has("uploads")) {
+          const created = await store.createMultipart(bucket, key);
+          sendJson(res, ctx, 201, { uploadId: created, bucket, key });
+          return;
+        }
+        if (req.method === "PUT" && uploadId) {
+          const partNumber = Number(url.searchParams.get("partNumber"));
+          const part = await store.putPart(uploadId, bucket, key, partNumber, meteredRequest(req, ctx));
+          sendJson(res, ctx, 200, { partNumber, etag: part.etag, size: part.size });
+          return;
+        }
+        if (req.method === "POST" && uploadId) {
+          const body = await readJson(req, ctx);
+          const parts = Array.isArray(body.parts) ? body.parts : undefined;
+          if (!parts) throw new StoreError("InvalidRequest", "A parts array is required to complete an upload.");
+          for (const part of parts) {
+            if (typeof part.partNumber !== "number" || (part.etag !== undefined && typeof part.etag !== "string")) {
+              throw new StoreError("InvalidPart", "Each part requires a numeric partNumber and optional string etag.");
+            }
+          }
+          const object = await store.completeMultipart(uploadId, bucket, key, parts as Array<{ partNumber: number; etag?: string }>);
+          sendJson(res, ctx, 201, { object });
+          return;
+        }
+        if (req.method === "DELETE" && uploadId) {
+          await store.abortMultipart(uploadId, bucket, key);
+          sendEmpty(res, 204);
+          return;
+        }
         if (req.method === "PUT") {
           const object = await store.putObject(bucket, key, meteredRequest(req, ctx));
           sendJson(res, ctx, 201, { object });
