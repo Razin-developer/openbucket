@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-html-link-for-pages */
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { AlertCircle, CheckCircle2 } from "lucide-react";
-import { HostedControlPlane, type AccountUser } from "./control-plane";
+import { HostedControlPlane, type AccountUser } from "../vercel/control-plane";
 import { BrandMark, SiteShell } from "./site-shell";
 import { forgotPasswordFormSchema, loginFormSchema, registerFormSchema, resetPasswordFormSchema, validateForm } from "./validation";
 

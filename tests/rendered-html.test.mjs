@@ -113,15 +113,15 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
     readFile(new URL("../vercel-dist/install.ps1", import.meta.url), "utf8"),
     readFile(new URL("../scripts/install.sh", import.meta.url), "utf8"),
     readFile(new URL("../scripts/install.ps1", import.meta.url), "utf8"),
-    readFile(new URL("../vercel/app.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../vercel/auth.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../vercel/docs.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../vercel/site-shell.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../vercel/landing.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/app.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/auth.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/docs.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/site-shell.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/landing.tsx", import.meta.url), "utf8"),
     readFile(new URL("../vercel/control-plane.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/api/account-api.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/HostedDashboard.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../vercel/node-discovery.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/node-discovery.tsx", import.meta.url), "utf8"),
   ]);
 
   assert.deepEqual(deployment, { schemaVersion: 1, commitSha });
