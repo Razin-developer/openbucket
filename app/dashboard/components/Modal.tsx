@@ -1,27 +1,25 @@
-import { useEffect, useRef, type ReactNode } from "react";
-import { X } from "lucide-react";
+import type { ReactNode } from "react";
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../../components/ui/dialog";
 
+/**
+ * Thin wrapper around shadcn's Dialog primitive that keeps the exact external API every call site
+ * already uses (title/description/children/onClose) while getting Radix's focus trap, ESC-to-close,
+ * outside-click, and portal-based positioning for free. Visuals are driven by ob-modal-* classes so
+ * this still matches the app's existing look — only the underlying behavior/a11y machinery changed.
+ */
 export function Modal({ title, description, children, onClose }: { title: string; description?: string; children: ReactNode; onClose: () => void }) {
-  const closeRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    closeRef.current?.focus();
-    const onKeyDown = (event: KeyboardEvent) => event.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
   return (
-    <div className="ob-modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
-      <section className="ob-modal-card" role="dialog" aria-modal="true" aria-labelledby="ob-modal-title">
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogContent className="ob-modal-card border-0 p-0 gap-0 shadow-none sm:max-w-[520px]">
         <div className="ob-modal-head">
           <div>
             <p className="ob-eyebrow">OpenBucket</p>
-            <h2 id="ob-modal-title">{title}</h2>
-            {description ? <p>{description}</p> : null}
+            <DialogTitle asChild><h2 id="ob-modal-title">{title}</h2></DialogTitle>
+            {description ? <DialogDescription asChild><p>{description}</p></DialogDescription> : null}
           </div>
-          <button ref={closeRef} className="ob-icon-button" type="button" onClick={onClose} aria-label="Close dialog"><X size={16} /></button>
         </div>
         {children}
-      </section>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

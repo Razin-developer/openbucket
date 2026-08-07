@@ -15,8 +15,32 @@
   --space-6: 24px; --space-7: 32px; --space-8: 40px;
   --ob-sidebar-width: 248px;
   min-height: 100vh;
+  background: var(--canvas-soft);
+  color: var(--ink);
 }
 .ob-shell, .ob-shell * , .ob-shell *::before, .ob-shell *::after { box-sizing: border-box; }
+
+/*
+ * Dark mode — scoped to the dashboard shell only (never the public marketing site). Settings >
+ * Appearance flips next-themes' `data-theme` attribute on <html>; these overrides redefine the
+ * CORE tokens the shell chrome reads (ink, body, mute, hairline, canvas, and their variants) so
+ * every ob dash-prefixed rule above (sidebar, topbar, cards, tables, panels) picks up the dark
+ * palette automatically, with no separate or disconnected color system.
+ */
+:root[data-theme="dark"] .ob-shell {
+  --ink: #f2f2f2; --body: #c7c7cc; --mute: #8b8b93; --hairline: #2a2a30; --hairline-strong: #46464d;
+  --canvas: #17171b; --canvas-soft: #111114; --canvas-soft-2: #202026;
+  --error: #ff6b6b; --error-soft: #3a1618; --warning: #f0a93e; --warning-soft: #3a2c0f;
+  --success: #3ddc97; --success-soft: #0f2f22;
+  --accent: #7b84e8; --accent-soft: #23253f; --accent-deep: #9aa1ef;
+  --shadow-1: 0 0 0 1px rgb(255 255 255 / 6%) inset;
+  --shadow-2: 0 1px 2px rgb(0 0 0 / 30%), var(--shadow-1);
+  --shadow-4: 0 4px 16px -4px rgb(0 0 0 / 55%), var(--shadow-1);
+}
+:root[data-theme="dark"] .ob-shell .ob-topbar { background: rgb(17 17 20 / 88%); }
+:root[data-theme="dark"] .ob-shell .ob-hero::after { background: linear-gradient(90deg, rgb(23 23 27 / 99%) 5%, rgb(23 23 27 / 91%) 52%, rgb(23 23 27 / 68%)); }
+:root[data-theme="dark"] .ob-shell .ob-capacity-panel { background: rgb(30 30 36 / 72%); border-color: rgb(255 255 255 / 8%); }
+:root[data-theme="dark"] .ob-shell .ob-capacity-ring::before { background: rgb(23 23 27 / 94%); }
 .ob-skip-link { position: fixed; z-index: 100; left: 16px; top: -60px; padding: 10px 14px; color: white; background: var(--ink); border-radius: var(--radius-sm); }
 .ob-skip-link:focus { top: 12px; }
 .ob-sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
@@ -326,6 +350,7 @@
 .ob-series-table > div { display: grid; grid-template-columns: 1.4fr repeat(3, 1fr); gap: 15px; padding: 11px 0; border-top: 1px solid var(--hairline); font-size: 12px; }
 .ob-series-table time { color: var(--mute); }
 
+.ob-settings-panel { margin-top: var(--space-6); display: grid; gap: var(--space-5); }
 .ob-profile-card { display: grid; grid-template-columns: 75px repeat(4, 1fr); align-items: center; padding: var(--space-7); border-radius: var(--radius-md); background: var(--canvas); box-shadow: var(--shadow-2); }
 .ob-profile-avatar { width: 75px; height: 75px; display: grid; place-items: center; color: #fff; border-radius: var(--radius-md); background: var(--ink); font-size: 27px; font-weight: 800; }
 .ob-profile-card > div { min-width: 0; display: grid; gap: 8px; padding: 12px 20px; border-left: 1px solid var(--hairline); }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { ExternalLink, RefreshCw } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { DashboardShell } from "./shell/DashboardShell";
 import { WorkspaceSwitcher } from "./shell/WorkspaceSwitcher";
 import { NODE_NAV_ITEMS } from "./shell/nav-config";
@@ -15,9 +16,10 @@ import { BucketsView } from "./views/node/BucketsView";
 import { KeysView } from "./views/node/KeysView";
 import { ConnectionsView } from "./views/node/ConnectionsView";
 import { LogsView } from "./views/node/LogsView";
+import { SettingsView } from "./views/settings/SettingsView";
 import type { NodeViewContext } from "./views/node/context";
 
-type NodeViewId = "overview" | "buckets" | "keys" | "connections" | "logs";
+type NodeViewId = "overview" | "buckets" | "keys" | "connections" | "logs" | "settings";
 
 /**
  * Standalone local dashboard entry — served both by the daemon itself and by the Vercel static
@@ -80,7 +82,12 @@ export function DashboardApp({ initialConnection }: { initialConnection?: Initia
         breadcrumbs={<><span>OpenBucket</span><b>/</b><strong>{NODE_NAV_ITEMS.find((item) => item.id === activeNavId)?.label}</strong></>}
         topbarActions={<>
           <span className="ob-last-updated">{data.lastUpdated ? `Updated ${data.lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Not connected"}</span>
-          <button className="ob-icon-button" type="button" aria-label="Refresh data" onClick={() => void data.refresh()}><RefreshCw size={15} /></button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button className="ob-icon-button" type="button" aria-label="Refresh data" onClick={() => void data.refresh()}><RefreshCw size={15} /></button>
+            </TooltipTrigger>
+            <TooltipContent>Refresh data</TooltipContent>
+          </Tooltip>
           <a className="ob-docs-link" href={docsUrl} target="_blank" rel="noreferrer">Docs <ExternalLink size={13} /></a>
         </>}
       >
@@ -89,6 +96,7 @@ export function DashboardApp({ initialConnection }: { initialConnection?: Initia
         {activeNavId === "keys" ? <KeysView node={nodeView} /> : null}
         {activeNavId === "connections" ? <ConnectionsView node={nodeView} onOpenConnectionSettings={() => setConnectionOpen(true)} /> : null}
         {activeNavId === "logs" ? <LogsView node={nodeView} /> : null}
+        {activeNavId === "settings" ? <SettingsView context="node" node={nodeView} onOpenConnectionSettings={() => setConnectionOpen(true)} /> : null}
       </DashboardShell>
       {connectionOpen ? <ConnectionModal apiBase={connection.apiBase} adminToken={connection.adminToken} onSave={saveConnection} onClose={() => setConnectionOpen(false)} /> : null}
     </>

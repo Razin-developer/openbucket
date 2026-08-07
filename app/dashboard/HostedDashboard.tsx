@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { LogOut, RefreshCw, Settings as SettingsIcon, UserRound } from "lucide-react";
 import { DashboardShell } from "./shell/DashboardShell";
 import { WorkspaceSwitcher } from "./shell/WorkspaceSwitcher";
 import { ACCOUNT_ADMIN_NAV_ITEMS, ACCOUNT_NAV_ITEMS, NODE_NAV_ITEMS } from "./shell/nav-config";
@@ -20,10 +20,19 @@ import { BucketsView } from "./views/node/BucketsView";
 import { KeysView } from "./views/node/KeysView";
 import { ConnectionsView } from "./views/node/ConnectionsView";
 import { LogsView } from "./views/node/LogsView";
+import { SettingsView } from "./views/settings/SettingsView";
 import type { NodeViewContext } from "./views/node/context";
+import { Alert, AlertDescription, AlertTitle } from "../components/ui/alert";
+import { Avatar, AvatarFallback } from "../components/ui/avatar";
+import { Button } from "../components/ui/button";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "../components/ui/dropdown-menu";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 
-type AccountNavId = "account-overview" | "nodes" | "usage" | "account" | "admin" | "support";
-type NodeNavId = "overview" | "buckets" | "keys" | "connections" | "logs";
+type AccountNavId = "account-overview" | "nodes" | "usage" | "account" | "admin" | "support" | "settings";
+type NodeNavId = "overview" | "buckets" | "keys" | "connections" | "logs" | "settings";
 
 const NODE_NAME_PATH = /^\/dashboard\/nodes\/([a-z0-9][a-z0-9-]{1,47})$/;
 
@@ -136,32 +145,72 @@ export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogou
         onNavigate={onNavigate}
         workspaceSwitcher={
           <WorkspaceSwitcher title={user.name || user.email} subtitle="Cloud workspace">
-            <select
-              className="ob-node-select"
-              value={selectedNode?.id ?? ""}
-              onChange={(event) => {
-                const node = account.nodes?.find((item) => item.id === event.target.value);
+            <Select
+              value={selectedNode?.id || "__account__"}
+              onValueChange={(value) => {
+                const node = account.nodes?.find((item) => item.id === value);
                 if (node) openNode(node); else backToAccount();
               }}
             >
-              <option value="">Account overview</option>
-              {(account.nodes ?? []).map((node) => <option key={node.id} value={node.id}>{node.name}</option>)}
-            </select>
+              <SelectTrigger className="ob-node-select w-full">
+                <SelectValue placeholder="Account overview" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__account__">Account overview</SelectItem>
+                {(account.nodes ?? []).map((node) => <SelectItem key={node.id} value={node.id}>{node.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </WorkspaceSwitcher>
         }
         sidebarFooter={<button className="ob-text-button" type="button" onClick={onLogout}>Sign out</button>}
         breadcrumbs={<><span>OpenBucket</span><b>/</b>{selectedNode ? <><span>{selectedNode.name}</span><b>/</b></> : null}<strong>{breadcrumbLabel}</strong></>}
-        topbarActions={<button className="ob-icon-button" type="button" aria-label="Refresh account data" disabled={account.refreshing} onClick={() => void account.load(true)}><RefreshCw size={15} className={account.refreshing ? "is-spinning" : undefined} /></button>}
-        avatarStack={<button className="ob-avatar-button" type="button" onClick={() => { setSelectedNode(null); setAccountNavId("account"); }}><span>{(user.name || user.email)[0].toUpperCase()}</span></button>}
+        topbarActions={
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button className="ob-icon-button" type="button" aria-label="Refresh account data" disabled={account.refreshing} onClick={() => void account.load(true)}><RefreshCw size={15} className={account.refreshing ? "is-spinning" : undefined} /></button>
+            </TooltipTrigger>
+            <TooltipContent>Refresh account data</TooltipContent>
+          </Tooltip>
+        }
+        avatarStack={
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="ob-avatar-button" type="button" aria-label="Account menu">
+                <Avatar size="sm" className="size-8">
+                  <AvatarFallback className="bg-transparent text-white">{(user.name || user.email)[0].toUpperCase()}</AvatarFallback>
+                </Avatar>
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => { setSelectedNode(null); setAccountNavId("account"); }}>
+                <UserRound size={14} /> Account overview
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => { setSelectedNode(null); setAccountNavId("settings"); }}>
+                <SettingsIcon size={14} /> Settings
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onSelect={onLogout}>
+                <LogOut size={14} /> Sign out
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        }
       >
         {account.error ? (
-          <section className="ob-state-panel error"><h2>Account data unavailable</h2><p>{account.error}</p><button className="ob-button primary" type="button" onClick={() => void account.load(true)}>Try again</button></section>
+          <Alert variant="destructive">
+            <AlertTitle>Account data unavailable</AlertTitle>
+            <AlertDescription>
+              <p>{account.error}</p>
+              <Button size="sm" variant="outline" onClick={() => void account.load(true)}>Try again</Button>
+            </AlertDescription>
+          </Alert>
         ) : null}
         {!account.error && (!account.nodes || !account.usage) ? <div className="ob-loading" aria-live="polite"><span /><span /><span /><p>Loading account data…</p></div> : null}
         {!account.error && account.nodes && account.usage && !selectedNode && accountNavId === "account-overview" ? <AccountOverviewView user={user} nodes={account.nodes} usage={account.usage} onView={(id) => setAccountNavId(id as AccountNavId)} onOpen={openNode} /> : null}
         {!account.error && account.nodes && !selectedNode && accountNavId === "nodes" ? <NodesView user={user} nodes={account.nodes} onOpen={openNode} /> : null}
         {!account.error && account.nodes && account.usage && !selectedNode && accountNavId === "usage" ? <UsageView usage={account.usage} nodes={account.nodes} /> : null}
         {!account.error && !selectedNode && accountNavId === "account" ? <AccountProfileView user={user} /> : null}
+        {!account.error && !selectedNode && accountNavId === "settings" ? <SettingsView context="account" user={user} /> : null}
         {!account.error && !selectedNode && accountNavId === "admin" && user.role === "admin" && account.admin ? <AdminView overview={account.admin} /> : null}
         {!account.error && !selectedNode && accountNavId === "admin" && user.role === "admin" && !account.admin ? <div className="ob-loading" aria-live="polite"><span /><span /><span /><p>Loading authorized overview…</p></div> : null}
         {!account.error && !selectedNode && accountNavId === "support" && user.role === "admin" ? <SupportView /> : null}
@@ -174,6 +223,7 @@ export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogou
               {nodeNavId === "keys" ? <KeysView node={nodeView} /> : null}
               {nodeNavId === "connections" ? <ConnectionsView node={nodeView} onOpenConnectionSettings={() => {}} /> : null}
               {nodeNavId === "logs" ? <LogsView node={nodeView} /> : null}
+              {nodeNavId === "settings" ? <SettingsView context="node" node={nodeView} onOpenConnectionSettings={() => {}} /> : null}
             </>
           ) : (
             <div className="ob-loading" aria-live="polite"><span /><span /><span /><p>{nodeConnectError || `Connecting securely to ${selectedNode.name}…`}</p></div>

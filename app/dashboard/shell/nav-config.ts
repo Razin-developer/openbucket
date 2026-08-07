@@ -1,4 +1,4 @@
-import { Activity, Box, Cable, FileKey2, LayoutDashboard, MessageSquare, Network, ShieldCheck, UserRound } from "lucide-react";
+import { Activity, Box, Cable, FileKey2, LayoutDashboard, MessageSquare, Network, Settings, ShieldCheck, UserRound } from "lucide-react";
 import type { NavItem } from "../api/types";
 
 export const NODE_NAV_ITEMS: NavItem[] = [
@@ -7,6 +7,7 @@ export const NODE_NAV_ITEMS: NavItem[] = [
   { id: "keys", label: "API keys", icon: FileKey2 },
   { id: "connections", label: "Connections", icon: Cable },
   { id: "logs", label: "Logs & analytics", icon: Activity },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 export const ACCOUNT_NAV_ITEMS: NavItem[] = [
@@ -14,6 +15,7 @@ export const ACCOUNT_NAV_ITEMS: NavItem[] = [
   { id: "nodes", label: "Nodes", icon: Network },
   { id: "usage", label: "Usage", icon: Activity },
   { id: "account", label: "Account", icon: UserRound },
+  { id: "settings", label: "Settings", icon: Settings },
 ];
 
 export const ACCOUNT_ADMIN_NAV_ITEMS: NavItem[] = [

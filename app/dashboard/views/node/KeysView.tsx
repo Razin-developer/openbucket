@@ -4,6 +4,10 @@ import { createKeyFormSchema, validateForm } from "../../../lib/validation";
 import { CopyButton } from "../../components/CopyButton";
 import { EmptyState } from "../../components/EmptyState";
 import { Modal } from "../../components/Modal";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
+import { Checkbox } from "../../../components/ui/checkbox";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
 import { formatDate } from "../../api/format";
 import type { ApiKey } from "../../api/types";
 import type { NodeViewContext } from "./context";
@@ -15,13 +19,15 @@ function asRecord(value: unknown): Record<string, string> {
 function CreateKeyModal({ node, onClose, onCreated }: { node: NodeViewContext; onClose: () => void; onCreated: (secret: Record<string, string>) => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [bucket, setBucket] = useState("");
+  const [readOnly, setReadOnly] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const result = validateForm(createKeyFormSchema, {
       name: String(form.get("name") || "API key"),
-      readOnly: form.get("readOnly") === "on",
-      bucket: String(form.get("bucket") || "") || undefined,
+      readOnly,
+      bucket: bucket || undefined,
     });
     if (!result.ok) { setError(result.message); return; }
     setBusy(true);
@@ -42,8 +48,20 @@ function CreateKeyModal({ node, onClose, onCreated }: { node: NodeViewContext; o
     <Modal title="Create an API key" description="The secret is available once, immediately after creation." onClose={onClose}>
       <form className="ob-form-stack" onSubmit={(event) => void submit(event)}>
         <label><span>Key name</span><input name="name" required placeholder="production-backups" autoFocus /></label>
-        <label><span>Bucket scope</span><select name="bucket"><option value="">All buckets</option>{node.buckets.map((bucket) => <option key={bucket.name} value={bucket.name}>{bucket.name}</option>)}</select></label>
-        <label className="ob-check-row"><input name="readOnly" type="checkbox" /><span><strong>Read-only access</strong><small>Allow listing and downloading, but block writes and deletes.</small></span></label>
+        <label>
+          <span>Bucket scope</span>
+          <Select value={bucket || "__all__"} onValueChange={(value) => setBucket(value === "__all__" ? "" : value)}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="All buckets" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">All buckets</SelectItem>
+              {node.buckets.map((item) => <SelectItem key={item.name} value={item.name}>{item.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </label>
+        <label className="ob-check-row">
+          <Checkbox checked={readOnly} onCheckedChange={(checked) => setReadOnly(checked === true)} />
+          <span><strong>Read-only access</strong><small>Allow listing and downloading, but block writes and deletes.</small></span>
+        </label>
         {error ? <p className="ob-form-error">{error}</p> : null}
         <div className="ob-modal-actions">
           <button className="ob-button secondary compact" type="button" onClick={onClose}>Cancel</button>
@@ -58,9 +76,9 @@ export function KeysView({ node }: { node: NodeViewContext }) {
   const { keys, loadState, notify, refresh, apiFetch } = node;
   const [createOpen, setCreateOpen] = useState(false);
   const [revealedKey, setRevealedKey] = useState<Record<string, string> | null>(null);
+  const [keyToRevoke, setKeyToRevoke] = useState<ApiKey | null>(null);
 
   async function revokeKey(key: ApiKey) {
-    if (!window.confirm(`Revoke "${key.name}"? Applications using it will stop working immediately.`)) return;
     try {
       await apiFetch(`/v1/keys/${encodeURIComponent(key.id)}`, { method: "DELETE" });
       notify("API key revoked");
@@ -82,20 +100,20 @@ export function KeysView({ node }: { node: NodeViewContext }) {
       </div>
       {keys.length ? (
         <div className="ob-table-card">
-          <table>
-            <thead><tr><th>Name</th><th>Access key</th><th>Scope</th><th>Created</th><th><span className="ob-sr-only">Actions</span></th></tr></thead>
-            <tbody>
+          <Table>
+            <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Access key</TableHead><TableHead>Scope</TableHead><TableHead>Created</TableHead><TableHead><span className="ob-sr-only">Actions</span></TableHead></TableRow></TableHeader>
+            <TableBody>
               {keys.map((key) => (
-                <tr key={key.id}>
-                  <td className="ob-strong-cell">{key.name}</td>
-                  <td><div className="ob-inline-code"><code>{key.accessKeyId}</code><CopyButton value={key.accessKeyId} /></div></td>
-                  <td>{key.bucket ? `${key.bucket} · ` : "All buckets · "}{key.readOnly ? "Read only" : "Read/write"}</td>
-                  <td>{formatDate(key.createdAt)}</td>
-                  <td className="ob-row-actions"><button className="ob-text-button danger" type="button" onClick={() => void revokeKey(key)}>Revoke</button></td>
-                </tr>
+                <TableRow key={key.id}>
+                  <TableCell className="ob-strong-cell">{key.name}</TableCell>
+                  <TableCell><div className="ob-inline-code"><code>{key.accessKeyId}</code><CopyButton value={key.accessKeyId} /></div></TableCell>
+                  <TableCell>{key.bucket ? `${key.bucket} · ` : "All buckets · "}{key.readOnly ? "Read only" : "Read/write"}</TableCell>
+                  <TableCell>{formatDate(key.createdAt)}</TableCell>
+                  <TableCell className="ob-row-actions"><button className="ob-text-button danger" type="button" onClick={() => setKeyToRevoke(key)}>Revoke</button></TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
         </div>
       ) : (
         <EmptyState title="No API keys available." body="Create credentials for your first S3 client. The initial key is printed by the daemon on first run." />
@@ -111,6 +129,14 @@ export function KeysView({ node }: { node: NodeViewContext }) {
           <div className="ob-modal-actions"><button className="ob-button primary compact" type="button" onClick={() => setRevealedKey(null)}>I saved the secret</button></div>
         </Modal>
       ) : null}
+      <ConfirmDialog
+        open={keyToRevoke !== null}
+        title={`Revoke "${keyToRevoke?.name ?? ""}"?`}
+        description="Applications using this key will stop working immediately. This cannot be undone."
+        confirmLabel="Revoke key"
+        onOpenChange={(open) => { if (!open) setKeyToRevoke(null); }}
+        onConfirm={() => { if (keyToRevoke) void revokeKey(keyToRevoke); }}
+      />
     </section>
   );
 }

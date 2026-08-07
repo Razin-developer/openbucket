@@ -3,18 +3,23 @@ import { ArrowLeft, Download, FolderOpen, Plus, RefreshCw, Upload } from "lucide
 import { createBucketFormSchema, validateForm } from "../../../lib/validation";
 import { EmptyState } from "../../components/EmptyState";
 import { Modal } from "../../components/Modal";
+import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { UploadProgressPanel } from "../../components/UploadProgressPanel";
+import { Badge } from "../../../components/ui/badge";
+import { Checkbox } from "../../../components/ui/checkbox";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
 import { formatBytes, formatDate, formatNumber } from "../../api/format";
-import type { Bucket } from "../../api/types";
+import type { Bucket, StorageObject } from "../../api/types";
 import type { NodeViewContext } from "./context";
 
 function CreateBucketModal({ node, onClose }: { node: NodeViewContext; onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [isPublic, setIsPublic] = useState(false);
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const result = validateForm(createBucketFormSchema, { name: String(form.get("name") ?? ""), public: form.get("public") === "on" });
+    const result = validateForm(createBucketFormSchema, { name: String(form.get("name") ?? ""), public: isPublic });
     if (!result.ok) { setError(result.message); return; }
     setBusy(true);
     try {
@@ -32,7 +37,10 @@ function CreateBucketModal({ node, onClose }: { node: NodeViewContext; onClose: 
     <Modal title="Create a bucket" description="Bucket names use S3-compatible lowercase naming rules." onClose={onClose}>
       <form className="ob-form-stack" onSubmit={(event) => void submit(event)}>
         <label><span>Bucket name</span><input name="name" required minLength={3} maxLength={63} pattern="[a-z0-9][a-z0-9.\-]*[a-z0-9]" placeholder="project-assets" autoFocus /></label>
-        <label className="ob-check-row"><input name="public" type="checkbox" /><span><strong>Allow anonymous downloads</strong><small>Uploads and management still require credentials.</small></span></label>
+        <label className="ob-check-row">
+          <Checkbox checked={isPublic} onCheckedChange={(checked) => setIsPublic(checked === true)} />
+          <span><strong>Allow anonymous downloads</strong><small>Uploads and management still require credentials.</small></span>
+        </label>
         {error ? <p className="ob-form-error">{error}</p> : null}
         <div className="ob-modal-actions">
           <button className="ob-button secondary compact" type="button" onClick={onClose}>Cancel</button>
@@ -51,6 +59,8 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
   } = objectBrowser;
   const [createOpen, setCreateOpen] = useState(false);
   const [dragOver, setDragOver] = useState(false);
+  const [bucketToDelete, setBucketToDelete] = useState<Bucket | null>(null);
+  const [objectToDelete, setObjectToDelete] = useState<StorageObject | null>(null);
   const uploading = uploadItems.some((item) => item.status === "queued" || item.status === "uploading");
 
   function onDrop(event: DragEvent<HTMLDivElement>) {
@@ -60,7 +70,6 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
   }
 
   async function deleteBucket(bucket: Bucket) {
-    if (!window.confirm(`Delete bucket "${bucket.name}"? The daemon refuses non-empty bucket deletion.`)) return;
     try {
       await apiFetch(`/v1/buckets/${encodeURIComponent(bucket.name)}`, { method: "DELETE" });
       if (selectedBucket === bucket.name) setSelectedBucket(null);
@@ -80,21 +89,21 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
       {!selectedBucket ? (
         buckets.length ? (
           <div className="ob-table-card">
-            <table>
-              <thead><tr><th>Name</th><th>Objects</th><th>Size</th><th>Access</th><th>Created</th><th><span className="ob-sr-only">Actions</span></th></tr></thead>
-              <tbody>
+            <Table>
+              <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Objects</TableHead><TableHead>Size</TableHead><TableHead>Access</TableHead><TableHead>Created</TableHead><TableHead><span className="ob-sr-only">Actions</span></TableHead></TableRow></TableHeader>
+              <TableBody>
                 {buckets.map((bucket) => (
-                  <tr key={bucket.name}>
-                    <td><button className="ob-bucket-link" type="button" onClick={() => void loadObjects(bucket.name)}><span className="ob-bucket-glyph"><FolderOpen size={14} /></span>{bucket.name}</button></td>
-                    <td>{formatNumber(bucket.objectCount)}</td>
-                    <td>{formatBytes(bucket.sizeBytes)}</td>
-                    <td><span className={`ob-status-badge ${bucket.public ? "info" : "neutral"}`}>{bucket.public ? "Public" : "Private"}</span></td>
-                    <td>{formatDate(bucket.createdAt)}</td>
-                    <td className="ob-row-actions"><button className="ob-text-button danger" type="button" onClick={() => void deleteBucket(bucket)}>Delete</button></td>
-                  </tr>
+                  <TableRow key={bucket.name}>
+                    <TableCell><button className="ob-bucket-link" type="button" onClick={() => void loadObjects(bucket.name)}><span className="ob-bucket-glyph"><FolderOpen size={14} /></span>{bucket.name}</button></TableCell>
+                    <TableCell>{formatNumber(bucket.objectCount)}</TableCell>
+                    <TableCell>{formatBytes(bucket.sizeBytes)}</TableCell>
+                    <TableCell><Badge variant={bucket.public ? "outline" : "secondary"} className={bucket.public ? "border-[color:var(--accent)] text-[color:var(--accent-deep)] bg-[color:var(--accent-soft)]" : ""}>{bucket.public ? "Public" : "Private"}</Badge></TableCell>
+                    <TableCell>{formatDate(bucket.createdAt)}</TableCell>
+                    <TableCell className="ob-row-actions"><button className="ob-text-button danger" type="button" onClick={() => setBucketToDelete(bucket)}>Delete</button></TableCell>
+                  </TableRow>
                 ))}
-              </tbody>
-            </table>
+              </TableBody>
+            </Table>
           </div>
         ) : (
           <EmptyState title="No buckets yet." body="Create a bucket to map a safe namespace inside this storage root." action={<button className="ob-button primary compact" type="button" onClick={() => setCreateOpen(true)} disabled={loadState !== "connected"}><Plus size={15} /> Create your first bucket</button>} />
@@ -130,26 +139,26 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
             <div className="ob-loading-rows" aria-label="Loading objects"><i /><i /><i /></div>
           ) : objects.length ? (
             <div className="ob-table-card flush">
-              <table>
-                <thead><tr><th>Object key</th><th>Size</th><th>Modified</th><th>ETag</th><th><span className="ob-sr-only">Actions</span></th></tr></thead>
-                <tbody>
+              <Table>
+                <TableHeader><TableRow><TableHead>Object key</TableHead><TableHead>Size</TableHead><TableHead>Modified</TableHead><TableHead>ETag</TableHead><TableHead><span className="ob-sr-only">Actions</span></TableHead></TableRow></TableHeader>
+                <TableBody>
                   {objects.map((object) => (
-                    <tr key={object.key}>
-                      <td className="ob-object-key">{object.key}</td>
-                      <td>{formatBytes(object.sizeBytes)}</td>
-                      <td>{formatDate(object.lastModified)}</td>
-                      <td><code className="ob-etag">{object.etag?.replaceAll('"', "").slice(0, 14) || "—"}</code></td>
-                      <td>
+                    <TableRow key={object.key}>
+                      <TableCell className="ob-object-key">{object.key}</TableCell>
+                      <TableCell>{formatBytes(object.sizeBytes)}</TableCell>
+                      <TableCell>{formatDate(object.lastModified)}</TableCell>
+                      <TableCell><code className="ob-etag">{object.etag?.replaceAll('"', "").slice(0, 14) || "—"}</code></TableCell>
+                      <TableCell>
                         <div className="ob-inline-actions">
                           <button type="button" onClick={() => void downloadObject(object)}><Download size={14} /> Download</button>
                           <button type="button" onClick={() => void shareObject(object)}>Share</button>
-                          <button className="danger" type="button" onClick={() => void deleteObject(object)}>Delete</button>
+                          <button className="danger" type="button" onClick={() => setObjectToDelete(object)}>Delete</button>
                         </div>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           ) : (
             <EmptyState title="This bucket is empty." body="Upload a file here or send a PutObject request to the S3 endpoint." />
@@ -157,6 +166,22 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
         </div>
       )}
       {createOpen ? <CreateBucketModal node={node} onClose={() => setCreateOpen(false)} /> : null}
+      <ConfirmDialog
+        open={bucketToDelete !== null}
+        title={`Delete bucket "${bucketToDelete?.name ?? ""}"?`}
+        description="The daemon refuses to delete a non-empty bucket. This cannot be undone."
+        confirmLabel="Delete bucket"
+        onOpenChange={(open) => { if (!open) setBucketToDelete(null); }}
+        onConfirm={() => { if (bucketToDelete) void deleteBucket(bucketToDelete); }}
+      />
+      <ConfirmDialog
+        open={objectToDelete !== null}
+        title={`Delete "${objectToDelete?.key ?? ""}"?`}
+        description="This object will be permanently removed. This cannot be undone."
+        confirmLabel="Delete object"
+        onOpenChange={(open) => { if (!open) setObjectToDelete(null); }}
+        onConfirm={() => { if (objectToDelete) void deleteObject(objectToDelete); }}
+      />
     </section>
   );
 }

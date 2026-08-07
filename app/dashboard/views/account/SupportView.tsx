@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Bug, MessageSquare } from "lucide-react";
 import { controlPlaneApi, type SupportListResponse } from "../../api/account-api";
 import { formatDate } from "../../api/format";
+import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 
 export function SupportView() {
   const [kindFilter, setKindFilter] = useState<"" | "feedback" | "bug">("");
@@ -43,19 +45,30 @@ export function SupportView() {
         {data ? <span className="ob-generated">{data.newCount} new · {data.totalCount} total</span> : null}
       </header>
       <div className="ob-support-filters">
-        <select value={kindFilter} onChange={(event) => setKindFilter(event.target.value as typeof kindFilter)}>
-          <option value="">All types</option>
-          <option value="feedback">Feedback</option>
-          <option value="bug">Bug reports</option>
-        </select>
-        <select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value as typeof statusFilter)}>
-          <option value="">All statuses</option>
-          <option value="new">New</option>
-          <option value="reviewed">Reviewed</option>
-          <option value="resolved">Resolved</option>
-        </select>
+        <Select value={kindFilter || "__all__"} onValueChange={(value) => setKindFilter((value === "__all__" ? "" : value) as typeof kindFilter)}>
+          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="All types" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All types</SelectItem>
+            <SelectItem value="feedback">Feedback</SelectItem>
+            <SelectItem value="bug">Bug reports</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter || "__all__"} onValueChange={(value) => setStatusFilter((value === "__all__" ? "" : value) as typeof statusFilter)}>
+          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="All statuses" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="__all__">All statuses</SelectItem>
+            <SelectItem value="new">New</SelectItem>
+            <SelectItem value="reviewed">Reviewed</SelectItem>
+            <SelectItem value="resolved">Resolved</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
-      {error ? <section className="ob-state-panel error"><h2>Support data unavailable</h2><p>{error}</p></section> : null}
+      {error ? (
+        <Alert variant="destructive">
+          <AlertTitle>Support data unavailable</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
       {!error && !data ? <div className="ob-loading" aria-live="polite"><span /><span /><span /><p>Loading submissions…</p></div> : null}
       {!error && data && data.submissions.length === 0 ? <section className="ob-state-panel"><h2>No submissions</h2><p>Nothing matches this filter yet.</p></section> : null}
       {!error && data && data.submissions.length > 0 ? (
