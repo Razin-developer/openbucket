@@ -16,6 +16,7 @@
   --fs-shadow: 0 20px 45px rgb(20 20 43 / 8%);
 }
 
+html { scroll-behavior: smooth; }
 .site-shell { min-height: 100vh; color: var(--site-ink); background: var(--site-paper); font-family: var(--font-geist-sans); -webkit-font-smoothing: antialiased; }
 .site-shell *, .site-shell *::before, .site-shell *::after, .auth-layout *, .account-dock * { box-sizing: border-box; }
 .site-shell a { color: inherit; }
@@ -210,7 +211,16 @@
 .docs-toc nav a.sub { padding-left: 26px; font-size: 12px; }
 .docs-toc nav a:hover { color: var(--site-ink); }
 .docs-toc nav a.active { border-left-color: var(--fs-accent); color: var(--fs-accent); font-weight: 590; }
-.docs-hero { padding: 15px 0 80px; border-bottom: 1px solid var(--site-line); }
+.docs-main-column { min-width: 0; }
+.docs-pagination { display: flex; align-items: stretch; justify-content: space-between; gap: 16px; margin: 56px 0 0; }
+.docs-pagination-link { display: flex; align-items: center; gap: 10px; max-width: 46%; padding: 16px 20px; border: 1px solid var(--site-line); border-radius: 14px; color: var(--site-ink); text-decoration: none; transition: border-color .2s var(--site-ease), background .2s var(--site-ease); }
+.docs-pagination-link:hover { border-color: rgb(20 20 43 / 24%); background: #f9f9fb; }
+.docs-pagination-link.next { margin-left: auto; text-align: right; }
+.docs-pagination-link span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.docs-pagination-link small { color: var(--site-muted); font-size: 11.5px; font-weight: 590; letter-spacing: .01em; text-transform: uppercase; }
+.docs-pagination-link strong { font-size: 15px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.docs-pagination-link svg { flex: none; color: var(--fs-accent); }
+.docs-hero { padding: 15px 0 80px; border-bottom: 1px solid var(--site-line); scroll-margin-top: 90px; }
 .docs-hero h1 { margin: 0; font-size: clamp(48px, 6.4vw, 80px); font-weight: 600; line-height: .98; letter-spacing: -.03em; }
 .docs-hero > p:not(.section-kicker) { max-width: 640px; margin: 28px 0; color: var(--site-muted); font-size: 18px; line-height: 1.55; letter-spacing: -.01em; }
 .docs-requirement { display: flex; gap: 13px; max-width: 660px; padding: 16px 18px; border-radius: 14px; background: #f5f5f7; }

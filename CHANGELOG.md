@@ -27,7 +27,7 @@
 
 ### Changed
 
-- **Admin access no longer lives in the database.** `role: "admin"` on a user document is now ignored entirely; signing in with `OPENBUCKET_ADMIN_EMAIL`/`OPENBUCKET_ADMIN_PASSWORD` grants a session with `role: "admin"` that has no backing MongoDB row at all. The one-time "owner bootstrap" race (first successful `/register` wins admin) is removed.
+- **Admin access no longer lives in the database.** `role: "admin"` on a user document is now ignored entirely; admin sessions are granted through server-side environment configuration instead, with no backing MongoDB row at all. The one-time "owner bootstrap" race (first successful `/register` wins admin) is removed.
 - **Self-serve registration is open by default.** `/register` no longer requires a one-time setup token; `OPENBUCKET_ALLOW_SIGNUP` now defaults to `true` (set it to `"false"` to close signup). `scripts/bootstrap-owner.mjs` is deprecated — it now prints a warning pointing at the env-based admin instead of trying to manage a signup window.
 - Redesigned `/login` and `/register`: removed the decorative left-side image panel in favor of a single centered card, added a "Continue with Google" button, and a "Forgot password?" link.
 - `openbucket login`'s "Continue in browser" option was a stub that opened a page and then still asked for your password in the terminal anyway. Replaced it with an honest "Do you already have an account?" choice — "No" opens `/register` in your browser and exits; "Yes" goes straight to the email/password prompt as before.

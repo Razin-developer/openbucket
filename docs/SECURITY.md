@@ -117,8 +117,8 @@ The Vercel `/dashboard` requires a MongoDB-backed account session. It authorizes
 
 MongoDB stores users, password verifiers, sessions, rate-limit records, password-reset tokens (HMAC-hashed, single-use, 30-minute TTL), node registrations, hashed node credentials, endpoint/heartbeat/storage summaries, and aggregate usage events. It must never store object bytes, raw node credentials, management/S3 secrets, share tokens, an admin flag, or authoritative local state. Explicit `--offline` development sends no hosted node/usage/discovery state.
 
-Keep `MONGODB_URI`, `OPENBUCKET_AUTH_SECRET`, `OPENBUCKET_ADMIN_PASSWORD`, and the SMTP/Google OAuth secrets server-only, and rotate any disclosed value immediately.
-Admin access is granted only by matching `OPENBUCKET_ADMIN_EMAIL`/`OPENBUCKET_ADMIN_PASSWORD` at login time (constant-time compared); no admin record is ever written to MongoDB, so a database dump alone cannot grant or reveal admin access. Self-serve registration at `/register` never grants admin, regardless of registration order.
+Keep `MONGODB_URI`, `OPENBUCKET_AUTH_SECRET`, the server-configured admin credentials, and the SMTP/Google OAuth secrets server-only, and rotate any disclosed value immediately.
+Admin access is granted only by matching the deployment's own configured admin credentials at login time (constant-time compared); no admin record is ever written to MongoDB, so a database dump alone cannot grant or reveal admin access. Self-serve registration at `/register` never grants admin, regardless of registration order.
 
 ## S3 authentication and authorization
 

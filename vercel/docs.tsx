@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ArrowRight, Check, Coffee, Copy, ExternalLink, Info, Search, Star, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Coffee, Copy, ExternalLink, Info, Search, Star, X } from "lucide-react";
 import { SiteShell, buyMeACoffeeUrl, githubUrl } from "./site-shell";
 
 function CodeBlock({ children, label = "Terminal" }: { children: string; label?: string }) {
@@ -73,7 +73,7 @@ const docPages: DocPageDef[] = [
   { path: "/docs", id: "overview", label: "Overview", sections: [["overview", "Overview"], ["quickstart", "Quickstart"]] },
   { path: "/docs/installation", id: "installation", label: "Installation", sections: [["npm", "npm (recommended)"], ["installer-script", "Installer script"], ["docker", "Docker"], ["source", "Build from source"]] },
   { path: "/docs/usage", id: "usage", label: "Usage", sections: [["first-node", "Run your first node"], ["daily-commands", "Day-to-day commands"], ["renaming", "Renaming a node"], ["interactive-console", "Interactive console"]] },
-  { path: "/docs/dashboard", id: "dashboard", label: "Dashboard", sections: [["local-dashboard", "Local dashboard"], ["hosted-dashboard", "Hosted dashboard"], ["admin", "Admin access"]] },
+  { path: "/docs/dashboard", id: "dashboard", label: "Dashboard", sections: [["local-dashboard", "Local dashboard"], ["hosted-dashboard", "Hosted dashboard"]] },
   { path: "/docs/s3-signing", id: "s3-signing", label: "S3 signing", sections: [["sigv4", "AWS Signature Version 4"], ["clients", "Connect existing clients"], ["compatibility", "Compatibility notes"]] },
   { path: "/docs/local-api", id: "local-api", label: "Local API", sections: [["auth-token", "Finding your management token"], ["quick-examples", "Quick examples"]] },
   { path: "/docs/api", id: "api", label: "API reference", sections: [["local-management", "Local management API"], ["local-s3", "Local S3 API"], ["hosted-auth", "Hosted: accounts"], ["hosted-nodes", "Hosted: nodes"], ["hosted-usage", "Hosted: usage & admin"]] },
@@ -180,11 +180,59 @@ function useScrollSpy(ids: readonly string[]): string {
   return active;
 }
 
+function useHashScroll(pageId: string) {
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    // The target section may still be mounting (lazily-loaded route chunk, or React
+    // hasn't committed yet), so poll across a few animation frames instead of assuming
+    // it's already in the DOM the instant this effect runs.
+    let cancelled = false;
+    let attempts = 0;
+    const tryScroll = () => {
+      if (cancelled) return;
+      const target = document.getElementById(hash);
+      if (target) {
+        target.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+      attempts += 1;
+      if (attempts < 20) window.requestAnimationFrame(tryScroll);
+    };
+    tryScroll();
+    return () => { cancelled = true; };
+  }, [pageId]);
+}
+
+function DocsPagination({ current }: { current: string }) {
+  const index = docPages.findIndex((entry) => entry.id === current);
+  if (index === -1) return null;
+  const prev = index > 0 ? docPages[index - 1] : null;
+  const next = index < docPages.length - 1 ? docPages[index + 1] : null;
+  return (
+    <nav className="docs-pagination" aria-label="Documentation pages navigation">
+      {prev ? (
+        <a className="docs-pagination-link prev" href={prev.path}>
+          <ArrowLeft size={15} aria-hidden="true" />
+          <span><small>Previous</small><strong>{prev.label}</strong></span>
+        </a>
+      ) : <span />}
+      {next ? (
+        <a className="docs-pagination-link next" href={next.path}>
+          <span><small>Next</small><strong>{next.label}</strong></span>
+          <ArrowRight size={15} aria-hidden="true" />
+        </a>
+      ) : <span />}
+    </nav>
+  );
+}
+
 function DocsShell({ current, children }: { current: string; children: ReactNode }) {
   const page = docPages.find((entry) => entry.id === current) ?? docPages[0]!;
   const tocIds = page.sections.map(([id]) => id);
   const tocLabels = Object.fromEntries(page.sections);
   const activeToc = useScrollSpy(tocIds);
+  useHashScroll(current);
   return (
     <SiteShell current="docs">
       <main className="docs-layout">
@@ -196,9 +244,6 @@ function DocsShell({ current, children }: { current: string; children: ReactNode
               <a key={entry.path} href={entry.path} className={entry.id === current ? "active" : ""}>{entry.label}</a>
             ))}
           </nav>
-          {/* <nav aria-label="Sections on this page">
-            {page.sections.map(([id, label]) => <a href={`#${id}`} key={id}>{label}</a>)}
-          </nav> */}
           <div className="docs-sidebar-callout">
             <strong>Need every detail?</strong>
             <p>The repository includes operations, security, S3 compatibility, and contribution references.</p>
@@ -206,7 +251,10 @@ function DocsShell({ current, children }: { current: string; children: ReactNode
           </div>
         </aside>
 
-        {children}
+        <div className="docs-main-column">
+          {children}
+          <DocsPagination current={current} />
+        </div>
 
         <aside className="docs-toc" aria-label="On this page">
           <p>ON THIS PAGE</p>
@@ -329,9 +377,6 @@ export function DashboardPage() {
           <p>Anyone can <a href="/register">create an account</a> to pair a node with the hosted control plane. The hosted <a href="/dashboard">web dashboard</a> reads MongoDB-backed node registrations, presence, storage summaries, and aggregate usage. Object bytes, raw node tokens, management credentials, and S3 keys remain on the storage host. Everything it calls is documented in the <a href="/docs/api#hosted-nodes">hosted API reference</a>.</p>
         </DocSection>
 
-        {/* <DocSection id="admin" eyebrow="ADMINISTRATION" title="Admin access">
-          <p>Administrator access isn&apos;t stored in the database at all &mdash; set <code>OPENBUCKET_ADMIN_EMAIL</code> and <code>OPENBUCKET_ADMIN_PASSWORD</code> on the deployment, and signing in with that exact email and password opens the admin-only aggregate overview. No account row is ever written for it, so there&apos;s nothing in a database dump that could reveal or grant admin access.</p>
-        </DocSection> */}
       </article>
     </DocsShell>
   );
@@ -521,7 +566,7 @@ export function ApiReferencePage() {
           }} />
           <EndpointCard endpoint={{
             id: "api-login", method: "POST", path: "/api/auth/login", title: "Sign in", auth: "None (rate-limited: 20/15min per IP, 8/15min per email).",
-            description: "Checks OPENBUCKET_ADMIN_EMAIL/PASSWORD first \u2014 a match returns role: \"admin\" with no database row \u2014 then falls back to the normal account lookup.",
+            description: "Checks the server-configured admin credentials first \u2014 a match returns role: \"admin\" with no database row \u2014 then falls back to the normal account lookup.",
             request: "{ \"email\": \"you@example.com\", \"password\": \"...\" }",
             response: "{ \"user\": { \"id\", \"email\", \"name\", \"handle\", \"role\" } }  // + Set-Cookie",
             js: "await fetch(\"/api/auth/login\", {\n  method: \"POST\",\n  credentials: \"same-origin\",\n  headers: { \"content-type\": \"application/json\" },\n  body: JSON.stringify({ email, password }),\n});",
@@ -624,7 +669,7 @@ export function ApiReferencePage() {
             python: "usage = session.get(\"https://your-openbucket-domain/api/usage\", params={\"interval\": \"day\"}).json()",
           }} />
           <EndpointCard endpoint={{
-            id: "api-admin", method: "GET", path: "/api/admin/overview?from=&to=&interval=", title: "Admin overview", auth: "Session cookie, role must be \"admin\" (the OPENBUCKET_ADMIN_EMAIL/PASSWORD account).",
+            id: "api-admin", method: "GET", path: "/api/admin/overview?from=&to=&interval=", title: "Admin overview", auth: "Session cookie, role must be \"admin\" (the server-configured admin account).",
             description: "Account, node, storage, and usage totals across every user. 403 ADMIN_REQUIRED otherwise.",
             response: "{ \"generatedAt\", \"users\": {\"total\",\"active\",\"disabled\"}, \"nodes\": {\"total\",\"online\",\"offline\",\"revoked\"}, \"storage\": {...}, \"usage\": {...} }",
             js: "const overview = await fetch(\"/api/admin/overview\", { credentials: \"same-origin\" }).then((r) => r.json());",

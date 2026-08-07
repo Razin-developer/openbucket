@@ -4,6 +4,7 @@ param(
   [string]$Version,
   [string]$Prefix,
   [int]$TimeoutSeconds,
+  [switch]$SkipNodeInstall,
   [switch]$Help
 )
 
@@ -12,25 +13,30 @@ Set-StrictMode -Version Latest
 
 if ($Help) {
   @"
-Install OpenBucket's npm package globally.
+Install OpenBucket: checks/installs Node.js if needed, installs the npm
+package globally, then verifies the result.
 
-Usage: ./install.ps1 [-Package SPEC] [-Version VERSION] [-Prefix DIRECTORY] [-TimeoutSeconds N]
+Usage: ./install.ps1 [-Package SPEC] [-Version VERSION] [-Prefix DIRECTORY] [-TimeoutSeconds N] [-SkipNodeInstall]
 
 Package may be an npm name, tarball URL, .tgz file, or local directory.
 Defaults come from OPENBUCKET_NPM_PACKAGE, OPENBUCKET_INSTALL_VERSION, and
 OPENBUCKET_NPM_PREFIX. The package name otherwise defaults to openbucket.
 -TimeoutSeconds aborts npm install after N seconds (default 120, or
-OPENBUCKET_INSTALL_TIMEOUT).
+OPENBUCKET_INSTALL_TIMEOUT). -SkipNodeInstall fails instead of attempting to
+install Node.js automatically.
 
-If the install hangs rather than failing outright, it is almost always a
-broken IPv6 route: DNS returns both an A and an AAAA record for the npm
-registry, Node.js picks the AAAA record, and that connection attempt times
-out slowly before falling back. This script already sets
+If Node.js 22.13+ isn't already on PATH, this script tries winget, then
+Chocolatey, then Scoop, then falls back to the official prebuilt Node.js
+archive from nodejs.org. It does not elevate, open ports, or modify firewall
+rules itself; a package manager step may prompt you (e.g. a UAC dialog) on
+its own.
+
+If the npm install step hangs rather than failing outright, it is almost
+always a broken IPv6 route: DNS returns both an A and an AAAA record for the
+npm registry, Node.js picks the AAAA record, and that connection attempt
+times out slowly before falling back. This script sets
 NODE_OPTIONS=--dns-result-order=ipv4first and shortens npm's fetch retry
 backoff to fail fast instead of hanging for minutes.
-
-The script does not elevate, install an OS service, change PATH, open ports, or
-modify firewall rules. It installs the selected package through npm only.
 "@
   exit 0
 }
@@ -44,17 +50,132 @@ if (-not $TimeoutSeconds) {
   $TimeoutSeconds = if ($env:OPENBUCKET_INSTALL_TIMEOUT) { [int]$env:OPENBUCKET_INSTALL_TIMEOUT } else { 120 }
 }
 
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
-  throw "Node.js is required. Install Node.js 22.13 or newer first."
+$RequiredMajor = 22
+$RequiredMinor = 13
+$NodeDistVersion = if ($env:OPENBUCKET_NODE_DIST_VERSION) { $env:OPENBUCKET_NODE_DIST_VERSION } else { "22.13.0" }
+$TotalSteps = 4
+$StepNum = 0
+
+function Write-Step([string]$Title) {
+  $script:StepNum++
+  Write-Host ""
+  Write-Host "[$script:StepNum/$TotalSteps] $Title" -ForegroundColor White
 }
-if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
-  throw "npm is required and was not found on PATH."
+function Write-Ok([string]$Message) { Write-Host "  * $Message" -ForegroundColor Green }
+function Write-Info([string]$Message) { Write-Host "  . $Message" -ForegroundColor DarkGray }
+function Write-Warn2([string]$Message) { Write-Host "  ! $Message" -ForegroundColor Yellow }
+function Write-Fail([string]$Message) { Write-Host "  x $Message" -ForegroundColor Red }
+
+Write-Host "OpenBucket installer" -ForegroundColor Magenta
+Write-Host "Turns a local folder into an S3-compatible endpoint." -ForegroundColor DarkGray
+
+function Test-NodeVersionOk {
+  if (-not (Get-Command node -ErrorAction SilentlyContinue)) { return $false }
+  & node -e "const [major, minor] = process.versions.node.split('.').map(Number); process.exit(major > $RequiredMajor || (major === $RequiredMajor && minor >= $RequiredMinor) ? 0 : 1)" 2>$null
+  return $LASTEXITCODE -eq 0
 }
 
-& node -e "const [major, minor] = process.versions.node.split('.').map(Number); process.exit(major > 22 || (major === 22 && minor >= 13) ? 0 : 1)"
-if ($LASTEXITCODE -ne 0) {
-  throw "OpenBucket requires Node.js 22.13 or newer; found $(& node --version)."
+function Install-NodeViaPackageManager {
+  if (Get-Command winget -ErrorAction SilentlyContinue) {
+    Write-Info "Found winget; installing Node.js LTS..."
+    try {
+      winget install --id OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements | Out-Null
+      $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+      return $true
+    } catch { return $false }
+  }
+  if (Get-Command choco -ErrorAction SilentlyContinue) {
+    Write-Info "Found Chocolatey; installing Node.js LTS..."
+    try {
+      choco install nodejs-lts -y | Out-Null
+      $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" + [System.Environment]::GetEnvironmentVariable("Path", "User")
+      return $true
+    } catch { return $false }
+  }
+  if (Get-Command scoop -ErrorAction SilentlyContinue) {
+    Write-Info "Found Scoop; installing Node.js LTS..."
+    try {
+      scoop install nodejs-lts | Out-Null
+      return $true
+    } catch { return $false }
+  }
+  return $false
 }
+
+function Install-NodeFromOfficialArchive {
+  $arch = if ([System.Environment]::Is64BitOperatingSystem) {
+    if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "arm64" } else { "x64" }
+  } else { "x86" }
+  $archiveName = "node-v$NodeDistVersion-win-$arch"
+  $url = "https://nodejs.org/dist/v$NodeDistVersion/$archiveName.zip"
+  $installRoot = Join-Path $env:USERPROFILE ".openbucket\node"
+  New-Item -ItemType Directory -Force -Path $installRoot | Out-Null
+  $zipPath = Join-Path $installRoot "$archiveName.zip"
+
+  Write-Info "Downloading Node.js v$NodeDistVersion for win-$arch..."
+  try {
+    Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing
+  } catch {
+    Write-Fail "Download failed: $url"
+    return $false
+  }
+
+  Write-Info "Extracting..."
+  $targetDir = Join-Path $installRoot $archiveName
+  if (Test-Path $targetDir) { Remove-Item -Recurse -Force $targetDir }
+  try {
+    Expand-Archive -Path $zipPath -DestinationPath $installRoot -Force
+  } catch {
+    Write-Fail "Failed to extract Node.js archive."
+    return $false
+  }
+  Remove-Item -Force $zipPath -ErrorAction SilentlyContinue
+
+  $env:Path = "$targetDir;$env:Path"
+  Write-Ok "Node.js v$NodeDistVersion is ready for this session at $targetDir"
+  Write-Info "To keep using it in new shells, add this to your PowerShell profile:"
+  Write-Info "  `$env:Path = `"$targetDir;`$env:Path`""
+  return $true
+}
+
+Write-Step "Checking for Node.js $RequiredMajor.$RequiredMinor+"
+if (Test-NodeVersionOk) {
+  Write-Ok "Node.js $(& node --version) found"
+} else {
+  if (Get-Command node -ErrorAction SilentlyContinue) {
+    Write-Warn2 "Found Node.js $(& node --version), but OpenBucket needs $RequiredMajor.$RequiredMinor+"
+  } else {
+    Write-Warn2 "Node.js was not found on PATH"
+  }
+
+  if ($SkipNodeInstall) {
+    Write-Fail "Node.js $RequiredMajor.$RequiredMinor+ is required. Install it and re-run this script."
+    exit 1
+  }
+
+  Write-Info "Attempting to install Node.js automatically..."
+  $installed = $false
+  if (Install-NodeViaPackageManager) {
+    if (Test-NodeVersionOk) { $installed = $true }
+  }
+  if (-not $installed -and (Install-NodeFromOfficialArchive)) {
+    if (Test-NodeVersionOk) { $installed = $true }
+  }
+  if ($installed) {
+    Write-Ok "Node.js $(& node --version) installed"
+  } else {
+    Write-Fail "Could not install Node.js automatically."
+    Write-Fail "Install Node.js $RequiredMajor.$RequiredMinor+ yourself from https://nodejs.org and re-run this script."
+    exit 1
+  }
+}
+
+if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
+  Write-Fail "npm is required and was not found on PATH (it normally ships with Node.js)."
+  exit 1
+}
+
+Write-Step "Preparing the OpenBucket package"
 
 $spec = $Package
 if ($Version) {
@@ -62,6 +183,9 @@ if ($Version) {
   if ($isLocalOrUrl) { throw "-Version can only be combined with a registry package name." }
   $spec = "$Package@$Version"
 }
+Write-Ok "Will install: $spec"
+
+Write-Step "Installing OpenBucket with npm"
 
 $arguments = @(
   "install", "--global", "--no-audit", "--no-fund",
@@ -71,7 +195,7 @@ $arguments = @(
 if ($Prefix) { $arguments += @("--prefix", $Prefix) }
 $arguments += $spec
 
-Write-Host "Installing $spec with npm (timeout: ${TimeoutSeconds}s)..."
+Write-Info "Running npm (timeout: ${TimeoutSeconds}s)..."
 $previousNodeOptions = $env:NODE_OPTIONS
 $env:NODE_OPTIONS = "$previousNodeOptions --dns-result-order=ipv4first".Trim()
 
@@ -90,20 +214,40 @@ try {
 
   if (-not $process.WaitForExit($TimeoutSeconds * 1000)) {
     try { $process.Kill($true) } catch {}
-    Write-Error "npm install did not finish within ${TimeoutSeconds}s and was aborted."
-    Write-Warning "This usually means a broken IPv6 route to the npm registry. Re-run with a longer -TimeoutSeconds, or check that IPv4 connectivity works."
+    Write-Fail "npm install did not finish within ${TimeoutSeconds}s and was aborted."
+    Write-Fail "This usually means a broken IPv6 route to the npm registry. Re-run with a longer -TimeoutSeconds, or check that IPv4 connectivity works."
     exit 1
   }
   if ($process.ExitCode -ne 0) { throw "npm install failed with exit code $($process.ExitCode)." }
 } finally {
   $env:NODE_OPTIONS = $previousNodeOptions
 }
+Write-Ok "npm install finished"
+
+Write-Step "Verifying the installation"
 
 $command = Get-Command openbucket -ErrorAction SilentlyContinue
-if ($command) {
-  & openbucket version
-  Write-Host "Installed successfully. Run: openbucket login --email you@example.com"
-  Write-Host "Then serve a disk: openbucket serve C:\path\to\storage --name my-node"
-} else {
-  Write-Warning "npm completed, but openbucket is not on PATH. Add npm's global bin directory to PATH, then run openbucket version."
+if (-not $command) {
+  Write-Fail "npm completed, but openbucket is not on PATH."
+  Write-Fail "Add npm's global bin directory to PATH, then run: openbucket version"
+  exit 1
 }
+
+$installedVersion = (& openbucket version) -replace '^openbucket\s+', ''
+Write-Ok "openbucket $installedVersion is on PATH"
+
+$doctorOutput = & openbucket doctor 2>&1
+$doctorExit = $LASTEXITCODE
+if ($doctorExit -eq 0) {
+  Write-Ok "openbucket doctor passed"
+} else {
+  Write-Warn2 "openbucket doctor reported issues (this is expected before your first 'serve')"
+}
+$doctorOutput | ForEach-Object { Write-Host "  $_" -ForegroundColor DarkGray }
+
+Write-Host ""
+Write-Host "Done. OpenBucket $installedVersion is installed." -ForegroundColor Green
+Write-Host ""
+Write-Host "  openbucket login --email you@example.com" -ForegroundColor White
+Write-Host "  openbucket serve C:\path\to\storage --name my-node" -ForegroundColor White
+Write-Host ""

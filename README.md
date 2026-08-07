@@ -277,7 +277,7 @@ If the dashboard and daemon have different origins, set `OPENBUCKET_DASHBOARD_UR
 
 MongoDB stores hosted users, password verifiers, sessions, rate-limit records, node registrations, hashed node credentials, latest heartbeat/storage summaries, and aggregate usage events. Object bytes remain on the daemon's disk; raw node credentials, daemon management tokens, and S3 credentials are never persisted to MongoDB.
 
-**Administrator access is not stored in MongoDB at all.** Set `OPENBUCKET_ADMIN_EMAIL` and `OPENBUCKET_ADMIN_PASSWORD` on the deployment; signing in with that exact email and password opens the admin-only aggregate overview. No account row is ever written for it, so there's nothing to lose access to or leak from a database dump. The local dashboard can still be used in explicit `--offline` development mode.
+**Administrator access is not stored in MongoDB at all.** It is configured through server-only environment variables described in [the Vercel deployment guide](docs/VERCEL.md); no account row is ever written for it, so there's nothing to lose access to or leak from a database dump. The local dashboard can still be used in explicit `--offline` development mode.
 
 GitHub Actions verifies the exact production commit without storing Vercel credentials. Later domain changes require only environment and DNS updates. Follow [the Vercel deployment guide](docs/VERCEL.md) for server-only authentication variables, CORS, production verification, and the later `openbucket.dev` cutover.
 

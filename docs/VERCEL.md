@@ -68,7 +68,7 @@ npx vercel@latest env add OPENBUCKET_NODE_DOMAIN production
 - `OPENBUCKET_AUTH_SECRET` is required and must contain at least 32 random bytes. Generate it with `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` and store only the result in Vercel.
 - `OPENBUCKET_NODE_DOMAIN` defaults to `openbucket.dev` and produces future names such as `s3.home-node.openbucket.dev`; it does not provision DNS/TLS/routing.
 - `OPENBUCKET_ALLOW_SIGNUP` controls self-serve account creation at `/register`. It's open by default; set it to `false` to close it.
-- `OPENBUCKET_ADMIN_EMAIL` / `OPENBUCKET_ADMIN_PASSWORD` grant admin access without ever writing an admin record to MongoDB. Signing in with this exact email and password (case-insensitive email) opens the admin-only aggregate overview. Leave both unset to disable admin access entirely.
+- `OPENBUCKET_ADMIN_EMAIL` / `OPENBUCKET_ADMIN_PASSWORD` configure the deployment's single admin account. Leave both unset to disable admin access entirely. Treat these as sensitive secrets, on par with a database credential.
 - `OPENBUCKET_SMTP_HOST` / `OPENBUCKET_SMTP_PORT` / `OPENBUCKET_SMTP_USER` / `OPENBUCKET_SMTP_PASS` / `OPENBUCKET_SMTP_FROM` send password-reset email. Any standard SMTP account works.
 - `OPENBUCKET_GOOGLE_CLIENT_ID` / `OPENBUCKET_GOOGLE_CLIENT_SECRET` enable the optional "Continue with Google" button. Create an OAuth 2.0 Client ID in Google Cloud Console and register `<your-app-url>/api/auth/google/callback` as an authorized redirect URI.
 
@@ -90,7 +90,7 @@ npx vercel@latest env add OPENBUCKET_ADMIN_PASSWORD production --sensitive
 npx vercel@latest deploy --prod
 ```
 
-Sign in with those exact credentials at `/login` to reach the admin-only overview. Everyone else can create a regular account directly at `/register` — no invite, token, or CLI helper required.
+Sign in with those credentials at `/login` to reach the admin-only overview. Everyone else can create a regular account directly at `/register` — no invite, token, or CLI helper required.
 
 Validate the web target locally with `npm ci && npm run build:vercel`. Push a reviewed commit to `main` for production; do not manually promote an unrelated local build to the production alias.
 
