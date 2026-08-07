@@ -90,6 +90,11 @@ export default defineConfig(({ mode }) => {
     root: vercelRoot,
     publicDir: path.join(projectRoot, "public"),
     envDir: projectRoot,
+    // Mirrors tsconfig.json's "@/*" path (used by shadcn/ui components under app/components/ui/,
+    // e.g. `import { cn } from "@/app/lib/cn"`). The production build resolves this natively via
+    // Rolldown's tsconfig-paths support, but Vite's dev-mode pre-transform does not — without this
+    // alias, `vite dev --config vite.vercel.config.ts` 500s on any file importing via "@/...".
+    resolve: { alias: { "@": projectRoot } },
     plugins: [
       react(),
       {
