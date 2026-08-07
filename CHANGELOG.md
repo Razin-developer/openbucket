@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.1.19] - 2026-08-07
+
+### Changed
+
+- Removed explicit references to the admin-login environment variable names and mechanism from public docs (README, CHANGELOG, RELEASING, SECURITY, `/docs`); the deployment guide (`docs/VERCEL.md`) still documents them since a self-hoster needs the exact names to configure their own admin account.
+- Rewrote both installer scripts (`install.sh`, `install.ps1`) with staged, colored progress output. They now detect a missing/too-old Node.js and attempt to install it automatically before installing the npm package and running `openbucket doctor` to verify the result.
+
+### Fixed
+
+- The docs "on this page" table of contents didn't scroll smoothly and could fail to jump to the right section on a hard reload of a deep link, since the target section may still be mounting in a lazily-loaded route chunk. Added smooth scrolling and a mount-time handler that retries across a few frames instead of assuming the target is already in the DOM.
+- Added Previous/Next pagination links to the bottom of every docs page.
+
 ## [0.1.18] - 2026-08-07
 
 ### Fixed
