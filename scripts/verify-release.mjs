@@ -84,9 +84,13 @@ const apiRouter = vercelConfig.rewrites?.find((rewrite) => rewrite.source === "/
 if (apiRouter?.destination !== "/api/router?__openbucket_path=:path*") {
   failures.push("Vercel API rewrite must target the consolidated router.");
 }
+const s3Router = vercelConfig.rewrites?.find((rewrite) => rewrite.source === "/s3/:path*");
+if (s3Router?.destination !== "/api/router?__openbucket_path=:path*&__openbucket_kind=s3") {
+  failures.push("Vercel S3 proxy rewrite must target the consolidated router.");
+}
 const spaFallback = vercelConfig.rewrites?.find((rewrite) => rewrite.destination === "/index.html");
-if (spaFallback?.source !== "/((?!api(?:/|$)).*)") {
-  failures.push("Vercel SPA fallback must exclude /api routes.");
+if (spaFallback?.source !== "/((?!api(?:/|$)|s3(?:/|$)).*)") {
+  failures.push("Vercel SPA fallback must exclude /api and /s3 routes.");
 }
 
 await Promise.all([
