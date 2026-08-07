@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { AlertCircle, Check } from "lucide-react";
 import { SiteShell, githubUrl } from "./site-shell";
 import { bugReportFormSchema, feedbackFormSchema, validateForm } from "./validation";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./components/ui/accordion";
 
 function InfoHero({ kicker, title, lead }: { kicker: string; title: string; lead?: string }) {
   return (
@@ -160,14 +161,14 @@ export function FaqPage() {
     <SiteShell current="docs">
       <main className="info-page">
         <InfoHero kicker="FAQ" title="Frequently asked questions." />
-        <div className="faq-list">
+        <Accordion className="faq-list" type="single" collapsible>
           {faqEntries.map((entry) => (
-            <details className="faq-item" key={entry.question}>
-              <summary>{entry.question}</summary>
-              <p>{entry.answer}</p>
-            </details>
+            <AccordionItem className="faq-item" value={entry.question} key={entry.question}>
+              <AccordionTrigger className="faq-trigger">{entry.question}</AccordionTrigger>
+              <AccordionContent className="faq-answer"><p>{entry.answer}</p></AccordionContent>
+            </AccordionItem>
           ))}
-        </div>
+        </Accordion>
         <p className="info-note">Didn&apos;t find your answer? <a href="/docs">Read the docs</a> or <a href="/feedback">send us feedback</a>.</p>
       </main>
     </SiteShell>
