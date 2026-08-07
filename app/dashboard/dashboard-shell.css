@@ -4,19 +4,36 @@
  * both `.app-shell`/`.sidebar`/`.topbar`/`.metric-card` (old app/dashboard.tsx) and
  * `.cp-shell`/`.cp-sidebar`/`.cp-topbar`/`.cp-metric` (old vercel/control-plane.css).
  *
- * Built on app/globals.css's token names (--ink, --body, --mute, --hairline, --canvas, --accent,
- * --success, --error, --warning, --shadow-*) — no new palette — extended with a radius scale and
- * spacing scale scoped under .ob-shell. Light theme throughout; no dark sidebar.
+ * Re-themed onto shadcn's own "neutral" preset palette (see app/globals.css's --sc- and oklch
+ * bridge, landed via `shadcn init --preset b1YmpVh4a`): grayscale surfaces, a near-black/near-white
+ * primary instead of the marketing site's indigo brand accent, and the preset's Inter font stack
+ * (`--font-sans`, wired in app/layout.tsx). Token NAMES are unchanged (--ink, --body, --mute,
+ * --hairline, --canvas, --accent, --success, --error, --warning, --shadow-*) so every existing
+ * .ob-* rule below picks up the new look automatically — only the values moved to the preset's
+ * oklch scale, extended with a radius scale and spacing scale scoped under .ob-shell.
  */
 
 .ob-shell {
-  --radius-sm: 6px; --radius-md: 10px; --radius-lg: 14px; --radius-pill: 999px;
+  --radius-sm: calc(var(--radius, 0.625rem) - 4px); --radius-md: var(--radius, 0.625rem); --radius-lg: calc(var(--radius, 0.625rem) + 4px); --radius-pill: 999px;
   --space-1: 4px; --space-2: 8px; --space-3: 12px; --space-4: 16px; --space-5: 20px;
   --space-6: 24px; --space-7: 32px; --space-8: 40px;
   --ob-sidebar-width: 248px;
   min-height: 100vh;
   background: var(--canvas-soft);
   color: var(--ink);
+  font-family: var(--font-sans), var(--font-geist-sans), Inter, ui-sans-serif, system-ui, sans-serif;
+
+  /* Preset light palette (shadcn "neutral") */
+  --ink: oklch(0.145 0 0); --body: oklch(0.34 0 0); --mute: oklch(0.556 0 0);
+  --hairline: oklch(0.922 0 0); --hairline-strong: oklch(0.7 0 0);
+  --canvas: oklch(1 0 0); --canvas-soft: oklch(0.985 0 0); --canvas-soft-2: oklch(0.97 0 0);
+  --error: #ee0000; --error-soft: #f7d4d6; --warning: #ab570a; --warning-soft: #ffefcf;
+  --success: #16825d; --success-soft: #d8f3e8;
+  --accent: oklch(0.205 0 0); --accent-foreground: oklch(0.985 0 0);
+  --accent-soft: oklch(0.97 0 0); --accent-deep: oklch(0.09 0 0);
+  --shadow-1: 0 0 0 1px rgb(0 0 0 / 6%) inset;
+  --shadow-2: 0 1px 2px rgb(0 0 0 / 3%), var(--shadow-1);
+  --shadow-4: 0 4px 12px -4px rgb(0 0 0 / 6%), var(--shadow-1);
 }
 .ob-shell, .ob-shell * , .ob-shell *::before, .ob-shell *::after { box-sizing: border-box; }
 
@@ -25,14 +42,17 @@
  * Appearance flips next-themes' `data-theme` attribute on <html>; these overrides redefine the
  * CORE tokens the shell chrome reads (ink, body, mute, hairline, canvas, and their variants) so
  * every ob dash-prefixed rule above (sidebar, topbar, cards, tables, panels) picks up the dark
- * palette automatically, with no separate or disconnected color system.
+ * palette automatically, with no separate or disconnected color system. Values mirror shadcn's
+ * preset dark scale (app/globals.css `.dark` block).
  */
 :root[data-theme="dark"] .ob-shell {
-  --ink: #f2f2f2; --body: #c7c7cc; --mute: #8b8b93; --hairline: #2a2a30; --hairline-strong: #46464d;
-  --canvas: #17171b; --canvas-soft: #111114; --canvas-soft-2: #202026;
+  --ink: oklch(0.985 0 0); --body: oklch(0.83 0 0); --mute: oklch(0.708 0 0);
+  --hairline: oklch(1 0 0 / 10%); --hairline-strong: oklch(1 0 0 / 20%);
+  --canvas: oklch(0.205 0 0); --canvas-soft: oklch(0.145 0 0); --canvas-soft-2: oklch(0.269 0 0);
   --error: #ff6b6b; --error-soft: #3a1618; --warning: #f0a93e; --warning-soft: #3a2c0f;
   --success: #3ddc97; --success-soft: #0f2f22;
-  --accent: #7b84e8; --accent-soft: #23253f; --accent-deep: #9aa1ef;
+  --accent: oklch(0.922 0 0); --accent-foreground: oklch(0.205 0 0);
+  --accent-soft: oklch(0.269 0 0); --accent-deep: oklch(0.985 0 0);
   --shadow-1: 0 0 0 1px rgb(255 255 255 / 6%) inset;
   --shadow-2: 0 1px 2px rgb(0 0 0 / 30%), var(--shadow-1);
   --shadow-4: 0 4px 16px -4px rgb(0 0 0 / 55%), var(--shadow-1);
@@ -89,6 +109,8 @@
 .ob-topbar-search { flex: 1; max-width: 360px; }
 .ob-topbar-actions { display: flex; align-items: center; gap: 10px; }
 .ob-last-updated { color: var(--mute); font: 11px/1 var(--font-geist-mono), monospace; }
+.ob-command-trigger { height: 32px; display: inline-flex; align-items: center; gap: 7px; padding: 0 10px; color: var(--mute); border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--canvas); cursor: pointer; font-size: 12px; }
+.ob-command-trigger:hover { color: var(--ink); background: var(--canvas-soft); }
 .ob-icon-button { width: 32px; height: 32px; display: grid; place-items: center; color: var(--body); border: 1px solid var(--hairline); border-radius: 50%; background: var(--canvas); cursor: pointer; }
 .ob-icon-button:hover { color: var(--ink); background: var(--canvas-soft); }
 .ob-docs-link { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 11px; color: var(--ink); border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--canvas); text-decoration: none; font-weight: 500; }
@@ -100,7 +122,7 @@
 .ob-button { min-height: 42px; display: inline-flex; align-items: center; justify-content: center; gap: 7px; padding: 0 17px; border-radius: var(--radius-pill); cursor: pointer; font-weight: 500; transition: transform 150ms ease, background 150ms ease, border-color 150ms ease; border: 1px solid transparent; }
 .ob-button:hover:not(:disabled) { transform: translateY(-1px); }
 .ob-button:disabled, .ob-button.disabled { cursor: not-allowed; opacity: .48; }
-.ob-button.primary { color: white; border-color: var(--accent-deep); background: var(--accent); box-shadow: 0 1px 2px rgb(94 106 210 / 25%); }
+.ob-button.primary { color: var(--accent-foreground, white); border-color: var(--accent-deep); background: var(--accent); box-shadow: 0 1px 2px rgb(0 0 0 / 16%); }
 .ob-button.primary:hover:not(:disabled) { background: var(--accent-deep); }
 .ob-button.secondary { color: var(--ink); border-color: var(--hairline); background: var(--canvas); box-shadow: 0 1px 2px rgb(0 0 0 / 3%); }
 .ob-button.secondary:hover:not(:disabled) { border-color: #d3d3d3; background: var(--canvas-soft); }
@@ -209,9 +231,14 @@
 .ob-prefix-bar input { flex: 1; height: 34px; padding: 0 11px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: white; }
 .ob-prefix-bar button { height: 34px; padding: 0 12px; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: white; cursor: pointer; }
 .ob-loading-rows { padding: 18px var(--space-6); }
-.ob-loading-rows i { height: 38px; display: block; margin: 9px 0; border-radius: var(--radius-sm); background: linear-gradient(90deg, #f3f3f3 20%, #fafafa 40%, #f3f3f3 60%); background-size: 300% 100%; animation: ob-shimmer 1.4s infinite; }
-@keyframes ob-shimmer { to { background-position: -150% 0; } }
+.ob-object-browser { position: relative; }
 .ob-object-browser.drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft); }
+.ob-dropzone-overlay { position: absolute; z-index: 5; inset: 0; display: grid; place-items: center; pointer-events: none; background: rgb(255 255 255 / 55%); backdrop-filter: blur(1px); }
+:root[data-theme="dark"] .ob-shell .ob-dropzone-overlay { background: rgb(0 0 0 / 45%); }
+.ob-dropzone-card { display: grid; justify-items: center; gap: 6px; padding: 22px 30px; border: 2px dashed var(--accent); border-radius: var(--radius-lg); background: var(--canvas); color: var(--ink); box-shadow: var(--shadow-4); text-align: center; }
+.ob-dropzone-card span { color: var(--mute); font-size: 12px; }
+.ob-pagination-bar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 12px var(--space-6); border-top: 1px solid var(--hairline); background: var(--canvas-soft); }
+.ob-pagination-bar > span { color: var(--mute); font-size: 12px; }
 
 .ob-upload-panel { margin-bottom: var(--space-4); border-radius: var(--radius-md); background: var(--canvas); box-shadow: var(--shadow-2); overflow: hidden; }
 .ob-upload-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--hairline); font-size: 13px; }
@@ -224,9 +251,7 @@
 .ob-upload-name { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); overflow: hidden; }
 .ob-upload-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; }
 .ob-upload-name small { flex: 0 0 auto; color: var(--mute); font: 10px/1 var(--font-geist-mono), monospace; }
-.ob-upload-bar { height: 4px; margin-top: 6px; border-radius: var(--radius-pill); background: var(--canvas-soft-2); overflow: hidden; }
-.ob-upload-bar i { display: block; height: 100%; background: var(--accent); transition: width 150ms ease; }
-.ob-upload-row.error .ob-upload-bar i, .ob-upload-row.cancelled .ob-upload-bar i { background: var(--mute); }
+.ob-upload-bar { margin-top: 6px; }
 .ob-upload-error { margin: 4px 0 0; color: var(--error); font-size: 11px; }
 .ob-security-note { display: flex; align-items: flex-start; gap: 14px; margin-bottom: var(--space-5); padding: 17px 19px; border: 1px solid #f1d7a7; border-radius: var(--radius-md); background: var(--warning-soft); }
 .ob-security-note > span { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--warning); font-size: 18px; }
@@ -252,6 +277,8 @@
 .ob-env-panel > div > p:not(.ob-eyebrow) { color: var(--body); }
 .ob-env-list { display: grid; gap: 7px; }
 .ob-env-list code { padding: 9px 11px; overflow: auto; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--canvas-soft); font-size: 11px; white-space: nowrap; }
+.ob-chart-panel { margin: var(--space-5) 0; min-height: 0; }
+.ob-request-chart { max-height: 220px; width: 100%; }
 .ob-logs-toolbar { min-height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 20px; margin-top: var(--space-4); padding: 0 4px; }
 .ob-logs-toolbar > span { color: var(--mute); font-size: 12px; }
 .ob-filter-pills { display: flex; gap: 5px; overflow-x: auto; padding: 3px; border: 1px solid var(--hairline); border-radius: var(--radius-pill); background: var(--canvas); }
@@ -302,6 +329,12 @@
 .ob-toast.success > span { background: var(--success); }
 .ob-toast.error > span { background: var(--error); }
 .ob-sidebar-scrim { display: none; }
+
+/* Mobile guard — below MOBILE_GUARD_MIN_WIDTH the shell renders only this message. */
+.ob-mobile-guard { min-height: 100vh; display: grid; place-items: center; padding: 32px; background: var(--canvas-soft); }
+.ob-mobile-guard-card { max-width: 320px; padding: var(--space-7) var(--space-6); border-radius: var(--radius-lg); background: var(--canvas); box-shadow: var(--shadow-4); text-align: center; }
+.ob-mobile-guard-card strong { display: block; margin-bottom: var(--space-2); font-size: 18px; font-weight: 600; letter-spacing: -.3px; color: var(--ink); }
+.ob-mobile-guard-card p { margin: 0; color: var(--body); font-size: 13px; line-height: 1.55; }
 
 /* Account (hosted) views — ported from the old .cp-* classes, same light theme */
 .ob-account-section { margin: var(--space-8) 0; }
@@ -419,6 +452,7 @@
   .ob-mobile-menu { width: 34px; height: 34px; display: grid; place-items: center; border: 1px solid var(--hairline); border-radius: var(--radius-sm); background: var(--canvas); }
   .ob-breadcrumbs { margin-right: auto; }
   .ob-breadcrumbs span, .ob-breadcrumbs b, .ob-last-updated { display: none; }
+  .ob-command-trigger span, .ob-command-trigger [data-slot="kbd-group"] { display: none; }
   .ob-hero { padding: 32px 26px; }
   .ob-hero-copy h1 { font-size: 39px; line-height: 41px; letter-spacing: -1.8px; }
   .ob-split-grid, .ob-endpoint-grid, .ob-env-panel { grid-template-columns: 1fr; }

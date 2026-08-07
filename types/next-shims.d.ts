@@ -23,4 +23,5 @@ declare module "next/font/google" {
 
   export function Geist(options?: FontOptions): FontResult;
   export function Geist_Mono(options?: FontOptions): FontResult;
+  export function Inter(options?: FontOptions & { subsets?: string[] }): FontResult;
 }
