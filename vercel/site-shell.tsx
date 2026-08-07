@@ -210,6 +210,23 @@ export function SiteFooter() {
           <a href={githubUrl}>Star on GitHub</a>
         </div>
       </div>
+      <div className="fs-footer-support">
+        <a href={githubUrl} target="_blank" rel="noreferrer" className="fs-footer-github">
+          <Star size={15} aria-hidden="true" />
+          Star OpenBucket on GitHub
+        </a>
+        <a href="https://www.buymeacoffee.com/razin.dev" target="_blank" rel="noreferrer" aria-label="Buy Razin a coffee">
+          {/* eslint-disable-next-line @next/next/no-img-element -- external image, not a build-time optimizable local asset */}
+          <img
+            src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png"
+            alt="Buy Me a Coffee"
+            width={163}
+            height={45}
+            loading="lazy"
+            decoding="async"
+          />
+        </a>
+      </div>
       <div className="fs-footer-bottom">
         <span>OpenBucket is open-source software. Object bytes remain on storage you control.</span>
         <span>Apache-2.0</span>

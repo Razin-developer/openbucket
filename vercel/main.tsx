@@ -27,12 +27,13 @@ function setAbsoluteMetadata(route: ReturnType<typeof routeForPath>) {
   const base = configuredAppUrl();
   const metadata = routeMetadata[route];
   const canonical = new URL(route === "node-discovery" ? window.location.pathname : metadata.path, `${base.origin}/`).toString();
-  const socialImage = new URL("/og.png", base.origin).toString();
+  const socialImage = new URL("/og.jpg", base.origin).toString();
   document.title = metadata.title;
   document.documentElement.dataset.route = route;
   const canonicalElement = document.querySelector<HTMLLinkElement>('link[rel="canonical"]');
   if (canonicalElement) canonicalElement.href = canonical;
   setMetaContent('meta[name="description"]', metadata.description);
+  setMetaContent('meta[name="keywords"]', metadata.keywords);
   setMetaContent('meta[name="robots"]', metadata.robots);
   setMetaContent('meta[property="og:url"]', canonical);
   setMetaContent('meta[property="og:title"]', metadata.title);

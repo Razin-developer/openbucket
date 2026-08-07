@@ -141,7 +141,7 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
   assert.match(discovery, /\/api\/nodes\/resolve\?\$\{query\}/);
   assert.match(discovery, /does not proxy S3 requests/);
   assert.doesNotMatch(controlPlane, /mock|fixture|fake data/i);
-  assert.match(landing, /src="\/og\.png"/);
+  assert.match(landing, /src="\/dashboard-preview\.webp"/);
   assert.match(index, new RegExp(`<link rel="canonical" href="${appUrl}"`));
   assert.match(index, /<link rel="icon" href="\/favicon\.svg" type="image\/svg\+xml"/);
   assert.match(favicon, /^<svg\b/);

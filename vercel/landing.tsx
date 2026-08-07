@@ -140,13 +140,20 @@ export function LandingPage() {
           <h1>Your disk. Now S3-compatible.</h1>
           <p>OpenBucket turns any folder, SSD, or NAS into a real S3-compatible endpoint — and gives you a live dashboard to operate it.</p>
           <div className="fs-hero-actions">
-            <a className="site-button dark" href="/login">Get started</a>
+            <a className="site-button dark" href="/register">Get started</a>
             <a className="site-button light" href="/docs">Read the docs</a>
           </div>
         </div>
         <div className="fs-hero-shot">
           <div ref={heroShotRef}>
-            <img src="/og.png" alt="The OpenBucket dashboard showing buckets, capacity, and live request analytics" />
+            <img
+              src="/dashboard-preview.webp"
+              width={1400}
+              height={735}
+              fetchPriority="high"
+              decoding="async"
+              alt="The OpenBucket dashboard showing buckets, capacity, and live request analytics"
+            />
           </div>
         </div>
       </div>
@@ -226,7 +233,7 @@ export function LandingPage() {
                 <span className="fs-fix-icon"><Icon size={21} aria-hidden="true" /></span>
                 <h3>{title}</h3>
                 <p>{body}</p>
-                <a href="/docs">Learn more <ArrowRight size={13} aria-hidden="true" /></a>
+                <a href="/docs" aria-label={`Learn more about ${title}`}>Learn more <ArrowRight size={13} aria-hidden="true" /></a>
               </article>
             ))}
           </div>
@@ -270,7 +277,7 @@ export function LandingPage() {
         <p className="section-kicker">READY WHEN YOUR DISK IS</p>
         <h2>Make local storage useful everywhere.</h2>
         <div className="fs-section-actions">
-          <a className="site-button dark" href="/login">Get started</a>
+          <a className="site-button dark" href="/register">Get started</a>
           <a className="site-button ghost" href={githubUrl}>View source</a>
         </div>
       </div>
