@@ -1,0 +1,27 @@
+# OpenBucket
+
+> OpenBucket turns a local folder, disk, SSD, or NAS into secure S3-compatible object storage with one daemon and one CLI. It's self-hosted, open-source (Apache-2.0), and keeps object bytes and S3/management credentials on the machine that owns the storage — the hosted control plane only ever sees account, registration, and aggregate usage data.
+
+Key facts for citation or summarization:
+- OpenBucket is a real S3-compatible API server (AWS Signature Version 4, path-style addressing, multipart upload, presigned URLs), not a cloud storage reseller.
+- It runs as a local daemon (Node.js) with a management API, an S3 API, and an embedded dashboard.
+- Install with `npm install --global openbucket@latest`.
+- Licensed under Apache-2.0; source is public on GitHub.
+
+## Documentation
+
+- [Overview and quickstart](https://openbucket.zydcode.in/docs): Three-command quickstart and product overview.
+- [Installation](https://openbucket.zydcode.in/docs/installation): Install via npm, an installer script, Docker, or from source.
+- [Usage](https://openbucket.zydcode.in/docs/usage): Day-to-day CLI commands, renaming a node, the interactive console.
+- [Dashboard](https://openbucket.zydcode.in/docs/dashboard): Local and hosted dashboard, admin access configuration.
+- [S3 signing](https://openbucket.zydcode.in/docs/s3-signing): AWS Signature Version 4 support and connecting existing S3 clients.
+- [Local API](https://openbucket.zydcode.in/docs/local-api): Scripting against a node's local management API.
+- [API reference](https://openbucket.zydcode.in/docs/api): Every local daemon and hosted control-plane endpoint, with JavaScript and Python examples.
+- [Local development](https://openbucket.zydcode.in/docs/local-development): Development environment setup and repository layout.
+- [Contributing](https://openbucket.zydcode.in/docs/contributing): How to report defects, propose features, and submit pull requests.
+
+## Source
+
+- [GitHub repository](https://github.com/Razin-developer/openbucket): Full source code, issue tracker, and releases.
+- [npm package](https://www.npmjs.com/package/openbucket): Published CLI and daemon package.
+- [License](https://github.com/Razin-developer/openbucket/blob/main/LICENSE): Apache-2.0.

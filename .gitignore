@@ -66,3 +66,6 @@ coverage.xml
 # release artifacts
 /.release/
 /openbucket-*.tgz
+
+#test-storage
+/storage

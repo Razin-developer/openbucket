@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.1.18] - 2026-08-07
+
+### Fixed
+
+- **The two biggest images on the landing page were ~1.5MB and ~1MB PNGs, served uncompressed as both the hero screenshot and the social preview image.** Re-encoded as WebP/JPEG at the sizes actually displayed: the inline dashboard screenshot is now a 39KB WebP (from 1.5MB), the hero/CTA background is an 8KB WebP (from 1MB), and the social share image is a 44KB JPEG. This was the direct cause of a 15s+ LCP on throttled mobile in a Lighthouse audit.
+- The hero image had no explicit `width`/`height`, so it popped into a reserved-but-wrong-sized box as it loaded, causing layout shift. Now has explicit dimensions, `fetchpriority="high"`, and `decoding="async"`.
+- Static assets (`og.jpg`, the new WebP images, favicon) had no real cache lifetime (`max-age=0` from the default header rule). Added a 30-day cache policy for them, matching the existing pattern for `og.png`.
+- Three low-contrast text colors (`#9a9aab`, `#b7b7c6`, `#7a7a8a`) on the landing page and footer failed WCAG AA contrast against white; replaced with the existing `--fs-body` design-system color, which passes.
+- The "Learn more" links on the six feature cards were identical, non-descriptive anchor text pointing to the same destination — flagged by Lighthouse's accessibility and SEO audits. Added a per-card `aria-label`.
+- Three "Get started" buttons had identical text pointing to two different destinations (`/login` vs `/register`); all now point to `/register`, matching the primary conversion intent for a new visitor.
+- `llms.txt` didn't exist (returning a page that failed the llms.txt spec's required-H1/links check); added a real one following the spec, listing every documentation page.
+- Cloudflare's own auto-injected analytics beacon (`static.cloudflareinsights.com`) was blocked by this site's CSP, logging a console error on every page load. Added it to `script-src` — the beacon is unrelated to the Vercel Speed Insights this project already uses; it's automatically injected by Cloudflare's DNS-level proxy on the custom domain.
+
+### Changed
+
+- Code-split the SPA: previously every route's JavaScript (docs, auth, dashboard, node discovery — including the entire new 9-page docs section and full API reference) shipped in one bundle regardless of which page was requested. The home route now lazy-loads everything except the landing page itself, cutting its initial JS from ~350KB to ~230KB, with docs (55KB) and auth (71KB) only fetched when actually visited.
+- Added per-route `<meta name="keywords">` and expanded Open Graph/Twitter Card metadata (image dimensions/type/alt, locale) across every page, driven by the existing dynamic title/description system.
+- Added `<link rel="preconnect" href="https://api.github.com">` — the header's live star count was identified as a preconnect candidate worth ~440ms.
+
+### Added
+
+- A "Star OpenBucket on GitHub" button and a Buy Me a Coffee button in the footer. Deliberately the static image-link version only, not the animated script button or floating widget — both pull in extra third-party JavaScript that works directly against the performance goals in this release.
+
 ## [0.1.17] - 2026-08-06
 
 ### Changed
