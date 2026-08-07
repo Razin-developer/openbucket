@@ -79,6 +79,7 @@ export default defineConfig(({ mode }) => {
     { slug: "docs/local-development", changefreq: "monthly", priority: "0.5" },
     { slug: "docs/contributing", changefreq: "monthly", priority: "0.5" },
     { slug: "faq", changefreq: "monthly", priority: "0.6" },
+    { slug: "help", changefreq: "monthly", priority: "0.5" },
     { slug: "feedback", changefreq: "yearly", priority: "0.3" },
     { slug: "report-bug", changefreq: "yearly", priority: "0.3" },
     { slug: "privacy", changefreq: "yearly", priority: "0.2" },

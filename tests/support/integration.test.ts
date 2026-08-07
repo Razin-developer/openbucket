@@ -4,7 +4,7 @@ import { closeAuthDatabaseForTests } from "../../server/auth/database";
 import { handleLogin, handleRegister } from "../../server/auth/service";
 import { resetControlPlaneIndexesForTests } from "../../server/control-plane/database";
 import { getSupportCollections, resetSupportIndexesForTests } from "../../server/support/database";
-import { handleListSupportSubmissions, handleSubmitBugReport, handleSubmitFeedback, handleUpdateSupportStatus } from "../../server/support/service";
+import { handleListSupportSubmissions, handleSubmitBugReport, handleSubmitFeedback, handleSubmitHelpRequest, handleUpdateSupportStatus } from "../../server/support/service";
 
 const testUri = process.env.MONGODB_TEST_URI?.trim();
 const requireMongo = process.env.OPENBUCKET_REQUIRE_MONGODB_TEST?.trim().toLowerCase() === "true";
@@ -157,6 +157,61 @@ describe("support submissions", { skip: !testUri }, () => {
     let lastStatus = 0;
     for (let i = 0; i < 12; i += 1) {
       const response = await handleSubmitFeedback(jsonRequest("/api/feedback", "POST", { message: `attempt ${i}` }, undefined, ip));
+      lastStatus = response.status;
+    }
+    assert.equal(lastStatus, 429);
+  });
+
+  test("help requests are stored, listed and filterable by an admin, and still succeed without SMTP configured", async () => {
+    // No OPENBUCKET_SMTP_* env vars are set in this test process, so the confirmation email send
+    // inside handleSubmitHelpRequest is expected to hit the "SMTP not configured" branch and
+    // log-and-return-false rather than throwing — the submission itself must still succeed (201).
+    assert.equal(process.env.OPENBUCKET_SMTP_HOST, undefined);
+
+    const missingEmail = await handleSubmitHelpRequest(jsonRequest("/api/help", "POST", {
+      subject: "Can't connect boto3 to my node",
+      message: "I keep getting a signature mismatch error when using the endpoint URL from the dashboard.",
+    }, undefined, "192.0.2.120"));
+    assert.equal(missingEmail.status, 400);
+
+    const help = await handleSubmitHelpRequest(jsonRequest("/api/help", "POST", {
+      subject: "Can't connect boto3 to my node",
+      message: "I keep getting a signature mismatch error when using the endpoint URL from the dashboard.",
+      email: "help-requester@example.com",
+      name: "Help Requester",
+      path: "/help",
+    }, undefined, "192.0.2.121"));
+    assert.equal(help.status, 201);
+    assert.deepEqual(await help.json(), { submitted: true });
+
+    const adminLogin = await handleLogin(jsonRequest("/api/auth/login", "POST", { email: adminEmail, password: adminPassword }, undefined, "192.0.2.122"));
+    assert.equal(adminLogin.status, 200);
+    const adminCookie = cookiePair(adminLogin);
+
+    const helpOnly = await handleListSupportSubmissions(jsonRequest("/api/admin/support?kind=help", "GET", undefined, adminCookie));
+    assert.equal(helpOnly.status, 200);
+    const helpOnlyPayload = await helpOnly.json() as { submissions: Array<{ id: string; kind: string; title: string | null; email: string | null; name: string | null }> };
+    assert.equal(helpOnlyPayload.submissions.length, 1);
+    const helpSubmission = helpOnlyPayload.submissions[0];
+    assert.ok(helpSubmission);
+    assert.equal(helpSubmission.kind, "help");
+    assert.equal(helpSubmission.title, "Can't connect boto3 to my node");
+    assert.equal(helpSubmission.email, "help-requester@example.com");
+    assert.equal(helpSubmission.name, "Help Requester");
+
+    const invalidKind = await handleListSupportSubmissions(jsonRequest("/api/admin/support?kind=bogus", "GET", undefined, adminCookie));
+    assert.equal(invalidKind.status, 400);
+  });
+
+  test("help requests are rate-limited per IP", async () => {
+    const ip = "192.0.2.130";
+    let lastStatus = 0;
+    for (let i = 0; i < 12; i += 1) {
+      const response = await handleSubmitHelpRequest(jsonRequest("/api/help", "POST", {
+        subject: `attempt ${i}`,
+        message: "repeated help request body",
+        email: "rate-limit-help@example.com",
+      }, undefined, ip));
       lastStatus = response.status;
     }
     assert.equal(lastStatus, 429);

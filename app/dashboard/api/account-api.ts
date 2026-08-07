@@ -59,7 +59,7 @@ type ApiErrorBody = { error?: { code?: string; message?: string } };
 
 export type SupportSubmission = {
   id: string;
-  kind: "feedback" | "bug";
+  kind: "feedback" | "bug" | "help";
   status: "new" | "reviewed" | "resolved";
   message: string;
   title: string | null;
@@ -98,7 +98,7 @@ export const controlPlaneApi = {
   createNode: (input: CreateNodeRequest) => apiRequest<CreateNodeResponse>("/api/nodes", { method: "POST", body: JSON.stringify(input) }),
   usage: () => apiRequest<UsageSummary>("/api/usage"),
   adminOverview: () => apiRequest<AdminOverview>("/api/admin/overview"),
-  listSupport: (kind?: "feedback" | "bug", status?: "new" | "reviewed" | "resolved") => {
+  listSupport: (kind?: "feedback" | "bug" | "help", status?: "new" | "reviewed" | "resolved") => {
     const params = new URLSearchParams();
     if (kind) params.set("kind", kind);
     if (status) params.set("status", status);
