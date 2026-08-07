@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from "react";
+import { useState, type DragEvent, type FormEvent } from "react";
 import { ArrowLeft, Download, FolderOpen, Plus, RefreshCw, Upload } from "lucide-react";
 import { createBucketFormSchema, validateForm } from "../../../../vercel/validation";
 import { EmptyState } from "../../components/EmptyState";
 import { Modal } from "../../components/Modal";
+import { UploadProgressPanel } from "../../components/UploadProgressPanel";
 import { formatBytes, formatDate, formatNumber } from "../../api/format";
 import type { Bucket } from "../../api/types";
 import type { NodeViewContext } from "./context";
@@ -30,7 +31,7 @@ function CreateBucketModal({ node, onClose }: { node: NodeViewContext; onClose: 
   return (
     <Modal title="Create a bucket" description="Bucket names use S3-compatible lowercase naming rules." onClose={onClose}>
       <form className="ob-form-stack" onSubmit={(event) => void submit(event)}>
-        <label><span>Bucket name</span><input name="name" required minLength={3} maxLength={63} pattern="[a-z0-9][a-z0-9.-]*[a-z0-9]" placeholder="project-assets" autoFocus /></label>
+        <label><span>Bucket name</span><input name="name" required minLength={3} maxLength={63} pattern="[a-z0-9][a-z0-9.\-]*[a-z0-9]" placeholder="project-assets" autoFocus /></label>
         <label className="ob-check-row"><input name="public" type="checkbox" /><span><strong>Allow anonymous downloads</strong><small>Uploads and management still require credentials.</small></span></label>
         {error ? <p className="ob-form-error">{error}</p> : null}
         <div className="ob-modal-actions">
@@ -44,8 +45,19 @@ function CreateBucketModal({ node, onClose }: { node: NodeViewContext; onClose: 
 
 export function BucketsView({ node }: { node: NodeViewContext }) {
   const { buckets, loadState, notify, refresh, apiFetch, objectBrowser } = node;
-  const { selectedBucket, objects, objectPrefix, busy, setObjectPrefix, setSelectedBucket, setObjects, loadObjects, uploadObject, downloadObject, deleteObject, shareObject } = objectBrowser;
+  const {
+    selectedBucket, objects, objectPrefix, busy, setObjectPrefix, setSelectedBucket, setObjects, loadObjects,
+    uploadFiles, downloadObject, deleteObject, shareObject, uploadItems, cancelUpload, clearFinishedUploads,
+  } = objectBrowser;
   const [createOpen, setCreateOpen] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const uploading = uploadItems.some((item) => item.status === "queued" || item.status === "uploading");
+
+  function onDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setDragOver(false);
+    if (event.dataTransfer.files.length) uploadFiles(event.dataTransfer.files);
+  }
 
   async function deleteBucket(bucket: Bucket) {
     if (!window.confirm(`Delete bucket "${bucket.name}"? The daemon refuses non-empty bucket deletion.`)) return;
@@ -88,21 +100,27 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
           <EmptyState title="No buckets yet." body="Create a bucket to map a safe namespace inside this storage root." action={<button className="ob-button primary compact" type="button" onClick={() => setCreateOpen(true)} disabled={loadState !== "connected"}><Plus size={15} /> Create your first bucket</button>} />
         )
       ) : (
-        <div className="ob-object-browser">
+        <div
+          className={`ob-object-browser${dragOver ? " drag-over" : ""}`}
+          onDragOver={(event) => { event.preventDefault(); setDragOver(true); }}
+          onDragLeave={() => setDragOver(false)}
+          onDrop={onDrop}
+        >
           <div className="ob-browser-toolbar">
             <div>
               <button className="ob-back-button" type="button" onClick={() => { setSelectedBucket(null); setObjects([]); }}><ArrowLeft size={14} /> All buckets</button>
               <h2>{selectedBucket}</h2>
-              <p>{objects.length} visible object{objects.length === 1 ? "" : "s"}</p>
+              <p>{objects.length} visible object{objects.length === 1 ? "" : "s"} · drag and drop files to upload</p>
             </div>
             <div className="ob-toolbar-actions">
-              <label className={`ob-button primary compact ob-upload-button ${busy === "upload" ? "disabled" : ""}`}>
-                <Upload size={15} /> {busy === "upload" ? "Uploading…" : "Upload file"}
-                <input type="file" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadObject(file); event.target.value = ""; }} disabled={busy === "upload"} />
+              <label className="ob-button primary compact ob-upload-button">
+                <Upload size={15} /> {uploading ? "Uploading…" : "Upload files"}
+                <input type="file" multiple onChange={(event) => { if (event.target.files?.length) uploadFiles(event.target.files); event.target.value = ""; }} />
               </label>
               <button className="ob-button secondary compact" type="button" onClick={() => void loadObjects(selectedBucket, objectPrefix)}><RefreshCw size={15} /> Refresh</button>
             </div>
           </div>
+          {uploadItems.length ? <div style={{ padding: "0 24px 16px" }}><UploadProgressPanel items={uploadItems} onCancel={cancelUpload} onDismiss={clearFinishedUploads} /></div> : null}
           <div className="ob-prefix-bar">
             <label htmlFor="ob-prefix">Prefix</label>
             <input id="ob-prefix" value={objectPrefix} onChange={(event) => setObjectPrefix(event.target.value)} placeholder="photos/2026" onKeyDown={(event) => event.key === "Enter" && void loadObjects(selectedBucket, objectPrefix)} />

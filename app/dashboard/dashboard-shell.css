@@ -187,6 +187,23 @@
 .ob-loading-rows { padding: 18px var(--space-6); }
 .ob-loading-rows i { height: 38px; display: block; margin: 9px 0; border-radius: var(--radius-sm); background: linear-gradient(90deg, #f3f3f3 20%, #fafafa 40%, #f3f3f3 60%); background-size: 300% 100%; animation: ob-shimmer 1.4s infinite; }
 @keyframes ob-shimmer { to { background-position: -150% 0; } }
+.ob-object-browser.drag-over { outline: 2px dashed var(--accent); outline-offset: -2px; background: var(--accent-soft); }
+
+.ob-upload-panel { margin-bottom: var(--space-4); border-radius: var(--radius-md); background: var(--canvas); box-shadow: var(--shadow-2); overflow: hidden; }
+.ob-upload-panel-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); padding: var(--space-3) var(--space-5); border-bottom: 1px solid var(--hairline); font-size: 13px; }
+.ob-upload-list { display: grid; gap: 1px; max-height: 260px; overflow-y: auto; background: var(--hairline); }
+.ob-upload-row { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-5); background: var(--canvas); }
+.ob-upload-icon { width: 26px; height: 26px; flex: 0 0 auto; display: grid; place-items: center; border-radius: 50%; color: var(--body); background: var(--canvas-soft-2); }
+.ob-upload-row.error .ob-upload-icon { color: white; background: var(--error); }
+.ob-upload-row.done .ob-upload-icon { color: white; background: var(--success); }
+.ob-upload-info { min-width: 0; flex: 1; }
+.ob-upload-name { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); overflow: hidden; }
+.ob-upload-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; font-weight: 500; }
+.ob-upload-name small { flex: 0 0 auto; color: var(--mute); font: 10px/1 var(--font-geist-mono), monospace; }
+.ob-upload-bar { height: 4px; margin-top: 6px; border-radius: var(--radius-pill); background: var(--canvas-soft-2); overflow: hidden; }
+.ob-upload-bar i { display: block; height: 100%; background: var(--accent); transition: width 150ms ease; }
+.ob-upload-row.error .ob-upload-bar i, .ob-upload-row.cancelled .ob-upload-bar i { background: var(--mute); }
+.ob-upload-error { margin: 4px 0 0; color: var(--error); font-size: 11px; }
 .ob-security-note { display: flex; align-items: flex-start; gap: 14px; margin-bottom: var(--space-5); padding: 17px 19px; border: 1px solid #f1d7a7; border-radius: var(--radius-md); background: var(--warning-soft); }
 .ob-security-note > span { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 50%; color: white; background: var(--warning); font-size: 18px; }
 .ob-security-note strong { font-weight: 600; }

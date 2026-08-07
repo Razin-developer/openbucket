@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { apiRequestUrl, arrayFrom, normalizeObject } from "../api/node-api";
 import type { NodeApiFetch } from "../api/node-api";
 import type { StorageObject } from "../api/types";
+import { useUploadQueue } from "../../lib/useUploadQueue";
 
 /** Object-browser state (selected bucket / prefix / listing) plus upload/download/delete/share. */
 export function useObjectBrowser(apiFetch: NodeApiFetch, apiBase: string, adminToken: string, notify: (message: string, tone?: "success" | "error") => void) {
@@ -10,6 +11,7 @@ export function useObjectBrowser(apiFetch: NodeApiFetch, apiBase: string, adminT
   const [objectPrefix, setObjectPrefix] = useState("");
   const [busy, setBusy] = useState("");
   const generation = useRef(0);
+  const uploadQueue = useUploadQueue();
 
   const reset = useCallback(() => {
     setSelectedBucket(null);
@@ -33,22 +35,23 @@ export function useObjectBrowser(apiFetch: NodeApiFetch, apiBase: string, adminT
     }
   }, [apiFetch, notify]);
 
-  const uploadObject = useCallback(async (file: File) => {
+  const uploadFiles = useCallback((files: FileList | File[]) => {
     if (!selectedBucket) return;
-    const key = objectPrefix ? `${objectPrefix.replace(/\/$/, "")}/${file.name}` : file.name;
-    setBusy("upload");
-    try {
-      await apiFetch(`/v1/buckets/${encodeURIComponent(selectedBucket)}/objects/${key.split("/").map(encodeURIComponent).join("/")}`, {
-        method: "PUT", headers: file.type ? { "Content-Type": file.type } : {}, body: file,
-      });
-      notify(`${file.name} uploaded`);
-      await loadObjects(selectedBucket, objectPrefix);
-    } catch (error) {
-      notify(error instanceof Error ? error.message : "Upload failed", "error");
-    } finally {
-      setBusy("");
-    }
-  }, [apiFetch, loadObjects, notify, objectPrefix, selectedBucket]);
+    const bucket = selectedBucket;
+    const prefix = objectPrefix;
+    uploadQueue.addFiles(
+      files,
+      (file) => (prefix ? `${prefix.replace(/\/$/, "")}/${file.name}` : file.name),
+      {
+        connection: { apiBase, adminToken },
+        bucket,
+        onComplete: (item) => {
+          notify(`${item.file.name} uploaded`);
+          void loadObjects(bucket, prefix);
+        },
+      },
+    );
+  }, [adminToken, apiBase, loadObjects, notify, objectPrefix, selectedBucket, uploadQueue]);
 
   const downloadObject = useCallback(async (object: StorageObject) => {
     if (!selectedBucket) return;
@@ -98,6 +101,7 @@ export function useObjectBrowser(apiFetch: NodeApiFetch, apiBase: string, adminT
 
   return {
     selectedBucket, objects, objectPrefix, busy, setObjectPrefix, setSelectedBucket, setObjects,
-    reset, loadObjects, uploadObject, downloadObject, deleteObject, shareObject,
+    reset, loadObjects, uploadFiles, downloadObject, deleteObject, shareObject,
+    uploadItems: uploadQueue.items, cancelUpload: uploadQueue.cancel, clearFinishedUploads: uploadQueue.clearFinished,
   };
 }
