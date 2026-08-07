@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.22] - 2026-08-07
+
+### Added
+
+- **Node names are no longer globally unique.** Two accounts can now register a node with the same name — like two Vercel accounts each having a "my-app" project. Uniqueness moves to a new `routeSlug` field instead: it starts as the normalized name and only gets a short random suffix on an actual collision, and it never changes on rename.
+- **A publicly discoverable node is now reachable at `openbucket.zydcode.in/s3/<routeSlug>` and `/api/<routeSlug>`.** These reverse-proxy real S3 and management traffic straight through to the node's own registered tunnel — not just the existing metadata-only discovery page. The daemon on the other end still verifies SigV4 or the bearer management token exactly as it would for a direct connection; Vercel is a transport relay only, rate-limited per source IP, and can only ever reach one specific already-registered node's own tunnel.
+- Added `scripts/backfill-route-slug.mjs`, a one-off migration to set `routeSlug = name` on node documents created before this change.
+
+### Fixed
+
+- An unscoped node-discovery lookup (`?name=`, no account `handle`) is now correctly ambiguous across accounts and fails closed (404) instead of arbitrarily returning one account's node for a name two accounts happen to share.
+
+### Known limitation
+
+Vercel Node functions have their own request body size and duration limits, so a very large object upload/download through the `/s3/<routeSlug>` proxy may fail where a direct connection to the node's own tunnel wouldn't. This is a deliberate tradeoff to avoid infrastructure cost until a dedicated VPS is available — the longer-term plan is real subdomain-per-node tunnel routing once that's in place.
+
 ## [0.1.21] - 2026-08-07
 
 ### Fixed
