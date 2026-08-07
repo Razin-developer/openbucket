@@ -15,7 +15,11 @@
       "destination": "/api/router?__openbucket_path=:path*"
     },
     {
-      "source": "/((?!api(?:/|$)).*)",
+      "source": "/s3/:path*",
+      "destination": "/api/router?__openbucket_path=:path*&__openbucket_kind=s3"
+    },
+    {
+      "source": "/((?!api(?:/|$)|s3(?:/|$)).*)",
       "destination": "/index.html"
     }
   ],
@@ -67,6 +71,19 @@
     },
     {
       "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store, max-age=0"
+        },
+        {
+          "key": "X-Robots-Tag",
+          "value": "noindex, nofollow, noarchive"
+        }
+      ]
+    },
+    {
+      "source": "/s3/(.*)",
       "headers": [
         {
           "key": "Cache-Control",

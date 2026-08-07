@@ -25,13 +25,27 @@ test("the consolidated Vercel function preserves every public API route", () => 
     assert.deepEqual(matchApiRoute(path), expected, path);
     assert.deepEqual(matchApiRoute(`${path}/`), expected, `${path}/`);
   }
-  assert.equal(matchApiRoute("/api/nodes/not-an-object-id"), null);
-  assert.equal(matchApiRoute("/api/unknown"), null);
+  // Anything under /api/ that isn't one of the control plane's own known routes above is a node
+  // proxy request keyed by routeSlug — RESERVED_NODE_NAMES keeps a real slug from ever colliding
+  // with a name already claimed above, so falling through here is intentional, not ambiguous.
+  assert.deepEqual(matchApiRoute("/api/nodes/not-an-object-id"), { id: "node-proxy", kind: "api", routeSlug: "nodes", subpath: "not-an-object-id" });
+  assert.deepEqual(matchApiRoute("/api/unknown"), { id: "node-proxy", kind: "api", routeSlug: "unknown", subpath: "" });
+});
+
+test("openbucket.zydcode.in/s3/<routeSlug> and /api/<routeSlug> resolve to node-proxy requests", () => {
+  assert.deepEqual(matchApiRoute("/s3/my-node"), { id: "node-proxy", kind: "s3", routeSlug: "my-node", subpath: "" });
+  assert.deepEqual(matchApiRoute("/s3/my-node/bucket/key.txt"), { id: "node-proxy", kind: "s3", routeSlug: "my-node", subpath: "bucket/key.txt" });
+  assert.deepEqual(matchApiRoute("/api/my-node/v1/buckets"), { id: "node-proxy", kind: "api", routeSlug: "my-node", subpath: "v1/buckets" });
+  assert.equal(matchApiRoute("/s3"), null);
+  assert.equal(matchApiRoute("/s3/"), null);
 });
 
 test("the consolidated Vercel function returns API-safe 404 and 405 responses", async () => {
+  // An empty forwarded path (no route at all, distinct from an unrecognized routeSlug — see the
+  // node-proxy fallback test above) is the one case guaranteed to short-circuit before touching
+  // the database, so it's safe to assert against in this DB-less unit test.
   const missing = await dispatchApiRequest(
-    new Request("https://openbucket.test/api/router?__openbucket_path=unknown"),
+    new Request("https://openbucket.test/api/router?__openbucket_path="),
   );
   assert.equal(missing.status, 404);
   assert.deepEqual(await missing.json(), {

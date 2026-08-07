@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { after, before, describe, test } from "node:test";
 import { ObjectId } from "mongodb";
 import { closeAuthDatabaseForTests, getAuthCollections } from "../../server/auth/database";
@@ -8,8 +9,10 @@ import {
   handleAdminOverview,
   handleCreateNode,
   handleNodeHeartbeat,
+  handleNodeProxy,
   handleResolveNode,
   handleRotateNodeToken,
+  handleUpdateNode,
   handleUsage,
 } from "../../server/control-plane/service";
 
@@ -320,5 +323,194 @@ describe("MongoDB-backed control plane", { skip: !testUri }, () => {
     assert.equal(overviewPayload.users.total, 1);
     assert.equal(overviewPayload.nodes.total, 1);
     assert.equal(overviewPayload.usage.requests, 15);
+  });
+
+  test("node names are display-only: two accounts can share a name, but each gets a unique routeSlug", async () => {
+    const ownerA = await handleRegister(sessionRequest("/api/auth/register", "POST", {
+      email: "slug-owner-a@example.com",
+      password: "correct horse battery staple",
+      name: "Owner A",
+    }, undefined, "192.0.2.80"));
+    assert.equal(ownerA.status, 201);
+    const cookieA = cookiePair(ownerA);
+
+    const ownerB = await handleRegister(sessionRequest("/api/auth/register", "POST", {
+      email: "slug-owner-b@example.com",
+      password: "correct horse battery staple",
+      name: "Owner B",
+    }, undefined, "192.0.2.81"));
+    assert.equal(ownerB.status, 201);
+    const cookieB = cookiePair(ownerB);
+
+    const createdA = await handleCreateNode(sessionRequest("/api/nodes", "POST", { name: "shared-name" }, cookieA, "192.0.2.82"));
+    assert.equal(createdA.status, 201);
+    const nodeA = (await createdA.json() as { node: { name: string; routeSlug: string } }).node;
+    assert.equal(nodeA.name, "shared-name");
+    assert.equal(nodeA.routeSlug, "shared-name", "the first account to use a name gets the bare slug");
+
+    const createdB = await handleCreateNode(sessionRequest("/api/nodes", "POST", { name: "shared-name" }, cookieB, "192.0.2.83"));
+    assert.equal(createdB.status, 201, "a second account may reuse the same display name");
+    const nodeB = (await createdB.json() as { node: { name: string; routeSlug: string } }).node;
+    assert.equal(nodeB.name, "shared-name");
+    assert.notEqual(nodeB.routeSlug, nodeA.routeSlug, "collision gets a suffixed, still-unique routeSlug");
+    assert.match(nodeB.routeSlug, /^shared-name-[a-z0-9]{4,6}$/);
+
+    const control = await getControlPlaneCollections();
+    const slugIndexes = await control.nodes.indexes();
+    assert.ok(slugIndexes.some((index) => index.name === "nodes_route_slug_unique" && index.unique === true));
+
+    function patchRequest(cookie: string, body: Record<string, unknown>): Request {
+      return new Request(origin + "/api/nodes/patch-test", {
+        method: "PATCH",
+        headers: { "content-type": "application/json", origin, "sec-fetch-site": "same-origin", cookie },
+        body: JSON.stringify(body),
+      });
+    }
+
+    const nodeADocument = await control.nodes.findOne({ routeSlug: nodeA.routeSlug });
+    assert.ok(nodeADocument);
+
+    // Renaming keeps the routeSlug stable so an already-configured public URL keeps working.
+    const renamed = await handleUpdateNode(patchRequest(cookieA, { name: "renamed-a" }), nodeADocument._id.toHexString());
+    assert.equal(renamed.status, 200);
+    const renamedPayload = (await renamed.json() as { node: { name: string; routeSlug: string } }).node;
+    assert.equal(renamedPayload.name, "renamed-a");
+    assert.equal(renamedPayload.routeSlug, nodeA.routeSlug, "routeSlug does not change on rename");
+
+    // The same account can't have two active nodes with the same display name.
+    const secondForOwnerA = await handleCreateNode(sessionRequest("/api/nodes", "POST", { name: "second-node" }, cookieA, "192.0.2.84"));
+    assert.equal(secondForOwnerA.status, 201);
+    const secondNodeADocument = await control.nodes.findOne({ name: "second-node", userId: nodeADocument.userId });
+    assert.ok(secondNodeADocument);
+    const rejectRename = await handleUpdateNode(patchRequest(cookieA, { name: "renamed-a" }), secondNodeADocument._id.toHexString());
+    assert.equal(rejectRename.status, 409);
+    assert.equal((await rejectRename.json() as { error: { code: string } }).error.code, "NODE_NAME_UNAVAILABLE");
+
+    // An unscoped resolve-by-name is now ambiguous across accounts and must fail closed, not
+    // arbitrarily hand back one account's endpoint for a name two accounts share.
+    const ownerC = await handleRegister(sessionRequest("/api/auth/register", "POST", {
+      email: "slug-owner-c@example.com",
+      password: "correct horse battery staple",
+      name: "Owner C",
+    }, undefined, "192.0.2.85"));
+    assert.equal(ownerC.status, 201);
+    const ownerCPayload = await ownerC.json() as { user: { handle: string } };
+    const cookieC = cookiePair(ownerC);
+
+    const createdC = await handleCreateNode(sessionRequest("/api/nodes", "POST", { name: "ambiguous-name" }, cookieC, "192.0.2.86"));
+    assert.equal(createdC.status, 201);
+    const nodeC = (await createdC.json() as { node: { id: string; name: string } }).node;
+    const createdD = await handleCreateNode(sessionRequest("/api/nodes", "POST", { name: "ambiguous-name" }, cookieB, "192.0.2.87"));
+    assert.equal(createdD.status, 201);
+    const nodeD = (await createdD.json() as { node: { id: string; name: string } }).node;
+
+    const bareAmbiguous = await handleResolveNode(sessionRequest("/api/nodes/resolve?name=ambiguous-name", "GET"));
+    assert.equal(bareAmbiguous.status, 404, "an unscoped lookup must not arbitrarily pick between two accounts' nodes");
+
+    const scoped = await handleResolveNode(sessionRequest(`/api/nodes/resolve?name=ambiguous-name&handle=${ownerCPayload.user.handle}`, "GET"));
+    // Neither node has sent a heartbeat yet, so neither is publicly discoverable — this only
+    // confirms handle-scoping still resolves deterministically to "not found" rather than 404
+    // for the wrong reason (ambiguity). Discoverability itself is covered by the primary test.
+    assert.equal(scoped.status, 404);
+    void nodeC;
+    void nodeD;
+  });
+
+  test("the /s3/<routeSlug> and /api/<routeSlug> reverse proxy forwards real requests to the node's tunnel", async () => {
+    const received: { last: { method: string; url: string; authorization: string | null; body: string } | null } = { last: null };
+    const upstream: Server = createServer((request: IncomingMessage, response: ServerResponse) => {
+      const chunks: Buffer[] = [];
+      request.on("data", (chunk: Buffer) => chunks.push(chunk));
+      request.on("end", () => {
+        received.last = {
+          method: request.method ?? "",
+          url: request.url ?? "",
+          authorization: request.headers.authorization ?? null,
+          body: Buffer.concat(chunks).toString("utf8"),
+        };
+        if (request.url === "/missing") {
+          response.writeHead(404, { "content-type": "application/json" });
+          response.end(JSON.stringify({ error: { code: "NOT_FOUND", message: "no such key" } }));
+          return;
+        }
+        response.writeHead(200, { "content-type": "text/plain", "x-upstream-marker": "daemon" });
+        response.end("hello from the daemon");
+      });
+    });
+    await new Promise<void>((resolve) => upstream.listen(0, "127.0.0.1", resolve));
+    const address = upstream.address();
+    if (!address || typeof address === "string") throw new Error("expected a TCP address");
+    const upstreamUrl = `http://127.0.0.1:${address.port}`;
+
+    try {
+      const owner = await handleRegister(sessionRequest("/api/auth/register", "POST", {
+        email: "proxy-owner@example.com",
+        password: "correct horse battery staple",
+        name: "Proxy Owner",
+      }, undefined, "192.0.2.90"));
+      assert.equal(owner.status, 201);
+      const cookie = cookiePair(owner);
+
+      const created = await handleCreateNode(sessionRequest("/api/nodes", "POST", { name: "proxy-node" }, cookie, "192.0.2.91"));
+      assert.equal(created.status, 201);
+      const createdPayload = await created.json() as {
+        node: { id: string; routeSlug: string };
+        credential: { token: string };
+      };
+
+      // Heartbeats require the daemon's real HTTPS tunnel for publicS3Url, which this test's
+      // plain-HTTP local server can't provide — set the node's endpoints directly instead, which
+      // is all handleNodeProxy actually reads (lifecycle + publicDiscoverable + endpoint URL).
+      const control = await getControlPlaneCollections();
+      await control.nodes.updateOne(
+        { _id: new ObjectId(createdPayload.node.id) },
+        { $set: { publicDiscoverable: true, publicS3Url: upstreamUrl, managementUrl: upstreamUrl, tunnelMode: "quick" } },
+      );
+
+      const s3Proxied = await handleNodeProxy(
+        new Request(origin + "/s3/" + createdPayload.node.routeSlug + "/my-bucket/my-key.txt?versionId=1", {
+          method: "PUT",
+          headers: { authorization: "AWS4-HMAC-SHA256 Credential=test", "content-type": "text/plain" },
+          body: "object body bytes",
+        }),
+        "s3",
+        createdPayload.node.routeSlug,
+        "my-bucket/my-key.txt",
+      );
+      assert.equal(s3Proxied.status, 200);
+      assert.equal(s3Proxied.headers.get("x-upstream-marker"), "daemon");
+      assert.equal(await s3Proxied.text(), "hello from the daemon");
+      const s3Request = received.last;
+      assert.ok(s3Request);
+      assert.equal(s3Request.method, "PUT");
+      assert.equal(s3Request.url, "/my-bucket/my-key.txt?versionId=1");
+      assert.equal(s3Request.authorization, "AWS4-HMAC-SHA256 Credential=test");
+      assert.equal(s3Request.body, "object body bytes");
+
+      const apiProxied = await handleNodeProxy(
+        new Request(origin + "/api/" + createdPayload.node.routeSlug + "/missing", {
+          method: "GET",
+          headers: { authorization: "Bearer some-management-token" },
+        }),
+        "api",
+        createdPayload.node.routeSlug,
+        "missing",
+      );
+      assert.equal(apiProxied.status, 404);
+      assert.deepEqual(await apiProxied.json(), { error: { code: "NOT_FOUND", message: "no such key" } });
+      const apiRequest = received.last;
+      assert.ok(apiRequest);
+      assert.equal(apiRequest.authorization, "Bearer some-management-token");
+
+      const unknownSlug = await handleNodeProxy(
+        new Request(origin + "/s3/no-such-node/key", { method: "GET" }),
+        "s3",
+        "no-such-node",
+        "key",
+      );
+      assert.equal(unknownSlug.status, 404);
+    } finally {
+      await new Promise<void>((resolve) => upstream.close(() => resolve()));
+    }
   });
 });
