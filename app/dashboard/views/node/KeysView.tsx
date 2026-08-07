@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { FileKey2, Plus } from "lucide-react";
-import { createKeyFormSchema, validateForm } from "../../../../vercel/validation";
+import { createKeyFormSchema, validateForm } from "../../../lib/validation";
 import { CopyButton } from "../../components/CopyButton";
 import { EmptyState } from "../../components/EmptyState";
 import { Modal } from "../../components/Modal";

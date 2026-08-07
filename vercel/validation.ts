@@ -47,44 +47,10 @@ export const bugReportFormSchema = z.object({
 });
 
 /**
- * Dashboard connection-settings form. Mirrors the exact checks app/dashboard/api/node-api.ts's
- * normalizeApiBase() performs (no credentials, query string, or fragment) as a Zod schema, so the
- * ConnectionModal can validate before it even calls normalizeApiBase.
+ * Dashboard form schemas (bucket/key/connection) live in app/lib/validation.ts, not here — the
+ * daemon's standalone Docker image builds only app/ (see .dockerignore excluding vercel/), so
+ * anything reachable from app/page.tsx must not depend on this file.
  */
-export const dashboardConnectionSchema = z.object({
-  apiBase: z
-    .string()
-    .trim()
-    .min(1, "Enter a management API URL.")
-    .url("Enter a valid HTTP(S) URL.")
-    .refine((value) => {
-      try {
-        const url = new URL(value);
-        return ["http:", "https:"].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash;
-      } catch {
-        return false;
-      }
-    }, "Use an HTTP(S) management API URL without credentials, query parameters, or a fragment."),
-  adminToken: z.string().optional(),
-});
-
-/** Dashboard bucket-create form (mirrors the daemon's S3-compatible bucket naming rules). */
-export const createBucketFormSchema = z.object({
-  name: z
-    .string()
-    .trim()
-    .min(3, "Bucket names must be at least 3 characters.")
-    .max(63, "Bucket names must be at most 63 characters.")
-    .regex(/^[a-z0-9][a-z0-9.-]*[a-z0-9]$/, "Use lowercase letters, numbers, dots, and hyphens only."),
-  public: z.boolean().optional(),
-});
-
-/** Dashboard API-key-create form. */
-export const createKeyFormSchema = z.object({
-  name: z.string().trim().min(1, "Enter a key name.").max(200, "Key name is too long."),
-  bucket: z.string().trim().max(63, "Bucket name is too long.").optional(),
-  readOnly: z.boolean().optional(),
-});
 
 /** Runs a schema and returns either the parsed value or the first human-readable error message. */
 export function validateForm<T>(schema: z.ZodType<T>, data: unknown): { ok: true; value: T } | { ok: false; message: string } {

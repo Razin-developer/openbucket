@@ -1,6 +1,6 @@
 import { useState, type DragEvent, type FormEvent } from "react";
 import { ArrowLeft, Download, FolderOpen, Plus, RefreshCw, Upload } from "lucide-react";
-import { createBucketFormSchema, validateForm } from "../../../../vercel/validation";
+import { createBucketFormSchema, validateForm } from "../../../lib/validation";
 import { EmptyState } from "../../components/EmptyState";
 import { Modal } from "../../components/Modal";
 import { UploadProgressPanel } from "../../components/UploadProgressPanel";

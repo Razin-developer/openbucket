@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { dashboardConnectionSchema, validateForm } from "../../../vercel/validation";
+import { dashboardConnectionSchema, validateForm } from "../../lib/validation";
 import { Modal } from "./Modal";
 
 export function ConnectionModal({ apiBase, adminToken, onSave, onClose }: { apiBase: string; adminToken: string; onSave: (api: string, token: string) => void; onClose: () => void }) {

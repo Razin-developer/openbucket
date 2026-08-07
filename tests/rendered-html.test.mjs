@@ -67,7 +67,7 @@ test("removes starter preview code and wires only live daemon data", async () =>
   assert.match(nodeApi, /current\.hash = ""/);
   assert.match(connectionsView, /const endpoint = "\$\{OPENBUCKET_S3_ENDPOINT\}"/);
   assert.match(dashboardApp, /NEXT_PUBLIC_DOCS_URL/);
-  assert.match(dashboardApp, /https:\/\/github\.com\/Razin-developer\/openbucket\/tree\/main\/docs/);
+  assert.ok(dashboardApp.includes("https://github.com/Razin-developer/openbucket/tree/main/docs"));
   assert.match(connectionsView, /\["OpenBucket API", apiDisplay,/);
   assert.doesNotMatch(dashboard, /sessionStorage\.setItem\(TOKEN_STORAGE_KEY,/);
   assert.doesNotMatch(dashboard, /media.*18,231|datasets.*142|14,281|429 GB/i);
