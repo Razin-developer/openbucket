@@ -82,8 +82,20 @@ function renderBrandedEmail(options: { preheader: string; heading: string; bodyH
 </html>`;
 }
 
+function stripTags(value: string): string {
+  // Strip repeatedly, not once: a single pass can leave a valid tag behind from adversarial
+  // nesting like "<<script>script>" (the outer pass only removes the inner "<script>").
+  let previous: string;
+  let current = value;
+  do {
+    previous = current;
+    current = current.replace(/<[^>]*>/g, "");
+  } while (current !== previous);
+  return current;
+}
+
 function textFromHtmlParagraphs(paragraphs: string[]): string {
-  return paragraphs.map((p) => p.replace(/<[^>]+>/g, "")).join("\n\n");
+  return paragraphs.map(stripTags).join("\n\n");
 }
 
 /** Returns true if the email was handed off to SMTP; false if SMTP isn't configured (logged, not thrown, so callers never leak configuration state to the client). */
