@@ -204,6 +204,9 @@ export function SiteFooter() {
           <a href={githubUrl}>Source</a>
           <a href={`${githubUrl}/issues`}>Issues</a>
           <a href={`${githubUrl}/blob/main/LICENSE`}>Apache-2.0</a>
+          <a href="/faq">FAQ</a>
+          <a href="/feedback">Feedback</a>
+          <a href="/report-bug">Report a bug</a>
         </div>
         <div>
           <strong>Get started</strong>
@@ -231,7 +234,11 @@ export function SiteFooter() {
       </div>
       <div className="fs-footer-bottom">
         <span>OpenBucket is open-source software. Object bytes remain on storage you control.</span>
-        <span>Apache-2.0</span>
+        <span className="fs-footer-legal">
+          <a href="/privacy">Privacy</a>
+          <a href="/terms">Terms</a>
+          <span>Apache-2.0</span>
+        </span>
       </div>
     </footer>
   );

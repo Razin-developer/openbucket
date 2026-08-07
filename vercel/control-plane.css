@@ -104,6 +104,27 @@
 .cp-account-note h2 { margin: 0; font-size: 30px; letter-spacing: -.04em; }
 .cp-account-note > p:last-child, .cp-admin-note p { max-width: 720px; color: #666; line-height: 1.65; }
 .cp-generated { color: #777; font-size: 9px; }
+.cp-support-filters { display: flex; gap: 10px; margin-bottom: 25px; }
+.cp-support-filters select { height: 36px; padding: 0 12px; color: #171717; border: 1px solid var(--cp-line); border-radius: 6px; background: #fff; font-size: 12px; }
+.cp-support-list { display: grid; gap: 14px; }
+.cp-support-item { padding: 22px; border: 1px solid var(--cp-line); background: #fff; }
+.cp-support-item.resolved { opacity: .62; }
+.cp-support-item-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; }
+.cp-support-kind { display: inline-flex; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 99px; background: #f1f1ef; color: #444; }
+.cp-support-kind.bug { background: #fff1f1; color: #a42828; }
+.cp-support-severity { padding: 4px 8px; border-radius: 99px; background: #fff4e5; color: #8a5a00; }
+.cp-support-severity.critical { background: #fde8e8; color: #a42828; }
+.cp-support-status { padding: 4px 8px; border-radius: 99px; border: 1px solid var(--cp-line); color: #666; }
+.cp-support-date { margin-left: auto; color: #999; font-weight: 500; text-transform: none; letter-spacing: 0; }
+.cp-support-item h3 { margin: 0 0 8px; font-size: 16px; letter-spacing: -.01em; }
+.cp-support-item p { margin: 0 0 8px; color: #444; font-size: 13px; line-height: 1.6; }
+.cp-support-steps { white-space: pre-wrap; }
+.cp-support-item-foot { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--cp-line); }
+.cp-support-item-foot > span { color: #999; font-size: 11px; }
+.cp-support-actions { display: flex; gap: 8px; }
+.cp-support-actions button { height: 30px; padding: 0 12px; color: #444; border: 1px solid var(--cp-line); border-radius: 6px; background: #fff; cursor: pointer; font-size: 11px; }
+.cp-support-actions button:hover { border-color: var(--cp-accent); color: var(--cp-accent); }
+.cp-support-actions button:disabled { opacity: .5; cursor: default; }
 .cp-state { display: grid; justify-items: center; padding: 55px; border: 1px solid var(--cp-line); background: #fff; text-align: center; }
 .cp-state > span { width: 45px; height: 45px; display: grid; place-items: center; margin-bottom: 15px; color: #fff; border-radius: 7px; font-weight: 800; }
 .cp-state.plain > span { background: transparent; }

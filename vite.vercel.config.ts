@@ -60,10 +60,27 @@ export default defineConfig(({ mode }) => {
 
   const canonicalUrl = publicEnv.NEXT_PUBLIC_APP_URL ?? defaultAppUrl;
   const canonicalRoot = `${canonicalUrl.replace(/\/+$/, "")}/`;
-  const docsSlugs = ["docs", "docs/installation", "docs/usage", "docs/dashboard", "docs/s3-signing", "docs/local-api", "docs/api", "docs/local-development", "docs/contributing"];
-  const docsUrls = docsSlugs.map((slug) => new URL(slug, canonicalRoot).toString());
   const sitemapUrl = new URL("sitemap.xml", canonicalRoot).toString();
   const commitSha = process.env.VERCEL_GIT_COMMIT_SHA?.trim() || process.env.GITHUB_SHA?.trim() || "unknown";
+  const buildLastmod = new Date().toISOString();
+  type SitemapEntry = { slug: string; changefreq: string; priority: string };
+  const sitemapEntries: SitemapEntry[] = [
+    { slug: "", changefreq: "weekly", priority: "1.0" },
+    { slug: "docs", changefreq: "weekly", priority: "0.8" },
+    { slug: "docs/installation", changefreq: "monthly", priority: "0.7" },
+    { slug: "docs/usage", changefreq: "monthly", priority: "0.7" },
+    { slug: "docs/dashboard", changefreq: "monthly", priority: "0.6" },
+    { slug: "docs/s3-signing", changefreq: "monthly", priority: "0.6" },
+    { slug: "docs/local-api", changefreq: "monthly", priority: "0.6" },
+    { slug: "docs/api", changefreq: "monthly", priority: "0.7" },
+    { slug: "docs/local-development", changefreq: "monthly", priority: "0.5" },
+    { slug: "docs/contributing", changefreq: "monthly", priority: "0.5" },
+    { slug: "faq", changefreq: "monthly", priority: "0.6" },
+    { slug: "feedback", changefreq: "yearly", priority: "0.3" },
+    { slug: "report-bug", changefreq: "yearly", priority: "0.3" },
+    { slug: "privacy", changefreq: "yearly", priority: "0.2" },
+    { slug: "terms", changefreq: "yearly", priority: "0.2" },
+  ];
 
   return {
     root: vercelRoot,
@@ -91,10 +108,14 @@ export default defineConfig(({ mode }) => {
             fileName: "robots.txt",
             source: `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /dashboard\nDisallow: /login\nDisallow: /register\nDisallow: /forgot-password\nDisallow: /reset-password\nSitemap: ${sitemapUrl}\n`,
           });
+          const sitemapUrls = sitemapEntries.map((entry) => {
+            const loc = xmlEscape(new URL(entry.slug, canonicalRoot).toString());
+            return `  <url>\n    <loc>${loc}</loc>\n    <lastmod>${buildLastmod}</lastmod>\n    <changefreq>${entry.changefreq}</changefreq>\n    <priority>${entry.priority}</priority>\n  </url>`;
+          });
           this.emitFile({
             type: "asset",
             fileName: "sitemap.xml",
-            source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${xmlEscape(canonicalRoot)}</loc></url>\n${docsUrls.map((url) => `  <url><loc>${xmlEscape(url)}</loc></url>`).join("\n")}\n</urlset>\n`,
+            source: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${sitemapUrls.join("\n")}\n</urlset>\n`,
           });
           this.emitFile({ type: "asset", fileName: "install.sh", source: installSh });
           this.emitFile({ type: "asset", fileName: "install.ps1", source: installPs1 });

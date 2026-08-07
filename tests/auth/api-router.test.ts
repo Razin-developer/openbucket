@@ -7,10 +7,13 @@ test("the consolidated Vercel function preserves every public API route", () => 
   const nodeId = "0123456789abcdef01234567";
   const cases = [
     ["/api/admin/overview", { id: "admin-overview" }],
+    ["/api/admin/support", { id: "admin-support" }],
     ["/api/auth/login", { id: "auth-login" }],
     ["/api/auth/logout", { id: "auth-logout" }],
     ["/api/auth/register", { id: "auth-register" }],
     ["/api/auth/session", { id: "auth-session" }],
+    ["/api/bugs", { id: "bugs" }],
+    ["/api/feedback", { id: "feedback" }],
     ["/api/health", { id: "health" }],
     ["/api/node/heartbeat", { id: "node-heartbeat" }],
     ["/api/nodes", { id: "nodes" }],
@@ -19,6 +22,7 @@ test("the consolidated Vercel function preserves every public API route", () => 
     [`/api/nodes/${nodeId}`, { id: "node", nodeId }],
     [`/api/nodes/${nodeId}/rotate-token`, { id: "node-rotate-token", nodeId }],
     [`/api/nodes/${nodeId}/revoke-token`, { id: "node-revoke-token", nodeId }],
+    [`/api/admin/support/${nodeId}`, { id: "admin-support-item", submissionId: nodeId }],
   ] as const;
 
   for (const [path, expected] of cases) {

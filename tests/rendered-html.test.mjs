@@ -117,13 +117,16 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
   assert.deepEqual(deployment, { schemaVersion: 1, commitSha });
   assert.equal(robots, `User-agent: *\nAllow: /\nDisallow: /api/\nDisallow: /dashboard\nDisallow: /login\nDisallow: /register\nDisallow: /forgot-password\nDisallow: /reset-password\nSitemap: ${appUrl}/sitemap.xml\n`);
   assert.match(sitemap, new RegExp(`<loc>${appUrl}/<\\/loc>`));
-  for (const slug of ["docs", "docs/installation", "docs/usage", "docs/dashboard", "docs/s3-signing", "docs/local-api", "docs/api", "docs/local-development", "docs/contributing"]) {
+  for (const slug of ["docs", "docs/installation", "docs/usage", "docs/dashboard", "docs/s3-signing", "docs/local-api", "docs/api", "docs/local-development", "docs/contributing", "faq", "feedback", "report-bug", "privacy", "terms"]) {
     assert.match(sitemap, new RegExp(`<loc>${appUrl}/${slug}<\\/loc>`));
   }
+  assert.match(sitemap, /<lastmod>[^<]+<\/lastmod>/);
+  assert.match(sitemap, /<changefreq>weekly<\/changefreq>/);
+  assert.match(sitemap, /<priority>1\.0<\/priority>/);
   assert.doesNotMatch(sitemap, /\/\/[^/]+\/(?:login|register|dashboard)<\/loc>/);
   assert.equal(installSh, checkedInInstallSh);
   assert.equal(installPs1, checkedInInstallPs1);
-  for (const route of ["docs", "docs/installation", "docs/usage", "docs/dashboard", "docs/s3-signing", "docs/local-api", "docs/api", "docs/local-development", "docs/contributing", "login", "register", "dashboard"]) {
+  for (const route of ["docs", "docs/installation", "docs/usage", "docs/dashboard", "docs/s3-signing", "docs/local-api", "docs/api", "docs/local-development", "docs/contributing", "login", "register", "dashboard", "feedback", "report-bug", "faq", "privacy", "terms"]) {
     assert.match(hostedApp, new RegExp(`normalized === "\\/${route}"`));
   }
   assert.match(hostedAuth, /fetch\("\/api\/auth\/session"/);

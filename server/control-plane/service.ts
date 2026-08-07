@@ -35,6 +35,8 @@ import { createHmac } from "node:crypto";
 const MAX_NODES_PER_USER = 100;
 const USER_WRITE_WINDOW_MS = 60 * 60 * 1000;
 const USER_WRITE_LIMIT = 60;
+const USER_READ_WINDOW_MS = 60 * 1000;
+const USER_READ_LIMIT = 120;
 const HEARTBEAT_WINDOW_MS = 60 * 1000;
 const HEARTBEAT_LIMIT = 180;
 const DISCOVERY_WINDOW_MS = 60 * 1000;
@@ -240,7 +242,9 @@ export async function handleListNodes(request: Request): Promise<Response> {
   try {
     assertMethod(request, "GET");
     const user = await requireUser(request);
-    const { nodes } = await getControlPlaneCollections();
+    const collections = await getControlPlaneCollections();
+    await consumeRateLimit(collections, "user-read", user.id, USER_READ_LIMIT, USER_READ_WINDOW_MS);
+    const { nodes } = collections;
     const documents = await nodes.find(
       { userId: objectId(user.id), lifecycle: { $ne: "deleted" } },
       { sort: { createdAt: -1 }, limit: MAX_NODES_PER_USER },
@@ -449,6 +453,7 @@ export async function handleManagementSession(request: Request, nodeId: string):
   try {
     assertSameOriginPost(request);
     const user = await requireUser(request);
+    await consumeRateLimit(await getControlPlaneCollections(), "user-write", user.id, USER_WRITE_LIMIT, USER_WRITE_WINDOW_MS);
     const body = await readJsonObject(request);
     onlyFields(body, []);
     const node = await ownedNode(objectId(user.id), nodeId);
@@ -647,6 +652,7 @@ export async function handleUsage(request: Request): Promise<Response> {
     const range = usageRange(request);
     const userId = objectId(user.id);
     const collections = await getControlPlaneCollections();
+    await consumeRateLimit(collections, "user-read", user.id, USER_READ_LIMIT, USER_READ_WINDOW_MS);
     if (range.nodeId) {
       const exists = await collections.nodes.findOne(
         { _id: range.nodeId, userId, lifecycle: { $ne: "deleted" } },
@@ -713,6 +719,7 @@ export async function handleAdminOverview(request: Request): Promise<Response> {
     const range = usageRange(request);
     const { users } = await getAuthCollections();
     const collections = await getControlPlaneCollections();
+    await consumeRateLimit(collections, "user-read", user.id, USER_READ_LIMIT, USER_READ_WINDOW_MS);
     const onlineSince = new Date(Date.now() - NODE_ONLINE_WINDOW_MS);
     const usageMatch = { receivedAt: { $gte: range.from, $lt: range.to } };
 
