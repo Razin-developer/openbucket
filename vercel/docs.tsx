@@ -607,18 +607,19 @@ export function ApiReferencePage() {
 
         <DocSection id="hosted-nodes" eyebrow="HOSTED CONTROL PLANE" title="Nodes">
           <p>Managing a node&apos;s registration requires the owning user&apos;s session cookie. The daemon itself never calls these &mdash; it only sends heartbeats using its own node bearer token.</p>
+          <p><code>name</code> is a display label, not a unique identifier &mdash; two accounts can each register a node called <code>home-node</code>, the way two Vercel accounts can each have a project named the same thing. Every node also gets a <code>routeSlug</code>: it starts as the normalized name and only gets a short random suffix appended on collision, and it never changes even if the node is renamed. A publicly discoverable node is reachable at <code>openbucket.zydcode.in/s3/&lt;routeSlug&gt;</code> and <code>/api/&lt;routeSlug&gt;</code> &mdash; these reverse-proxy real S3 and management traffic straight to the node&apos;s own tunnel; the daemon on the other end still does its own SigV4 or bearer-token verification exactly as it would for a direct connection.</p>
           <EndpointCard endpoint={{
             id: "api-nodes-list", method: "GET", path: "/api/nodes", title: "List your nodes", auth: "Session cookie.",
             description: "Up to 100 nodes, newest first.",
-            response: "{ \"nodes\": [ { \"id\", \"name\", \"status\": \"online\"|\"offline\"|\"revoked\", \"storage\", \"usage\", \"endpoint\": { ... } } ] }",
+            response: "{ \"nodes\": [ { \"id\", \"name\", \"routeSlug\", \"status\": \"online\"|\"offline\"|\"revoked\", \"storage\", \"usage\", \"endpoint\": { \"publicS3ProxyUrl\", \"publicApiProxyUrl\", ... } } ] }",
             js: "const { nodes } = await fetch(\"/api/nodes\", { credentials: \"same-origin\" }).then((r) => r.json());",
             python: "nodes = session.get(\"https://your-openbucket-domain/api/nodes\").json()[\"nodes\"]",
           }} />
           <EndpointCard endpoint={{
             id: "api-nodes-create", method: "POST", path: "/api/nodes", title: "Register a node", auth: "Session cookie.",
-            description: "Idempotent by name \u2014 calling it again with the same name you already own returns created: false without a new credential. This is what \"openbucket serve\" calls on first connect.",
+            description: "Idempotent by name for your own account \u2014 calling it again with a name you already own returns created: false without a new credential. A name already used by a different account is fine; the new node gets a distinct routeSlug. This is what \"openbucket serve\" calls on first connect.",
             request: "{ \"name\": \"home-node\" }",
-            response: "{ \"created\": true, \"node\": { ... }, \"credential\": { \"token\": \"obn_...\", \"managementSecret\": \"...\", \"createdAt\": \"...\" } }",
+            response: "{ \"created\": true, \"node\": { \"routeSlug\": \"home-node\", ... }, \"credential\": { \"token\": \"obn_...\", \"managementSecret\": \"...\", \"createdAt\": \"...\" } }",
             js: "const { credential } = await fetch(\"/api/nodes\", {\n  method: \"POST\", credentials: \"same-origin\",\n  headers: { \"content-type\": \"application/json\" },\n  body: JSON.stringify({ name: \"home-node\" }),\n}).then((r) => r.json());\n// credential.token is shown only this once.",
             python: "node = session.post(\"https://your-openbucket-domain/api/nodes\", json={\"name\": \"home-node\"}).json()\n# node[\"credential\"][\"token\"] is shown only this once.",
           }} />

@@ -25,6 +25,7 @@ import {
   NODE_ONLINE_WINDOW_MS,
   nodeStatus,
   normalizeNodeName,
+  routeSlugCandidates,
   toNodeView,
   toPublicDiscovery,
   validateHeartbeatPayload,
@@ -187,12 +188,21 @@ async function authenticateNode(request: Request): Promise<{ node: NodeDocument;
   return { node, tokenHash };
 }
 
-function initialNode(userId: ObjectId, name: string, credential: ReturnType<typeof issueNodeCredential>): NodeDocument {
+async function generateUniqueRouteSlug(nodes: ControlPlaneCollections["nodes"], name: string): Promise<string> {
+  for (const candidate of routeSlugCandidates(name)) {
+    const taken = await nodes.findOne({ routeSlug: candidate }, { projection: { _id: 1 } });
+    if (!taken) return candidate;
+  }
+  throw new ApiError(503, "ROUTE_SLUG_UNAVAILABLE", "Could not allocate a unique node route; try again.");
+}
+
+function initialNode(userId: ObjectId, name: string, routeSlug: string, credential: ReturnType<typeof issueNodeCredential>): NodeDocument {
   const now = credential.createdAt;
   return {
     _id: objectId(credential.token.slice(4, 28)),
     userId,
     name,
+    routeSlug,
     lifecycle: "active",
     tokenHash: credential.tokenHash,
     credentialVersion: 1,
@@ -254,16 +264,17 @@ export async function handleCreateNode(request: Request): Promise<Response> {
     const collections = await getControlPlaneCollections();
     await consumeRateLimit(collections, "user-write", user.id, USER_WRITE_LIMIT, USER_WRITE_WINDOW_MS);
 
-    const existing = await collections.nodes.findOne({ name });
+    // `name` is a display label, not a unique identifier — re-registering the same name is
+    // idempotent for the SAME account (returns the existing node), but a different account can
+    // freely reuse the same name too, the way two Vercel accounts can each have a "my-app"
+    // project. Uniqueness is enforced on `routeSlug` instead (see generateUniqueRouteSlug).
+    const existing = await collections.nodes.findOne({ userId, name, lifecycle: { $ne: "deleted" } });
     if (existing) {
-      if (existing.userId.equals(userId) && existing.lifecycle !== "deleted") {
-        return jsonResponse({
-          created: false,
-          node: toNodeView(existing, requestOrigin(request)),
-          credential: null,
-        });
-      }
-      throw new ApiError(409, "NODE_NAME_UNAVAILABLE", "Node name is unavailable.");
+      return jsonResponse({
+        created: false,
+        node: toNodeView(existing, requestOrigin(request)),
+        credential: null,
+      });
     }
 
     const count = await collections.nodes.countDocuments({ userId, lifecycle: { $ne: "deleted" } }, { limit: MAX_NODES_PER_USER });
@@ -273,20 +284,17 @@ export async function handleCreateNode(request: Request): Promise<Response> {
 
     const id = new ObjectId();
     const credential = issueNodeCredential(id);
-    const node = initialNode(userId, name, credential);
+    const routeSlug = await generateUniqueRouteSlug(collections.nodes, name);
+    const node = initialNode(userId, name, routeSlug, credential);
     try {
       await collections.nodes.insertOne(node);
     } catch (error) {
       if (!isDuplicateKey(error)) throw error;
-      const raced = await collections.nodes.findOne({ name });
-      if (raced && raced.userId.equals(userId) && raced.lifecycle !== "deleted") {
-        return jsonResponse({
-          created: false,
-          node: toNodeView(raced, requestOrigin(request)),
-          credential: null,
-        });
-      }
-      throw new ApiError(409, "NODE_NAME_UNAVAILABLE", "Node name is unavailable.");
+      // Lost a race on routeSlug (two requests picked the same free candidate at once) — the
+      // node's own _id is derived from the credential token, so it's still safe to retry the
+      // insert with a freshly regenerated slug rather than the whole request.
+      node.routeSlug = await generateUniqueRouteSlug(collections.nodes, name);
+      await collections.nodes.insertOne(node);
     }
 
     return jsonResponse({
@@ -312,18 +320,19 @@ export async function handleUpdateNode(request: Request, nodeId: string): Promis
     if (current.name === name) return jsonResponse({ node: toNodeView(current, requestOrigin(request)) });
 
     const { nodes } = await getControlPlaneCollections();
-    try {
-      const updated = await nodes.findOneAndUpdate(
-        { _id: current._id, userId, lifecycle: { $ne: "deleted" } },
-        { $set: { name, updatedAt: new Date() } },
-        { returnDocument: "after" },
-      );
-      if (!updated) throw new ApiError(404, "NODE_NOT_FOUND", "Node not found.");
-      return jsonResponse({ node: toNodeView(updated, requestOrigin(request)) });
-    } catch (error) {
-      if (isDuplicateKey(error)) throw new ApiError(409, "NODE_NAME_UNAVAILABLE", "Node name is unavailable.");
-      throw error;
-    }
+    // Renaming only changes the display name — routeSlug (the public /s3/ and /api/ URL identifier)
+    // stays fixed for the node's lifetime, so an already-configured S3 client keeps working.
+    // Since `name` is no longer globally unique, block only a collision within this same account.
+    const clashing = await nodes.findOne({ userId, name, lifecycle: { $ne: "deleted" }, _id: { $ne: current._id } });
+    if (clashing) throw new ApiError(409, "NODE_NAME_UNAVAILABLE", "You already have a node with this name.");
+
+    const updated = await nodes.findOneAndUpdate(
+      { _id: current._id, userId, lifecycle: { $ne: "deleted" } },
+      { $set: { name, updatedAt: new Date() } },
+      { returnDocument: "after" },
+    );
+    if (!updated) throw new ApiError(404, "NODE_NOT_FOUND", "Node not found.");
+    return jsonResponse({ node: toNodeView(updated, requestOrigin(request)) });
   } catch (error) {
     return errorResponse(error);
   }
@@ -797,9 +806,83 @@ export async function handleResolveNode(request: Request): Promise<Response> {
       if (!user) throw new ApiError(404, "NODE_NOT_FOUND", "Node not found.");
       filter.userId = user._id;
     }
-    const node = await collections.nodes.findOne(filter);
+    // `name` is no longer globally unique, so without a `handle` more than one account could have
+    // an active, publicly-discoverable node with this exact name — fail closed (not found) rather
+    // than arbitrarily picking one of them, since a wrong match would hand a client the wrong
+    // node's S3 endpoint. A `handle`-scoped lookup stays deterministic: node creation and rename
+    // both already reject a same-account name collision, so at most one match is possible there.
+    const matches = await collections.nodes.find(filter).limit(2).toArray();
+    if (matches.length !== 1) throw new ApiError(404, "NODE_NOT_FOUND", "Node not found.");
+    const [node] = matches;
+    return jsonResponse(toPublicDiscovery(node!, requestOrigin(request), Date.now(), handle));
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+const PROXY_WINDOW_MS = 60 * 1000;
+const PROXY_LIMIT = 600;
+const HOP_BY_HOP_REQUEST_HEADERS = ["host", "connection", "content-length", "keep-alive", "transfer-encoding", "upgrade"];
+const HOP_BY_HOP_RESPONSE_HEADERS = ["connection", "content-encoding", "content-length", "keep-alive", "transfer-encoding", "upgrade"];
+
+/**
+ * Reverse-proxies a request through openbucket.zydcode.in/s3/<routeSlug>/... or
+ * /api/<routeSlug>/... to the node's own registered public tunnel. This is a transport-level
+ * relay only — Vercel does not authenticate these requests itself, the daemon on the other end
+ * still verifies SigV4 (S3 kind) or the bearer management token (api kind) exactly as it would
+ * for a direct connection. The blast radius of an open relay is bounded: the destination is
+ * always one specific, already-registered node's own tunnel URL, never an attacker-supplied
+ * arbitrary host, and traffic is capped per source IP.
+ */
+export async function handleNodeProxy(request: Request, kind: "s3" | "api", routeSlug: string, subpath: string): Promise<Response> {
+  try {
+    if (!/^[a-z0-9](?:[a-z0-9-]{1,58}[a-z0-9])?$/.test(routeSlug)) {
+      throw new ApiError(404, "NODE_NOT_FOUND", "Node not found.");
+    }
+    const collections = await getControlPlaneCollections();
+    await consumeRateLimit(collections, "proxy", requestIp(request), PROXY_LIMIT, PROXY_WINDOW_MS);
+
+    const node = await collections.nodes.findOne({ routeSlug, lifecycle: "active" });
     if (!node) throw new ApiError(404, "NODE_NOT_FOUND", "Node not found.");
-    return jsonResponse(toPublicDiscovery(node, requestOrigin(request), Date.now(), handle));
+    if (!node.publicDiscoverable) throw new ApiError(404, "NODE_NOT_FOUND", "Node not found.");
+
+    const baseUrl = kind === "s3"
+      ? (node.endpoints?.s3.url ?? node.publicS3Url)
+      : (node.endpoints?.management.url ?? node.managementUrl);
+    if (!baseUrl) throw new ApiError(503, "NODE_UNREACHABLE", "This node has no public endpoint right now.");
+
+    let targetUrl: URL;
+    try {
+      targetUrl = new URL(subpath.replace(/^\/+/, ""), baseUrl.endsWith("/") ? baseUrl : baseUrl + "/");
+    } catch {
+      throw new ApiError(400, "INVALID_REQUEST", "Invalid proxied path.");
+    }
+    if (targetUrl.origin !== new URL(baseUrl).origin) {
+      // Path traversal (e.g. "../") that escaped the node's own origin.
+      throw new ApiError(400, "INVALID_REQUEST", "Invalid proxied path.");
+    }
+    targetUrl.search = new URL(request.url).search;
+
+    const forwardHeaders = new Headers(request.headers);
+    for (const header of HOP_BY_HOP_REQUEST_HEADERS) forwardHeaders.delete(header);
+
+    const hasBody = request.method !== "GET" && request.method !== "HEAD";
+    let upstream: Response;
+    try {
+      upstream = await fetch(targetUrl, {
+        method: request.method,
+        headers: forwardHeaders,
+        body: hasBody ? request.body : undefined,
+        redirect: "manual",
+        ...(hasBody ? { duplex: "half" } : {}),
+      } as RequestInit);
+    } catch {
+      throw new ApiError(502, "NODE_UNREACHABLE", "Could not reach this node's public endpoint.");
+    }
+
+    const responseHeaders = new Headers(upstream.headers);
+    for (const header of HOP_BY_HOP_RESPONSE_HEADERS) responseHeaders.delete(header);
+    return new Response(upstream.body, { status: upstream.status, headers: responseHeaders });
   } catch (error) {
     return errorResponse(error);
   }

@@ -25,6 +25,32 @@ const RESERVED_NODE_NAMES = new Set([
   "www",
 ]);
 
+const ROUTE_SLUG_SUFFIX_CHARS = "abcdefghijklmnopqrstuvwxyz0123456789";
+const MAX_ROUTE_SLUG_LENGTH = 48;
+
+function randomSlugSuffix(length: number): string {
+  let suffix = "";
+  for (let i = 0; i < length; i += 1) {
+    suffix += ROUTE_SLUG_SUFFIX_CHARS[Math.floor(Math.random() * ROUTE_SLUG_SUFFIX_CHARS.length)];
+  }
+  return suffix;
+}
+
+/**
+ * Yields candidate route slugs for a node name, starting with the bare name and falling back to
+ * name-plus-random-suffix variants on collision (the caller checks each candidate against the
+ * database and stops at the first free one) — the same pattern Vercel uses for project slugs.
+ */
+export function* routeSlugCandidates(name: string): Generator<string> {
+  yield name;
+  for (let attempt = 0; attempt < 8; attempt += 1) {
+    const suffixLength = attempt < 4 ? 4 : 6;
+    const suffix = randomSlugSuffix(suffixLength);
+    const base = name.slice(0, Math.max(1, MAX_ROUTE_SLUG_LENGTH - suffixLength - 1));
+    yield `${base}-${suffix}`;
+  }
+}
+
 export type HeartbeatInput = {
   eventId: string;
   nodeId: string | null;
@@ -45,6 +71,7 @@ export type HeartbeatInput = {
 export type NodeView = {
   id: string;
   name: string;
+  routeSlug: string;
   status: "online" | "offline" | "revoked";
   createdAt: string;
   updatedAt: string;
@@ -57,6 +84,9 @@ export type NodeView = {
     nodePath: string;
     controlPlaneUrl: string;
     publicS3Url: string | null;
+    /** Proxied through this domain — the same routeSlug that appears in publicS3ProxyUrl/publicApiProxyUrl. */
+    publicS3ProxyUrl: string | null;
+    publicApiProxyUrl: string | null;
     tunnelMode: "none" | "quick" | "managed";
     managementUrl: string | null;
     dashboardUrl: string | null;
@@ -328,9 +358,11 @@ export function toNodeView(node: NodeDocument, requestOrigin: string, now = Date
     s3: endpointFromLegacy(node.publicS3Url, node.tunnelMode, new Date(node.updatedAt)),
     management: endpointFromLegacy(node.managementUrl, "none", new Date(node.updatedAt)),
   };
+  const proxyable = Boolean(node.routeSlug) && node.publicDiscoverable && endpoints.s3.url !== null && endpoints.s3.kind !== "none";
   return {
     id: node._id.toHexString(),
     name: node.name,
+    routeSlug: node.routeSlug ?? "",
     status: nodeStatus(node, now),
     createdAt: node.createdAt.toISOString(),
     updatedAt: node.updatedAt.toISOString(),
@@ -343,6 +375,8 @@ export function toNodeView(node: NodeDocument, requestOrigin: string, now = Date
       nodePath: "/" + node.name,
       controlPlaneUrl: requestOrigin + "/api/node/heartbeat",
       publicS3Url: node.publicS3Url,
+      publicS3ProxyUrl: proxyable ? `${requestOrigin}/s3/${node.routeSlug}` : null,
+      publicApiProxyUrl: proxyable ? `${requestOrigin}/api/${node.routeSlug}` : null,
       tunnelMode: node.tunnelMode,
       managementUrl: node.managementUrl,
       dashboardUrl: node.dashboardUrl,
@@ -357,9 +391,11 @@ export function toNodeView(node: NodeDocument, requestOrigin: string, now = Date
 
 export function toPublicDiscovery(node: NodeDocument, requestOrigin: string, now = Date.now(), handle?: string): {
   nodeName: string;
+  routeSlug: string;
   online: boolean;
   tunnelMode: "quick" | "managed" | "unavailable";
   s3Endpoint: string | null;
+  s3ProxyUrl: string | null;
   canonicalPath: string;
   futureHostname: string;
 } {
@@ -372,7 +408,9 @@ export function toPublicDiscovery(node: NodeDocument, requestOrigin: string, now
   const isPublic = configuredPublic && online;
   return {
     nodeName: node.name,
+    routeSlug: node.routeSlug ?? "",
     online,
+    s3ProxyUrl: isPublic && node.routeSlug ? `${requestOrigin}/s3/${node.routeSlug}` : null,
     tunnelMode: configuredPublic && node.tunnelMode !== "none" ? node.tunnelMode : "unavailable",
     s3Endpoint: isPublic ? endpoints.s3.url : null,
     canonicalPath: requestOrigin + "/" + (handle ? `${handle}/` : "") + node.name,

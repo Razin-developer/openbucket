@@ -31,6 +31,14 @@ export type NodeDocument = {
   _id: ObjectId;
   userId: ObjectId;
   name: string;
+  /**
+   * The unique, URL-safe identifier used for public routing (openbucket.zydcode.in/api/<routeSlug>,
+   * /s3/<routeSlug>). `name` is a non-unique display label a user can reuse across accounts (like a
+   * Vercel project name); `routeSlug` starts as the normalized name and gets a short random suffix
+   * appended only on collision. It never changes once a node is created, even if the node is renamed,
+   * so a public URL a client has already configured keeps working.
+   */
+  routeSlug: string;
   lifecycle: NodeLifecycle;
   tokenHash: string | null;
   credentialVersion: number;
@@ -94,9 +102,24 @@ async function ensureControlPlaneIndexes(database: Db): Promise<void> {
   let pending = indexState.indexPromises.get(key);
   if (!pending) {
     pending = Promise.all([
+      // `name` is no longer globally unique (multiple accounts may register the same display
+      // name, like a Vercel project name) — this index exists for lookup speed, not uniqueness.
+      // A pre-existing `nodes_name_unique` unique index from before this change is dropped first
+      // since MongoDB errors on redefining an existing index name with different options.
+      database.collection<NodeDocument>("nodes").dropIndex("nodes_name_unique").catch(() => undefined),
       database.collection<NodeDocument>("nodes").createIndex(
         { name: 1 },
-        { name: "nodes_name_unique", unique: true },
+        { name: "nodes_name_lookup" },
+      ),
+      // Sparse so legacy documents without a `routeSlug` yet (before the backfill migration runs,
+      // see scripts/backfill-route-slug.mjs) don't collide with each other on a shared `null`.
+      database.collection<NodeDocument>("nodes").createIndex(
+        { routeSlug: 1 },
+        { name: "nodes_route_slug_unique", unique: true, sparse: true },
+      ),
+      database.collection<NodeDocument>("nodes").createIndex(
+        { userId: 1, name: 1 },
+        { name: "nodes_user_name" },
       ),
       database.collection<NodeDocument>("nodes").createIndex(
         { userId: 1, createdAt: -1 },

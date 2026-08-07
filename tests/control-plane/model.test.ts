@@ -42,6 +42,7 @@ function node(overrides: Partial<NodeDocument> = {}): NodeDocument {
     _id: new ObjectId(),
     userId: new ObjectId(),
     name: "office-node",
+    routeSlug: "office-node",
     lifecycle: "active",
     tokenHash: "a".repeat(64),
     credentialVersion: 1,
