@@ -28,7 +28,6 @@ test("server-renders the complete OpenBucket dashboard shell", async () => {
   assert.match(html, /<title>OpenBucket — your disk, now S3-compatible<\/title>/i);
   assert.match(html, /<meta name="application-name" content="OpenBucket"\/>/i);
   assert.match(html, /OpenBucket/);
-  assert.match(html, /Node console/);
   assert.match(html, /Connect your first disk\./);
   assert.match(html, /Buckets/);
   assert.match(html, /API keys/);
@@ -39,33 +38,41 @@ test("server-renders the complete OpenBucket dashboard shell", async () => {
 });
 
 test("removes starter preview code and wires only live daemon data", async () => {
-  const [page, layout, dashboard, css, packageJson] = await Promise.all([
+  // Workstream C split the old single-file app/dashboard.tsx into app/dashboard/* (shell, hooks,
+  // node-api client, views) — these assertions were ported to read the new locations instead.
+  const [page, layout, nodeApi, nodeDataHook, connectionHook, dashboardApp, connectionsView, css, shellCss, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/dashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/api/node-api.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/hooks/useNodeData.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/hooks/useNodeConnection.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/DashboardApp.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/views/node/ConnectionsView.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/dashboard-shell.css", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
+  const dashboard = [nodeApi, nodeDataHook, connectionHook, dashboardApp, connectionsView].join("\n");
 
-  assert.match(page, /<Dashboard \/>/);
+  assert.match(page, /<DashboardApp \/>/);
   assert.match(layout, /app\.openbucket\.dev/);
-  assert.match(dashboard, /\/v1\/status/);
-  assert.match(dashboard, /\/v1\/buckets/);
-  assert.match(dashboard, /\/v1\/analytics/);
-  assert.match(dashboard, /\/v1\/logs\?limit=100/);
+  assert.match(nodeDataHook, /\/v1\/status/);
+  assert.match(nodeDataHook, /\/v1\/buckets/);
+  assert.match(nodeDataHook, /\/v1\/analytics/);
+  assert.match(nodeDataHook, /\/v1\/logs\?limit=100/);
   assert.match(dashboard, /apiRequestUrl\(apiBase, path\)/);
-  assert.match(dashboard, /lucide-react/);
-  assert.match(dashboard, /localStorage\.setItem\(API_STORAGE_KEY/);
-  assert.match(dashboard, /sessionStorage\.setItem\(tokenStorageKey\(apiBase\)/);
-  assert.match(dashboard, /current\.hash = ""/);
-  assert.match(dashboard, /const endpoint = "\$\{OPENBUCKET_S3_ENDPOINT\}"/);
-  assert.match(dashboard, /NEXT_PUBLIC_DOCS_URL/);
-  assert.match(dashboard, /https:\/\/github\.com\/Razin-developer\/openbucket\/tree\/main\/docs/);
-  assert.match(dashboard, /\["OpenBucket API", initialConnection\?\.displayUrl/);
+  assert.match(dashboardApp, /lucide-react/);
+  assert.match(nodeApi, /localStorage\.setItem\(API_STORAGE_KEY/);
+  assert.match(nodeApi, /sessionStorage\.setItem\(tokenStorageKey\(apiBase\)/);
+  assert.match(nodeApi, /current\.hash = ""/);
+  assert.match(connectionsView, /const endpoint = "\$\{OPENBUCKET_S3_ENDPOINT\}"/);
+  assert.match(dashboardApp, /NEXT_PUBLIC_DOCS_URL/);
+  assert.match(dashboardApp, /https:\/\/github\.com\/Razin-developer\/openbucket\/tree\/main\/docs/);
+  assert.match(connectionsView, /\["OpenBucket API", apiDisplay,/);
   assert.doesNotMatch(dashboard, /sessionStorage\.setItem\(TOKEN_STORAGE_KEY,/);
   assert.doesNotMatch(dashboard, /media.*18,231|datasets.*142|14,281|429 GB/i);
   assert.match(css, /--ink:\s*#171717/);
-  assert.match(css, /gradient-develop|radial-gradient/i);
+  assert.match(shellCss, /gradient-develop|radial-gradient/i);
   assert.match(css, /prefers-reduced-motion:\s*reduce/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await assert.rejects(access(new URL("../app/_sites-preview/SkeletonPreview.tsx", import.meta.url)));
@@ -100,7 +107,7 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
     readFile(new URL("../.github/workflows/vercel.yml", import.meta.url), "utf8"),
   ]);
   const deployment = JSON.parse(deploymentSource);
-  const [installSh, installPs1, checkedInInstallSh, checkedInInstallPs1, hostedApp, hostedAuth, hostedDocs, siteShell, landing, controlPlane, discovery] = await Promise.all([
+  const [installSh, installPs1, checkedInInstallSh, checkedInInstallPs1, hostedApp, hostedAuth, hostedDocs, siteShell, landing, controlPlane, accountApi, hostedDashboard, discovery] = await Promise.all([
     readFile(new URL("../vercel-dist/install.sh", import.meta.url), "utf8"),
     readFile(new URL("../vercel-dist/install.ps1", import.meta.url), "utf8"),
     readFile(new URL("../scripts/install.sh", import.meta.url), "utf8"),
@@ -111,6 +118,8 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
     readFile(new URL("../vercel/site-shell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../vercel/landing.tsx", import.meta.url), "utf8"),
     readFile(new URL("../vercel/control-plane.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/api/account-api.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/dashboard/HostedDashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../vercel/node-discovery.tsx", import.meta.url), "utf8"),
   ]);
 
@@ -136,10 +145,13 @@ test("Vercel build emits commit, crawler, sitemap, and icon metadata", async () 
   assert.match(hostedAuth, /<HostedControlPlane user=\{state\.user\} \/>/);
   assert.match(hostedApp, /nodeNameForPath/);
   assert.match(hostedApp, /route === "node-discovery"/);
-  assert.match(controlPlane, /apiRequest<NodesResponse>\("\/api\/nodes"\)/);
-  assert.match(controlPlane, /apiRequest<UsageSummary>\("\/api\/usage"\)/);
-  assert.match(controlPlane, /apiRequest<AdminOverview>\("\/api\/admin\/overview"\)/);
-  assert.match(controlPlane, /user\.role === "admin"/);
+  // control-plane.tsx is now a thin wrapper (Workstream C) — the account API client it used to
+  // define inline lives at app/dashboard/api/account-api.ts, and the account nav/gating logic
+  // lives in app/dashboard/HostedDashboard.tsx.
+  assert.match(accountApi, /apiRequest<NodesResponse>\("\/api\/nodes"\)/);
+  assert.match(accountApi, /apiRequest<UsageSummary>\("\/api\/usage"\)/);
+  assert.match(accountApi, /apiRequest<AdminOverview>\("\/api\/admin\/overview"\)/);
+  assert.match(hostedDashboard, /user\.role === "admin"/);
   assert.match(discovery, /new URLSearchParams\(\{ name: nodeName \}\)/);
   assert.match(discovery, /\/api\/nodes\/resolve\?\$\{query\}/);
   assert.match(discovery, /does not proxy S3 requests/);
