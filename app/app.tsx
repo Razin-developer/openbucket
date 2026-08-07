@@ -25,12 +25,13 @@ const BugReportPage = lazy(() => import("./support-pages").then((m) => ({ defaul
 const FaqPage = lazy(() => import("./support-pages").then((m) => ({ default: m.FaqPage })));
 const PrivacyPolicyPage = lazy(() => import("./support-pages").then((m) => ({ default: m.PrivacyPolicyPage })));
 const TermsPage = lazy(() => import("./support-pages").then((m) => ({ default: m.TermsPage })));
+const HelpPage = lazy(() => import("./help").then((m) => ({ default: m.HelpPage })));
 
 export type HostedRoute =
   | "home" | "docs" | "docs-installation" | "docs-usage" | "docs-dashboard" | "docs-s3-signing"
   | "docs-local-api" | "docs-api" | "docs-local-development" | "docs-contributing"
   | "login" | "register" | "forgot-password" | "reset-password" | "dashboard" | "node-discovery"
-  | "feedback" | "report-bug" | "faq" | "privacy" | "terms" | "not-found";
+  | "feedback" | "report-bug" | "faq" | "help" | "privacy" | "terms" | "not-found";
 
 export const routeMetadata: Record<HostedRoute, { path: string; title: string; description: string; keywords: string; robots: string }> = {
   home: {
@@ -147,6 +148,12 @@ export const routeMetadata: Record<HostedRoute, { path: string; title: string; d
     keywords: "OpenBucket FAQ, OpenBucket questions, self hosted S3 FAQ",
     robots: "index, follow",
   },
+  help: {
+    path: "/help", title: "Help & contact · OpenBucket",
+    description: "Get help from a real person, or browse the FAQ for answers to common OpenBucket questions.",
+    keywords: "OpenBucket help, contact OpenBucket, OpenBucket support request",
+    robots: "index, follow",
+  },
   privacy: {
     path: "/privacy", title: "Privacy policy · OpenBucket",
     description: "What OpenBucket's hosted dashboard collects, and what it never sees.",
@@ -167,7 +174,7 @@ export const routeMetadata: Record<HostedRoute, { path: string; title: string; d
   },
 };
 
-const reservedNodeNames = new Set(["admin", "api", "auth", "dashboard", "docs", "faq", "feedback", "forgot-password", "health", "login", "mail", "node", "nodes", "openbucket", "privacy", "register", "report-bug", "reset-password", "s3", "status", "support", "terms", "usage", "www"]);
+const reservedNodeNames = new Set(["admin", "api", "auth", "dashboard", "docs", "faq", "feedback", "forgot-password", "health", "help", "login", "mail", "node", "nodes", "openbucket", "privacy", "register", "report-bug", "reset-password", "s3", "status", "support", "terms", "usage", "www"]);
 
 export function nodeNameForPath(pathname: string): string | null {
   let name: string;
@@ -205,6 +212,7 @@ export function routeForPath(pathname: string): HostedRoute {
   if (normalized === "/feedback") return "feedback";
   if (normalized === "/report-bug") return "report-bug";
   if (normalized === "/faq") return "faq";
+  if (normalized === "/help") return "help";
   if (normalized === "/privacy") return "privacy";
   if (normalized === "/terms") return "terms";
   if (nodePathForPath(pathname)) return "node-discovery";
@@ -239,6 +247,7 @@ function RoutedPage({ route }: { route: HostedRoute }) {
   if (route === "feedback") return <FeedbackPage />;
   if (route === "report-bug") return <BugReportPage />;
   if (route === "faq") return <FaqPage />;
+  if (route === "help") return <HelpPage />;
   if (route === "privacy") return <PrivacyPolicyPage />;
   if (route === "terms") return <TermsPage />;
   return <NotFoundPage />;

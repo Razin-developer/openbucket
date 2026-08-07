@@ -4,8 +4,9 @@ import { keyedHash } from "../auth/crypto.js";
 import { getAuthCollections } from "../auth/database.js";
 import { ApiError, assertMethod, assertSameOriginPost, errorResponse, jsonResponse, readJsonObject, requestIp } from "../auth/http.js";
 import { authenticateRequest } from "../auth/service.js";
+import { sendBugReportConfirmationEmail, sendFeedbackConfirmationEmail, sendHelpRequestConfirmationEmail } from "../mailer.js";
 import { getSupportCollections, type SupportKind, type SupportStatus, type SupportSubmissionDocument } from "./database.js";
-import { validateBugReportInput, validateFeedbackInput } from "./model.js";
+import { validateBugReportInput, validateFeedbackInput, validateHelpRequestInput } from "./model.js";
 
 const SUBMIT_IP_LIMIT = 10;
 const SUBMIT_WINDOW_MS = 60 * 60 * 1000;
@@ -75,6 +76,7 @@ export async function handleSubmitFeedback(request: Request): Promise<Response> 
       createdAt: now,
       updatedAt: now,
     });
+    if (input.email) await sendFeedbackConfirmationEmail(input.email, input.message);
     return jsonResponse({ submitted: true }, 201);
   } catch (error) {
     return errorResponse(error);
@@ -103,6 +105,36 @@ export async function handleSubmitBugReport(request: Request): Promise<Response>
       createdAt: now,
       updatedAt: now,
     });
+    if (input.email) await sendBugReportConfirmationEmail(input.email, input.title, input.severity);
+    return jsonResponse({ submitted: true }, 201);
+  } catch (error) {
+    return errorResponse(error);
+  }
+}
+
+export async function handleSubmitHelpRequest(request: Request): Promise<Response> {
+  try {
+    assertSameOriginPost(request);
+    await consumeRateLimit("help-submit", requestIp(request), SUBMIT_IP_LIMIT, SUBMIT_WINDOW_MS);
+    const input = validateHelpRequestInput(await readJsonObject(request));
+    const { submissions } = await getSupportCollections();
+    const now = new Date();
+    await submissions.insertOne({
+      _id: new ObjectId(),
+      kind: "help",
+      status: "new",
+      message: input.message,
+      title: input.subject,
+      stepsToReproduce: null,
+      severity: null,
+      email: input.email,
+      name: input.name,
+      path: input.path,
+      userAgent: request.headers.get("user-agent")?.slice(0, 300) ?? null,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await sendHelpRequestConfirmationEmail(input.email, input.subject);
     return jsonResponse({ submitted: true }, 201);
   } catch (error) {
     return errorResponse(error);
@@ -115,8 +147,8 @@ export async function handleListSupportSubmissions(request: Request): Promise<Re
     await requireAdmin(request);
     const url = new URL(request.url);
     const kindParam = url.searchParams.get("kind");
-    if (kindParam !== null && kindParam !== "feedback" && kindParam !== "bug") {
-      throw new ApiError(400, "INVALID_REQUEST", "kind must be feedback or bug.");
+    if (kindParam !== null && kindParam !== "feedback" && kindParam !== "bug" && kindParam !== "help") {
+      throw new ApiError(400, "INVALID_REQUEST", "kind must be feedback, bug, or help.");
     }
     const statusParam = url.searchParams.get("status");
     if (statusParam !== null && statusParam !== "new" && statusParam !== "reviewed" && statusParam !== "resolved") {

@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   BookOpen, Boxes, ChevronDown, Coffee, Container, ExternalLink, Gauge,
-  HardDrive, KeyRound, LayoutDashboard, Rocket, ShieldCheck, Star, Terminal, Workflow,
+  HardDrive, KeyRound, LayoutDashboard, LifeBuoy, Rocket, ShieldCheck, Star, Terminal, Workflow,
 } from "lucide-react";
 
 const githubUrl = "https://github.com/Razin-developer/openbucket";
@@ -149,6 +149,7 @@ const resourceLinks: NavLink[] = [
   { href: "/docs/api", label: "API reference", description: "Every local and hosted endpoint, with JS and Python examples.", icon: Container },
   { href: "/docs/contributing", label: "Contributing", description: "Report defects, propose features, submit pull requests.", icon: KeyRound },
   { href: "/dashboard", label: "Dashboard", description: "Operate buckets, keys, and logs for a live node.", icon: LayoutDashboard },
+  { href: "/help", label: "Help & contact", description: "Get help from a real person, or browse the FAQ.", icon: LifeBuoy },
 ];
 
 function NavMenu({ label, links, active }: { label: string; links: NavLink[]; active: boolean }) {
@@ -222,6 +223,7 @@ export function SiteFooter() {
           <a href={`${githubUrl}/issues`}>Issues</a>
           <a href={`${githubUrl}/blob/main/LICENSE`}>Apache-2.0</a>
           <a href="/faq">FAQ</a>
+          <a href="/help">Help &amp; contact</a>
           <a href="/feedback">Feedback</a>
           <a href="/report-bug">Report a bug</a>
         </div>

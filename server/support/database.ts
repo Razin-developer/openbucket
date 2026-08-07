@@ -1,7 +1,7 @@
 import { ObjectId, type Collection, type Db } from "mongodb";
 import { getAuthDatabaseContext } from "../auth/database.js";
 
-export type SupportKind = "feedback" | "bug";
+export type SupportKind = "feedback" | "bug" | "help";
 export type SupportSeverity = "low" | "medium" | "high" | "critical";
 export type SupportStatus = "new" | "reviewed" | "resolved";
 

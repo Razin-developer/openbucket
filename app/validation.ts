@@ -46,6 +46,13 @@ export const bugReportFormSchema = z.object({
   email: z.union([clientEmailSchema, z.literal("")]).optional(),
 });
 
+export const helpRequestFormSchema = z.object({
+  name: z.string().trim().max(200, "Name is too long.").optional(),
+  email: clientEmailSchema,
+  subject: z.string().trim().min(1, "Enter a subject.").max(200, "Subject is too long."),
+  message: z.string().trim().min(1, "Enter your message.").max(4000, "Message is too long."),
+});
+
 /**
  * Dashboard form schemas (bucket/key/connection) live in app/lib/validation.ts, not here — the
  * daemon's standalone Docker image builds only app/ (see .dockerignore excluding vercel/), so

@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
-import { Bug, MessageSquare } from "lucide-react";
+import { Bug, LifeBuoy, MessageSquare } from "lucide-react";
 import { controlPlaneApi, type SupportListResponse } from "../../api/account-api";
 import { formatDate } from "../../api/format";
 import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/alert";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 
 export function SupportView() {
-  const [kindFilter, setKindFilter] = useState<"" | "feedback" | "bug">("");
+  const [kindFilter, setKindFilter] = useState<"" | "feedback" | "bug" | "help">("");
   const [statusFilter, setStatusFilter] = useState<"" | "new" | "reviewed" | "resolved">("");
   const [data, setData] = useState<SupportListResponse | null>(null);
   const [error, setError] = useState("");
@@ -41,7 +41,7 @@ export function SupportView() {
   return (
     <>
       <header className="ob-page-heading">
-        <div><p className="ob-eyebrow">FEEDBACK &amp; BUG REPORTS</p><h1>Support inbox</h1><p>Submitted through the public feedback and bug report forms.</p></div>
+        <div><p className="ob-eyebrow">FEEDBACK, BUGS &amp; HELP REQUESTS</p><h1>Support inbox</h1><p>Submitted through the public feedback, bug report, and help forms.</p></div>
         {data ? <span className="ob-generated">{data.newCount} new · {data.totalCount} total</span> : null}
       </header>
       <div className="ob-support-filters">
@@ -51,6 +51,7 @@ export function SupportView() {
             <SelectItem value="__all__">All types</SelectItem>
             <SelectItem value="feedback">Feedback</SelectItem>
             <SelectItem value="bug">Bug reports</SelectItem>
+            <SelectItem value="help">Help requests</SelectItem>
           </SelectContent>
         </Select>
         <Select value={statusFilter || "__all__"} onValueChange={(value) => setStatusFilter((value === "__all__" ? "" : value) as typeof statusFilter)}>
@@ -76,7 +77,11 @@ export function SupportView() {
           {data.submissions.map((item) => (
             <article className={`ob-support-item ${item.status}`} key={item.id}>
               <div className="ob-support-item-head">
-                <span className={`ob-support-kind ${item.kind}`}>{item.kind === "bug" ? <Bug size={13} /> : <MessageSquare size={13} />} {item.kind === "bug" ? "Bug" : "Feedback"}</span>
+                <span className={`ob-support-kind ${item.kind}`}>
+                  {item.kind === "bug" ? <Bug size={13} /> : item.kind === "help" ? <LifeBuoy size={13} /> : <MessageSquare size={13} />}
+                  {" "}
+                  {item.kind === "bug" ? "Bug" : item.kind === "help" ? "Help" : "Feedback"}
+                </span>
                 {item.severity ? <span className={`ob-support-severity ${item.severity}`}>{item.severity}</span> : null}
                 <span className="ob-support-status">{item.status}</span>
                 <span className="ob-support-date">{formatDate(item.createdAt)}</span>

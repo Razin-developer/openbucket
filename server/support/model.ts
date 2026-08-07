@@ -43,6 +43,14 @@ const optionalEmailSchema = optionalTextSchema("email", MAX_EMAIL_BYTES).transfo
   return value.toLowerCase();
 });
 
+const requiredEmailSchema = requiredTextSchema("email", MAX_EMAIL_BYTES).transform((value, ctx) => {
+  if (!EMAIL_PATTERN.test(value)) {
+    ctx.addIssue({ code: "custom", message: "email is invalid." });
+    return z.NEVER;
+  }
+  return value.toLowerCase();
+});
+
 const optionalPathSchema = optionalTextSchema("path", 512).transform((value, ctx) => {
   if (value === null) return null;
   if (!value.startsWith("/")) {
@@ -96,6 +104,28 @@ const bugReportBodySchema = z.object({
 
 export function validateBugReportInput(body: Record<string, unknown>): BugReportInput {
   const result = bugReportBodySchema.safeParse(body);
+  if (!result.success) throw invalidRequest(result.error);
+  return result.data;
+}
+
+export type HelpRequestInput = {
+  subject: string;
+  message: string;
+  email: string;
+  name: string | null;
+  path: string | null;
+};
+
+const helpRequestBodySchema = z.object({
+  subject: requiredTextSchema("subject", MAX_SHORT_TEXT_BYTES),
+  message: requiredTextSchema("message", MAX_MESSAGE_BYTES),
+  email: requiredEmailSchema,
+  name: optionalTextSchema("name", MAX_SHORT_TEXT_BYTES),
+  path: optionalPathSchema,
+}).strict();
+
+export function validateHelpRequestInput(body: Record<string, unknown>): HelpRequestInput {
+  const result = helpRequestBodySchema.safeParse(body);
   if (!result.success) throw invalidRequest(result.error);
   return result.data;
 }

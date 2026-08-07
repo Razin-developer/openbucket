@@ -28,6 +28,7 @@ import {
   handleListSupportSubmissions,
   handleSubmitBugReport,
   handleSubmitFeedback,
+  handleSubmitHelpRequest,
   handleUpdateSupportStatus,
 } from "../server/support/service.js";
 
@@ -49,6 +50,7 @@ type ApiRouteId =
   | "bugs"
   | "feedback"
   | "health"
+  | "help"
   | "node"
   | "node-heartbeat"
   | "node-management-session"
@@ -85,6 +87,7 @@ const exactRoutes = new Map<string, ApiRouteId>([
   ["/api/bugs", "bugs"],
   ["/api/feedback", "feedback"],
   ["/api/health", "health"],
+  ["/api/help", "help"],
   ["/api/node/heartbeat", "node-heartbeat"],
   ["/api/nodes", "nodes"],
   ["/api/nodes/resolve", "nodes-resolve"],
@@ -99,6 +102,7 @@ const routeHandlers: Record<ApiRouteId, RouteHandlers> = {
   },
   bugs: { POST: (request) => handleSubmitBugReport(request) },
   feedback: { POST: (request) => handleSubmitFeedback(request) },
+  help: { POST: (request) => handleSubmitHelpRequest(request) },
   "auth-forgot-password": { POST: (request) => handleForgotPassword(request) },
   "auth-google-callback": { GET: (request) => handleGoogleCallback(request) },
   "auth-google-start": { GET: (request) => handleGoogleStart(request) },
