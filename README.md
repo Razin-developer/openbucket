@@ -6,7 +6,7 @@ OpenBucket writes real object bytes to the directory you choose. The normal prod
 
 > OpenBucket is currently a single-node, self-hosted v0.1 product. It is useful for development, homelabs, local backup targets, and trusted private networks. Read [Security](#security) and [Current limitations](#current-limitations) before exposing it outside a machine you control.
 
-The Node daemon and CLI are published as [`openbucket@0.1.19`](https://www.npmjs.com/package/openbucket/v/0.1.19), and the web application is live at [openbucket.zydcode.in](https://openbucket.zydcode.in). Release `0.1.19` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
+The Node daemon and CLI are published as [`openbucket@0.1.20`](https://www.npmjs.com/package/openbucket/v/0.1.20), and the web application is live at [openbucket.zydcode.in](https://openbucket.zydcode.in). Release `0.1.20` is the current unified trusted release for npm, PyPI, GitHub Container Registry, and GitHub Releases; see [Releasing](docs/RELEASING.md).
 
 ## What is included
 
@@ -85,7 +85,7 @@ Requires Node.js 22.13 or newer (npm comes bundled with it) — that's the only 
 ### From npm (recommended)
 
 ```bash
-npm install --global openbucket@0.1.19
+npm install --global openbucket@0.1.20
 openbucket version
 openbucket login --email you@example.com
 openbucket serve /path/to/storage --name my-node
@@ -101,12 +101,12 @@ The installers are thin, auditable npm wrappers served by the current Vercel dep
 
 ```bash
 curl -fsSLo openbucket-install.sh https://openbucket.zydcode.in/install.sh
-OPENBUCKET_INSTALL_VERSION=0.1.19 sh ./openbucket-install.sh
+OPENBUCKET_INSTALL_VERSION=0.1.20 sh ./openbucket-install.sh
 ```
 
 ```powershell
 Invoke-WebRequest https://openbucket.zydcode.in/install.ps1 -OutFile openbucket-install.ps1
-& ./openbucket-install.ps1 -Version 0.1.19
+& ./openbucket-install.ps1 -Version 0.1.20
 ```
 
 Set `OPENBUCKET_NPM_PACKAGE` or pass `--package`/`-Package` to install a tarball, local path, scoped package, or a specific registry version.
@@ -128,7 +128,7 @@ openbucket version
 
 ```bash
 npm pack
-npm install --global ./openbucket-0.1.19.tgz
+npm install --global ./openbucket-0.1.20.tgz
 ```
 
 ## CLI reference
