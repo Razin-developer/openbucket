@@ -1065,17 +1065,23 @@ function printBanner(
   line(`  ${pc.green("●")} ${pc.bold("Daemon running")}`);
   line(`  ${label("Node")}${state.node}`);
   line(`  ${label("Storage")}${state.root}`);
-  line(`  ${label("Local management")}${pc.cyan(state.managementUrl)}`);
-  if (state.s3Url) line(`  ${label("Local S3")}${pc.cyan(state.s3Url)}`);
-  if (state.dashboardUrl) {
-    line(`  ${label("Local dashboard")}${pc.cyan(state.dashboardUrl.split("?")[0].split("#")[0])}`);
-    line(`  ${label("Reopen")}openbucket dashboard`);
+  line("");
+  line(`  ${pc.bold("Local")}`);
+  if (state.dashboardUrl) line(`  ${label("Dashboard")}${pc.cyan(state.dashboardUrl.split("?")[0].split("#")[0])}`);
+  line(`  ${label("API")}${pc.cyan(state.managementUrl)}`);
+  if (state.s3Url) line(`  ${label("S3")}${pc.cyan(state.s3Url)}`);
+  if (state.dashboardUrl) line(`  ${label("Reopen")}openbucket dashboard`);
+
+  const hasRemote = Boolean(state.nodeApiUrl || state.publicManagementUrl || state.publicApiProxyUrl || state.publicUrl || state.publicS3ProxyUrl);
+  if (hasRemote) {
+    line("");
+    line(`  ${pc.bold("Remote")}`);
+    if (state.nodeApiUrl) line(`  ${label("Dashboard")}${pc.cyan(state.nodeApiUrl)}`);
+    if (state.publicManagementUrl) line(`  ${label("API")}${pc.cyan(state.publicManagementUrl)}`);
+    if (state.publicApiProxyUrl) line(`  ${label("API (proxy)")}${pc.cyan(state.publicApiProxyUrl)}`);
+    if (state.publicUrl) line(`  ${label("S3")}${pc.cyan(state.publicUrl)}`);
+    if (state.publicS3ProxyUrl) line(`  ${label("S3 (proxy)")}${pc.cyan(state.publicS3ProxyUrl)}`);
   }
-  if (state.publicUrl) line(`  ${label("Public S3")}${pc.cyan(state.publicUrl)}`);
-  if (state.publicManagementUrl) line(`  ${label("Public management")}${pc.cyan(state.publicManagementUrl)}`);
-  if (state.publicS3ProxyUrl) line(`  ${label("Public S3 (proxy)")}${pc.cyan(state.publicS3ProxyUrl)}`);
-  if (state.publicApiProxyUrl) line(`  ${label("Public API (proxy)")}${pc.cyan(state.publicApiProxyUrl)}`);
-  if (state.nodeApiUrl) line(`  ${label("Hosted dashboard")}${pc.cyan(state.nodeApiUrl)}`);
   if (initialCredentials) {
     line("");
     line(`  ${pc.bold("Initial S3 credentials")}${pc.dim(" (shown once)")}`);
@@ -1886,6 +1892,7 @@ async function serveForeground(
   let quickTunnels = new Map<QuickTunnelSurface, QuickTunnelHandle>();
   let shutdownStarted = false;
 
+  let quickTunnelFailure: string | undefined;
   if (config.quickTunnel) {
     writeLine(io.stdout, "Preparing secure OpenBucket access…");
     const surfaces: Array<{ surface: QuickTunnelSurface; origin: string }> = [
@@ -1910,14 +1917,15 @@ async function serveForeground(
       handle.config.dashboardUrl = effectiveDashboardUrl;
       if (effectiveDashboardUrl) effectiveOrigins.add(new URL(effectiveDashboardUrl).origin);
       handle.config.allowedOrigins = [...effectiveOrigins];
-
-
     } catch (error) {
-      shutdownStarted = true;
+      // The public tunnel is a convenience layer on top of an already-running daemon, not a
+      // precondition for one — a machine without cloudflared (or a flaky tunnel handshake)
+      // should still get a fully working local daemon instead of no daemon at all. Tear down
+      // only the tunnel attempt itself and keep serving locally.
       await stopQuickTunnels(quickTunnels);
-      await handle.stop();
-      await dashboardHandle?.stop().catch(() => undefined);
-      throw new Error("Could not establish OpenBucket public access. Run `openbucket doctor` for recovery guidance.");
+      quickTunnels = new Map();
+      publicUrl = undefined;
+      quickTunnelFailure = error instanceof Error ? error.message : String(error);
     }
   }
 
@@ -1930,7 +1938,7 @@ async function serveForeground(
     ...(dashboardApiUrl !== managementUrl ? { dashboardApiUrl } : {}),
     ...(publicUrl ? { publicUrl } : {}),
     ...(quickTunnels.get("management")?.url ? { publicManagementUrl: quickTunnels.get("management")!.url } : {}),
-    ...(config.quickTunnel ? { tunnelMode: "quick" as const } : {}),
+    ...(publicUrl ? { tunnelMode: "quick" as const } : {}),
     ...(hostedNode ? { nodeApiUrl: new URL(`/dashboard/nodes/${encodeURIComponent(hostedNode.credential.nodeName)}`, hostedNode.session.controlPlaneUrl).toString() } : {}),
     ...(hostedNode?.node.publicS3ProxyUrl ? { publicS3ProxyUrl: hostedNode.node.publicS3ProxyUrl } : {}),
     ...(hostedNode?.node.publicApiProxyUrl ? { publicApiProxyUrl: hostedNode.node.publicApiProxyUrl } : {}),
@@ -2014,6 +2022,13 @@ async function serveForeground(
         );
       },
     });
+  }
+
+  if (quickTunnelFailure) {
+    writeLine(io.stdout, "");
+    writeLine(io.stdout, `  ${pc.yellow("!")} ${pc.bold("Public access is unavailable")}${pc.dim(` (${quickTunnelFailure})`)}`);
+    writeLine(io.stdout, `  ${pc.dim("OpenBucket is still running fully locally.")} Run \`openbucket doctor\` to check cloudflared, or`);
+    writeLine(io.stdout, "  `npx openbucket install` to install/update it automatically.");
   }
 
   printBanner(
