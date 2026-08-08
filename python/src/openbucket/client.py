@@ -188,7 +188,7 @@ class OpenBucketClient:
         token: str,
         *,
         timeout: float = 30.0,
-        user_agent: str = "openbucket-client/0.1.22",
+        user_agent: str = "openbucket-client/0.1.23",
         max_metadata_bytes: int = _DEFAULT_METADATA_LIMIT,
         opener: OpenerDirector | None = None,
     ) -> None:
