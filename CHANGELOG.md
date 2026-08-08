@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.1.23] - 2026-08-08
+
+### Added
+
+- **Zod validation** across auth, control-plane, and support request handling (server-side), plus matching client-side validation on every auth/support form — preserves all existing `ApiError` codes exactly, so nothing that depended on them broke.
+- **Instant client-side auth state.** A non-`HttpOnly` "signed-in hint" cookie, set/cleared in lockstep with the real session cookie, lets the header render its final signed-in/signed-out state on first paint instead of always starting at "loading."
+- **A unified dashboard shell.** The standalone-local dashboard and the hosted account dashboard now share one component tree (`app/dashboard/`) instead of two independently built, visually inconsistent ones. Selecting a node switches views in place — no more full-shell swap.
+- **Real multipart uploads.** New management-API endpoints (`?uploads`, `?uploadId=&partNumber=`, complete/abort) mirror the S3 multipart protocol over the existing bearer-token auth, so the dashboard doesn't need browser-side AWS SigV4 signing. Paired with a client upload engine (XHR for real progress, single PUT under 8MiB / chunked multipart with per-part retry above it), multi-file queueing, and drag-and-drop.
+- **shadcn/ui**, re-themed on a dedicated preset: Breadcrumb (full path including bucket name), a Cmd/Ctrl+K command palette, right-click context menus on bucket object rows, client-side pagination on bucket/object lists, a real chart in the Logs view, Alert/AlertDialog replacing ad hoc error banners and `window.confirm`, and a Settings page with a working light/dark toggle. A mobile-width guard shows a clear "use a bigger screen" message below 768px in both dashboard contexts; the public marketing site remains fully responsive.
+- **A Help/contact ticket kind.** Extends the existing feedback/bug support system with a third kind for general contact requests, a new public `/help` page, and branded HTML confirmation emails sent on every feedback/bug (when an email was given) and help (always) submission — sending never blocks the submission itself, even without SMTP configured.
+- **Landing-page testimonials section** (illustrative placeholder content, explicitly labeled as such) and a **FAQ accordion**.
+- **CLI installer rework.** `install.sh`/`install.ps1` now detect npm vs pnpm and cloudflared, auto-installing cloudflared via the platform's package manager where possible (never required — only the optional public-tunnel feature needs it). New `openbucket install` subcommand, usable via `npx openbucket install` with no prior global install.
+- The CLI banner now prints the `/s3/<routeSlug>` and `/api/<routeSlug>` reverse-proxy URLs for a hosted-connected node, alongside the existing direct-tunnel and hosted-dashboard lines.
+
+### Fixed
+
+- A Docker-build-breaking cross-directory import (dashboard form schemas depended on a `vercel/` file the daemon's standalone image never ships).
+- A CodeQL "incomplete URL substring sanitization" finding in a test assertion.
+- A dependency-review CI failure caused by a build-time-only CLI tool (`shadcn`) being listed in `dependencies` instead of `devDependencies`, pulling a vulnerable transitive dependency into the flagged production graph.
+- A CodeQL "incomplete multi-character sanitization" finding in the plaintext-email helper's single-pass HTML-tag stripping.
+- A Node `DEP0190` security deprecation warning from spawning npm/openbucket's Windows `.cmd` shims with `shell: true` and an unescaped args array.
+- An HTML `pattern` attribute regex that threw in browsers parsing it as a v-flag (Unicode-sets) regex.
+
 ## [0.1.22] - 2026-08-07
 
 ### Added
