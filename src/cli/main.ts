@@ -2928,10 +2928,15 @@ function runChildCapture(
 
 /**
  * npm (and locally-installed CLIs like openbucket) ship as .cmd shims on Windows, which
- * node:child_process cannot exec directly without a shell host. Route through the shell there.
+ * node:child_process cannot exec directly without a shell host. Rather than `shell: true`
+ * (which makes Node build a shell command line by string-joining the args array — the exact
+ * pattern node:child_process's own docs warn is injection-prone, and warns about via
+ * DEP0190), route through `cmd.exe /d /c <command> <args...>` with shell left false: cmd.exe
+ * receives the real argv array from CreateProcess, no naive string-joining involved.
  */
-function needsShellHost(io: CLIIO): boolean {
-  return io.platform === "win32";
+function shimSafeSpawnTarget(io: CLIIO, command: string, args: readonly string[]): { command: string; args: string[] } {
+  if (io.platform !== "win32") return { command, args: [...args] };
+  return { command: "cmd.exe", args: ["/d", "/c", command, ...args] };
 }
 
 /** Compare two dotted version strings. Returns -1, 0, or 1 like Array#sort comparators. */
@@ -2949,7 +2954,8 @@ function compareSemverLike(a: string, b: string): number {
 
 /** Look up the currently-installed global openbucket version, if any (undefined if not installed). */
 async function getInstalledGlobalVersion(io: CLIIO): Promise<string | undefined> {
-  const result = await runChildCapture(io, "openbucket", ["version"], { shell: needsShellHost(io) });
+  const target = shimSafeSpawnTarget(io, "openbucket", ["version"]);
+  const result = await runChildCapture(io, target.command, target.args, { shell: false });
   if (result.code !== 0) return undefined;
   const match = /(\d+\.\d+\.\d+)/.exec(result.stdout);
   return match?.[1];
@@ -2998,9 +3004,10 @@ async function runInstall(parsed: ParsedCLICommand, io: CLIIO): Promise<number> 
     writeLine(io.stdout, "");
     writeLine(io.stdout, `Installing ${target} globally with npm…`);
     const npmResult = await new Promise<{ code: number | null }>((resolveInstall) => {
-      const child = io.spawn("npm", ["install", "--global", "--no-audit", "--no-fund", target], {
+      const spawnTarget = shimSafeSpawnTarget(io, "npm", ["install", "--global", "--no-audit", "--no-fund", target]);
+      const child = io.spawn(spawnTarget.command, spawnTarget.args, {
         stdio: "inherit",
-        shell: needsShellHost(io),
+        shell: false,
         windowsHide: true,
       });
       child.once("error", () => resolveInstall({ code: null }));
