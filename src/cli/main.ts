@@ -33,6 +33,7 @@ import {
   resolveControlPlaneUrl,
   writeHostedSession,
   type HostedSession,
+  type HostedNodeSummary,
   type NodeCredential,
 } from "./auth-session.js";
 import { startQuickTunnel, type QuickTunnelHandle } from "./tunnel.js";
@@ -118,6 +119,8 @@ export interface ActiveDaemonState {
   publicManagementUrl?: string;
   tunnelMode?: "quick" | "managed";
   nodeApiUrl?: string;
+  publicS3ProxyUrl?: string;
+  publicApiProxyUrl?: string;
   root: string;
   node: string;
   token?: string;
@@ -1064,6 +1067,8 @@ function printBanner(
   }
   if (state.publicUrl) line(`  ${label("Public S3")}${pc.cyan(state.publicUrl)}`);
   if (state.publicManagementUrl) line(`  ${label("Public management")}${pc.cyan(state.publicManagementUrl)}`);
+  if (state.publicS3ProxyUrl) line(`  ${label("Public S3 (proxy)")}${pc.cyan(state.publicS3ProxyUrl)}`);
+  if (state.publicApiProxyUrl) line(`  ${label("Public API (proxy)")}${pc.cyan(state.publicApiProxyUrl)}`);
   if (state.nodeApiUrl) line(`  ${label("Hosted dashboard")}${pc.cyan(state.nodeApiUrl)}`);
   if (initialCredentials) {
     line("");
@@ -1486,6 +1491,7 @@ async function stopQuickTunnels(
 interface HostedNodeRuntime {
   session: HostedSession;
   credential: NodeCredential;
+  node: HostedNodeSummary;
 }
 
 function validHostedNode(value: unknown): value is { id: string; name: string } {
@@ -1554,7 +1560,7 @@ async function prepareHostedNode(
     };
   }
   await writeNodeCredential(saved, io.env, io.homedir(), io.pid);
-  return { session, credential: saved };
+  return { session, credential: saved, node: registration.node };
 }
 interface HostedHeartbeatReporter {
   publicEndpointUnavailable(): Promise<void>;
@@ -1917,6 +1923,8 @@ async function serveForeground(
     ...(quickTunnels.get("management")?.url ? { publicManagementUrl: quickTunnels.get("management")!.url } : {}),
     ...(config.quickTunnel ? { tunnelMode: "quick" as const } : {}),
     ...(hostedNode ? { nodeApiUrl: new URL(`/dashboard/nodes/${encodeURIComponent(hostedNode.credential.nodeName)}`, hostedNode.session.controlPlaneUrl).toString() } : {}),
+    ...(hostedNode?.node.publicS3ProxyUrl ? { publicS3ProxyUrl: hostedNode.node.publicS3ProxyUrl } : {}),
+    ...(hostedNode?.node.publicApiProxyUrl ? { publicApiProxyUrl: hostedNode.node.publicApiProxyUrl } : {}),
     root: config.storageRoot,
     node: handle.config.nodeName ?? config.nodeName,
     token: handle.config.adminToken ?? adminToken,

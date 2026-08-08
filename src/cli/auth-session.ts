@@ -36,6 +36,9 @@ export interface HostedNodeSummary {
   id: string;
   name: string;
   status?: string;
+  routeSlug?: string;
+  publicS3ProxyUrl?: string | null;
+  publicApiProxyUrl?: string | null;
   [key: string]: unknown;
 }
 
