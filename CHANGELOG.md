@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.24] - 2026-08-09
+
+### Fixed
+
+- **The public quick tunnel no longer takes the whole daemon down when it can't start.** It's on by default (unless `--offline`/`--no-tunnel`/`--public-url`), but a missing `cloudflared` or a failed handshake previously tore down an already-running daemon and exited `serve` with an error — a machine without cloudflared pre-installed got no daemon at all, not even a working local one. It now prints a clear, actionable warning (`openbucket doctor` / `npx openbucket install`) and keeps serving locally. `tunnelMode` in the persisted state now only reflects an actually-succeeded tunnel, not just a requested one.
+- The startup banner is redesigned into explicit **Local** / **Remote** sections (each listing Dashboard/API/S3), so it's unambiguous at a glance which URLs are local-only vs. actually reachable from the internet.
+
 ## [0.1.23] - 2026-08-08
 
 ### Added
