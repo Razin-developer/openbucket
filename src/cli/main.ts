@@ -77,6 +77,7 @@ export interface ParsedCLICommand {
     | "config"
     | "version"
     | "ui"
+    | "install"
     | "help";
   subcommand?: "create" | "delete" | "revoke" | "setup" | "status" | "update";
   positionals: string[];
@@ -461,6 +462,11 @@ export function parseCLIArgs(argv: readonly string[]): ParsedCLICommand {
       parsed = parseOptions(tail, [], []);
       assertPositionals(command, parsed.positionals, 0);
       return { command, ...parsed, raw } as ParsedCLICommand;
+    }
+    case "install": {
+      parsed = parseOptions(tail, [], ["yes"]);
+      assertPositionals("install [--yes]", parsed.positionals, 0);
+      return { command: "install", ...parsed, raw };
     }
     case "status": {
       parsed = parseOptions(tail, [], ["json"]);
@@ -1101,6 +1107,8 @@ function renderHelp(topic?: string): string {
     config: "Usage: openbucket config",
     version: "Usage: openbucket version",
     ui: "Usage: openbucket ui (beta; also launched by running \"openbucket\" with no command)",
+    install:
+      "Usage: openbucket install [--yes]\n\nInstalls (or updates) the global openbucket npm package to the latest\nversion and runs the equivalent of \"openbucket doctor\" to confirm the\nmachine is ready. Useful as: npx openbucket install",
     help: "Usage: openbucket help [command]",
   };
   if (topic && commandHelp[topic]) return `${commandHelp[topic]}\n`;
@@ -1140,6 +1148,7 @@ S3 credentials
   key revoke ID        Revoke a key
 
 Other
+  install [--yes]      Install/update the global CLI and run doctor (e.g. via "npx openbucket install")
   config               Show client configuration
   version              Show the OpenBucket version
   help [command]       Show help
@@ -2866,6 +2875,156 @@ async function runTunnel(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
   return EXIT_SUCCESS;
 }
 
+interface CapturedChild {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/** Run a child process to completion, capturing its stdout/stderr instead of inheriting them. */
+function runChildCapture(
+  io: CLIIO,
+  command: string,
+  args: readonly string[],
+  options: SpawnOptions = {},
+): Promise<CapturedChild> {
+  return new Promise((resolveChild) => {
+    let child: ChildProcess;
+    try {
+      child = io.spawn(command, args, {
+        shell: false,
+        windowsHide: true,
+        ...options,
+        stdio: ["ignore", "pipe", "pipe"],
+      });
+    } catch (error) {
+      resolveChild({ code: null, stdout: "", stderr: error instanceof Error ? error.message : String(error) });
+      return;
+    }
+    let stdout = "";
+    let stderr = "";
+    child.stdout?.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+    });
+    child.stderr?.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString("utf8");
+    });
+    child.once("error", (error) => {
+      resolveChild({ code: null, stdout, stderr: stderr || (error instanceof Error ? error.message : String(error)) });
+    });
+    child.once("close", (code) => {
+      resolveChild({ code, stdout, stderr });
+    });
+  });
+}
+
+/**
+ * npm (and locally-installed CLIs like openbucket) ship as .cmd shims on Windows, which
+ * node:child_process cannot exec directly without a shell host. Route through the shell there.
+ */
+function needsShellHost(io: CLIIO): boolean {
+  return io.platform === "win32";
+}
+
+/** Compare two dotted version strings. Returns -1, 0, or 1 like Array#sort comparators. */
+function compareSemverLike(a: string, b: string): number {
+  const partsA = a.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const partsB = b.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const length = Math.max(partsA.length, partsB.length);
+  for (let index = 0; index < length; index += 1) {
+    const valueA = partsA[index] ?? 0;
+    const valueB = partsB[index] ?? 0;
+    if (valueA !== valueB) return valueA < valueB ? -1 : 1;
+  }
+  return 0;
+}
+
+/** Look up the currently-installed global openbucket version, if any (undefined if not installed). */
+async function getInstalledGlobalVersion(io: CLIIO): Promise<string | undefined> {
+  const result = await runChildCapture(io, "openbucket", ["version"], { shell: needsShellHost(io) });
+  if (result.code !== 0) return undefined;
+  const match = /(\d+\.\d+\.\d+)/.exec(result.stdout);
+  return match?.[1];
+}
+
+/** Look up the latest version published to the npm registry for the openbucket package. */
+async function getLatestPublishedVersion(io: CLIIO): Promise<string | undefined> {
+  try {
+    const response = await io.fetch("https://registry.npmjs.org/openbucket/latest");
+    if (!response.ok) return undefined;
+    const data = (await response.json()) as { version?: unknown };
+    return typeof data.version === "string" ? data.version : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function runInstall(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
+  writeLine(io.stdout, "");
+  writeLine(io.stdout, `  ${pc.bold("▲ OpenBucket install")}${pc.dim("  ·  global CLI setup")}`);
+  writeLine(io.stdout, "");
+
+  writeLine(io.stdout, "Checking the global openbucket install…");
+  const [installedVersion, latestVersion] = await Promise.all([
+    getInstalledGlobalVersion(io),
+    getLatestPublishedVersion(io),
+  ]);
+
+  if (installedVersion) {
+    writeLine(io.stdout, `  ${pc.green("*")} openbucket ${installedVersion} is installed globally`);
+  } else {
+    writeLine(io.stdout, `  ${pc.yellow("!")} openbucket is not installed globally`);
+  }
+  if (latestVersion) {
+    writeLine(io.stdout, `  ${pc.dim(".")} latest published version is ${latestVersion}`);
+  } else {
+    writeLine(io.stdout, `  ${pc.yellow("!")} could not reach the npm registry to check the latest version`);
+  }
+
+  const needsInstall =
+    !installedVersion || (latestVersion !== undefined && compareSemverLike(installedVersion, latestVersion) < 0);
+
+  let installFailed = false;
+  if (needsInstall) {
+    const target = latestVersion ? `openbucket@${latestVersion}` : "openbucket@latest";
+    writeLine(io.stdout, "");
+    writeLine(io.stdout, `Installing ${target} globally with npm…`);
+    const npmResult = await new Promise<{ code: number | null }>((resolveInstall) => {
+      const child = io.spawn("npm", ["install", "--global", "--no-audit", "--no-fund", target], {
+        stdio: "inherit",
+        shell: needsShellHost(io),
+        windowsHide: true,
+      });
+      child.once("error", () => resolveInstall({ code: null }));
+      child.once("close", (code) => resolveInstall({ code }));
+    });
+    if (npmResult.code !== 0) {
+      installFailed = true;
+      writeLine(io.stderr, "");
+      writeLine(io.stderr, `${pc.red("x")} npm install failed. Install manually with: npm install --global ${target}`);
+    } else {
+      writeLine(io.stdout, `${pc.green("*")} npm install finished`);
+    }
+  } else {
+    writeLine(io.stdout, `${pc.green("*")} openbucket is already up to date`);
+  }
+
+  writeLine(io.stdout, "");
+  writeLine(io.stdout, "Running openbucket doctor…");
+  writeLine(io.stdout, "");
+  const doctorParsed: ParsedCLICommand = { command: "doctor", positionals: [], options: {}, raw: ["doctor"] };
+  const doctorExitCode = await runDoctor(doctorParsed, io);
+
+  writeLine(io.stdout, "");
+  writeLine(io.stdout, `${pc.bold("Next steps")}`);
+  writeLine(io.stdout, `  ${pc.bold("openbucket login --email you@example.com")}`);
+  writeLine(io.stdout, `  ${pc.bold("openbucket serve /path/to/storage --name my-node")}`);
+  writeLine(io.stdout, "");
+
+  if (installFailed) return EXIT_FAILURE;
+  return doctorExitCode;
+}
+
 async function executeCommand(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
   switch (parsed.command) {
     case "serve":
@@ -2906,6 +3065,8 @@ async function executeCommand(parsed: ParsedCLICommand, io: CLIIO): Promise<numb
       return runConfig(io);
     case "ui":
       return runUi(io);
+    case "install":
+      return runInstall(parsed, io);
     case "version":
       writeLine(io.stdout, `openbucket ${await getProductVersion(io)}`);
       return EXIT_SUCCESS;
