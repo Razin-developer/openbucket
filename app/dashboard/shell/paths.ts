@@ -22,7 +22,7 @@ export function nodeViewFromPath(basePath: string, pathname: string): NodeViewId
   return ids.find((id) => id === segment) ?? "overview";
 }
 
-export type AccountViewId = "account-overview" | "nodes" | "usage" | "account" | "settings" | "admin" | "support";
+export type AccountViewId = "account-overview" | "nodes" | "usage" | "settings" | "admin" | "support";
 
 /** Hosted-only: account-level view paths, all rooted at /dashboard. */
 export function accountViewPath(id: AccountViewId): string {
@@ -31,7 +31,7 @@ export function accountViewPath(id: AccountViewId): string {
 
 export function accountViewFromPath(pathname: string): AccountViewId {
   const segment = pathname.replace(/^\/dashboard\/?/, "").split("/")[0] ?? "";
-  const ids: AccountViewId[] = ["nodes", "usage", "account", "settings", "admin", "support"];
+  const ids: AccountViewId[] = ["nodes", "usage", "settings", "admin", "support"];
   return ids.find((id) => id === segment) ?? "account-overview";
 }
 

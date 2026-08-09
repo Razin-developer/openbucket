@@ -17,7 +17,6 @@ import type { NavSection } from "./api/types";
 import { AccountOverviewView } from "./views/account/AccountOverviewView";
 import { NodesView } from "./views/account/NodesView";
 import { UsageView } from "./views/account/UsageView";
-import { AccountProfileView } from "./views/account/AccountProfileView";
 import { AdminView } from "./views/account/AdminView";
 import { SupportView } from "./views/account/SupportView";
 import { NodeOverviewView } from "./views/node/NodeOverviewView";
@@ -191,7 +190,7 @@ function HostedDashboardInner({ user, onLogout }: { user: AccountUser; onLogout:
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => navigate(accountViewPath("account"))}>
+              <DropdownMenuItem onSelect={() => navigate(accountViewPath("account-overview"))}>
                 <UserRound size={14} /> Account overview
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => navigate(accountViewPath("settings"))}>
@@ -218,7 +217,6 @@ function HostedDashboardInner({ user, onLogout }: { user: AccountUser; onLogout:
         {!account.error && account.nodes && account.usage && !selectedNode && accountNavId === "account-overview" ? <AccountOverviewView user={user} nodes={account.nodes} usage={account.usage} onView={(id) => navigate(accountViewPath(id as AccountViewId))} onOpen={openNode} /> : null}
         {!account.error && account.nodes && !selectedNode && accountNavId === "nodes" ? <NodesView user={user} nodes={account.nodes} onOpen={openNode} /> : null}
         {!account.error && account.nodes && account.usage && !selectedNode && accountNavId === "usage" ? <UsageView usage={account.usage} nodes={account.nodes} /> : null}
-        {!account.error && !selectedNode && accountNavId === "account" ? <AccountProfileView user={user} /> : null}
         {!account.error && !selectedNode && accountNavId === "settings" ? <SettingsView context="account" user={user} /> : null}
         {!account.error && !selectedNode && accountNavId === "admin" && user.role === "admin" && account.admin ? <AdminView overview={account.admin} /> : null}
         {!account.error && !selectedNode && accountNavId === "admin" && user.role === "admin" && !account.admin ? <div className="ob-loading" aria-live="polite"><span /><span /><span /><p>Loading authorized overview…</p></div> : null}

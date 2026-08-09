@@ -1,4 +1,4 @@
-import { Activity, Box, Cable, FileKey2, LayoutDashboard, MessageSquare, Network, Settings, ShieldCheck, UserRound } from "lucide-react";
+import { Activity, Box, Cable, FileKey2, LayoutDashboard, MessageSquare, Network, Settings, ShieldCheck } from "lucide-react";
 import type { NavItem } from "../api/types";
 
 export const NODE_NAV_ITEMS: NavItem[] = [
@@ -10,11 +10,12 @@ export const NODE_NAV_ITEMS: NavItem[] = [
   { id: "settings", label: "Settings", icon: Settings },
 ];
 
+// No separate "Account" profile page — its content (name/email/role/user id) is fully covered by
+// the Profile tab on Settings, so a standalone page was pure duplication.
 export const ACCOUNT_NAV_ITEMS: NavItem[] = [
   { id: "account-overview", label: "Overview", icon: LayoutDashboard },
   { id: "nodes", label: "Nodes", icon: Network },
   { id: "usage", label: "Usage", icon: Activity },
-  { id: "account", label: "Account", icon: UserRound },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 

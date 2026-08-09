@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages */
 import { ArrowRight } from "lucide-react";
 import { CopyButton } from "../../components/CopyButton";
 import type { AccountUser } from "../../api/account-api";
