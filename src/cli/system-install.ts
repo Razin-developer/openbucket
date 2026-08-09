@@ -4,7 +4,7 @@
  * shell profile / Windows User PATH, not just the current process's environment) that
  * `scripts/install.sh`/`scripts/install.ps1`'s archive-fallback paths were missing.
  */
-import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { join } from "node:path";

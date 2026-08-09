@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages */
 import { useState, type FormEvent } from "react";
 import { AlertCircle, Check } from "lucide-react";
 import { SiteShell, githubUrl } from "./site-shell";
