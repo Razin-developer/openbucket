@@ -38,7 +38,7 @@ import {
 } from "./auth-session.js";
 import { startQuickTunnel, type QuickTunnelHandle } from "./tunnel.js";
 import {
-  ensureCloudflared, ensureNodeVersion, installOpenBucketGlobally, pickPackageManager, toolVersion,
+  ensureCloudflaredWithConsent, ensureNodeVersion, installOpenBucketGlobally, pickPackageManager, toolVersion,
 } from "./system-install.js";
 import * as prompts from "@clack/prompts";
 import pc from "picocolors";
@@ -3042,7 +3042,7 @@ async function runInstall(parsed: ParsedCLICommand, io: CLIIO): Promise<number> 
 
   writeLine(io.stdout, "");
   writeLine(io.stdout, "Checking cloudflared (optional — used by `openbucket serve --tunnel`)…");
-  const cloudflaredResult = await ensureCloudflared(io);
+  const cloudflaredResult = await ensureCloudflaredWithConsent(io, parsed.options.yes === true);
   writeLine(io.stdout, `  ${cloudflaredResult.ok ? pc.green("*") : pc.yellow("!")} ${cloudflaredResult.detail}`);
 
   writeLine(io.stdout, "");
