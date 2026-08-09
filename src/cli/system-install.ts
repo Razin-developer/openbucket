@@ -4,7 +4,7 @@
  * shell profile / Windows User PATH, not just the current process's environment) that
  * `scripts/install.sh`/`scripts/install.ps1`'s archive-fallback paths were missing.
  */
-import { spawn as nodeSpawn, type ChildProcess } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createWriteStream } from "node:fs";
 import { join } from "node:path";
@@ -289,6 +289,30 @@ export async function ensureCloudflared(io: CLIIO): Promise<{ ok: boolean; detai
     return { ok: true, detail: `${archiveResult.detail}; ${persisted.detail}` };
   }
   return { ok: false, detail: `could not install cloudflared automatically (${archiveResult.detail}). Install it from https://developers.cloudflare.com/tunnel/downloads/ — OpenBucket still works fully locally without it` };
+}
+
+/**
+ * Arrow-key yes/no picker (same @clack/prompts.select widget as pickPackageManager, not the
+ * bracket-style confirm prompt) asked only when cloudflared isn't already on PATH — no point
+ * asking about something that's already there. `--yes`/OPENBUCKET_SKIP_CLOUDFLARED_PROMPT=1 and
+ * non-interactive runs keep the previous default (install it), matching install.sh/install.ps1's
+ * own "attempt automatically" behavior for the optional tunnel dependency.
+ */
+export async function ensureCloudflaredWithConsent(io: CLIIO, skipPrompt: boolean): Promise<{ ok: boolean; detail: string }> {
+  const existing = await toolVersion(io, io.env.OPENBUCKET_CLOUDFLARED_PATH || "cloudflared");
+  if (existing) return { ok: true, detail: `already installed (${existing})` };
+  if (!skipPrompt && io.stdout.isTTY) {
+    const choice = await prompts.select({
+      message: "cloudflared powers the public tunnel (openbucket serve --tunnel). Install it now?",
+      options: [
+        { value: true, label: "Yes", hint: "install cloudflared" },
+        { value: false, label: "No", hint: "skip — the tunnel feature won't be available" },
+      ],
+    });
+    const wantsCloudflared = !prompts.isCancel(choice) && choice === true;
+    if (!wantsCloudflared) return { ok: true, detail: "skipped — run `openbucket install` again later to add it" };
+  }
+  return ensureCloudflared(io);
 }
 
 export type PackageManager = "npm" | "pnpm" | "bun";

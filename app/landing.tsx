@@ -1,4 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
+/* eslint-disable @next/next/no-html-link-for-pages */
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight, Boxes, Check, Coffee, Copy, Database, FileKey2, Gauge,

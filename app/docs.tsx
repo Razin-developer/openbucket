@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Check, Coffee, Copy, ExternalLink, Info, Search, Star, X } from "lucide-react";
 import { SiteShell, buyMeACoffeeUrl, githubUrl } from "./site-shell";
