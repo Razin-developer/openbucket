@@ -27,6 +27,10 @@ export type AccountNode = {
     nodePath: string;
     controlPlaneUrl: string;
     publicS3Url: string | null;
+    /** Reverse-proxied through this hosted domain (openbucket.zydcode.in/api|s3/<routeSlug>) —
+     *  prefer these over the raw tunnel URLs above; they never expose the underlying tunnel host. */
+    publicS3ProxyUrl: string | null;
+    publicApiProxyUrl: string | null;
     managementUrl: string | null;
     dashboardUrl: string | null;
     futureS3Hostname: string;
@@ -126,6 +130,16 @@ export function summarizeFleet(nodes: AccountNode[], usage: UsageSummary): Fleet
   };
 }
 
+/** The management API URL to display/share — always the reverse-proxy URL through this hosted
+ *  domain (never the raw tunnel host) when the node has one; falls back to the raw control-plane
+ *  node path only for a node with no live proxy (e.g. never actually reachable). */
 export function nodeApiUrl(node: AccountNode): string {
+  if (node.endpoint.publicApiProxyUrl) return node.endpoint.publicApiProxyUrl;
   return new URL(node.endpoint.nodePath, node.endpoint.controlPlaneUrl).toString();
+}
+
+/** The S3 URL to display/share — the reverse-proxy URL, or undefined if the node has none
+ *  (offline, or no public S3 endpoint healthy yet). Never the raw tunnel host. */
+export function nodeS3Url(node: AccountNode): string | undefined {
+  return node.endpoint.publicS3ProxyUrl ?? undefined;
 }

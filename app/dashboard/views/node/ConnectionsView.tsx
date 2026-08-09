@@ -4,7 +4,10 @@ import { Tabs, TabsList, TabsTrigger } from "../../../components/ui/tabs";
 import type { NodeViewContext } from "./context";
 
 export function ConnectionsView({ node, onOpenConnectionSettings }: { node: NodeViewContext; onOpenConnectionSettings: () => void }) {
-  const { loadState, keys, displayUrl } = node;
+  const { loadState, keys, displayUrl, s3DisplayUrl } = node;
+  // The snippets are copy-paste templates showing "reference an env var", not "here's your literal
+  // URL" — keep this a static placeholder regardless of s3DisplayUrl; the real value goes in the
+  // "S3 service" card below instead.
   const endpoint = "${OPENBUCKET_S3_ENDPOINT}";
   const accessKey = keys[0]?.accessKeyId ?? "YOUR_ACCESS_KEY";
   const snippets = useMemo(() => ({
@@ -15,6 +18,7 @@ export function ConnectionsView({ node, onOpenConnectionSettings }: { node: Node
   }), [accessKey]);
   const [snippetTab, setSnippetTab] = useState<keyof typeof snippets>("javascript");
   const apiDisplay = displayUrl ?? (typeof window === "undefined" ? "OpenBucket" : window.location.origin);
+  const s3Display = s3DisplayUrl ?? (loadState === "connected" ? "Available" : "Not connected");
 
   return (
     <section>
@@ -25,12 +29,12 @@ export function ConnectionsView({ node, onOpenConnectionSettings }: { node: Node
       <div className="ob-endpoint-grid">
         {[
           ["OpenBucket API", apiDisplay, "Use this OpenBucket URL to manage the node."],
-          ["S3 service", loadState === "connected" ? "Available" : "Not connected", "Provide OPENBUCKET_S3_ENDPOINT to your workload."],
+          ["S3 service", s3Display, "Provide OPENBUCKET_S3_ENDPOINT to your workload."],
           ["File sharing", loadState === "connected" ? "Available" : "Not connected", "Create expiring links from the Buckets page."],
         ].map(([label, value, note]) => (
           <article className="ob-endpoint-card" key={label}>
             <p className="ob-eyebrow">{label}</p>
-            <div className="ob-endpoint-value"><code>{value}</code>{label === "OpenBucket API" ? <CopyButton value={value} /> : null}</div>
+            <div className="ob-endpoint-value"><code>{value}</code>{label === "OpenBucket API" || (label === "S3 service" && s3DisplayUrl) ? <CopyButton value={value} /> : null}</div>
             <p>{note}</p>
           </article>
         ))}
