@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.1.26] - 2026-08-09
+
+### Fixed
+
+- **Ctrl+C could get silently swallowed during `openbucket serve` startup.** The loading spinner (added in 0.1.25) used `@clack/prompts`' `spinner()`, which installs its own process-level SIGINT/SIGTERM handlers while running to cancel itself gracefully — those handlers never call `process.exit()`, so a Ctrl+C that landed while the spinner was still active (e.g. a slow dashboard/tunnel boot) left the daemon running with no way to stop it from the terminal. Replaced with a minimal hand-rolled spinner that only ever touches stdout, and added a "Press Ctrl+C to stop the daemon" hint once startup finishes.
+- **The raw Cloudflare Quick Tunnel URL (`*.trycloudflare.com`) was leaking into the CLI banner and hosted dashboard** instead of the intended `openbucket.zydcode.in/api|s3/<node>` reverse-proxy URL, caused by a field-path bug (`hostedNode.node.publicApiProxyUrl` read as a top-level field when the control plane actually nests it under `.endpoint`). Fixed the field path; the proxy URL is now the only one shown whenever a hosted registration provides one.
+- **The local dashboard could look like it "wasn't connecting."** `useNodeConnection`'s `apiBase` initialized to a hardcoded default port and only corrected itself a tick later via a `setTimeout(0)`-deferred effect, so every single page load fired one guaranteed-to-fail request before recovering. Now resolved synchronously on first render — no more flash of "Daemon not reachable."
+- **Wrong API/S3 URLs on the Connections page.** The local dashboard's "OpenBucket API" field silently fell back to the dashboard's own URL (not the management API's) whenever a launch hint wasn't present — which was always true for the standalone dashboard. "S3 service" never showed a URL at all, just "Available"/"Not connected". Both now show the real, correct values on both dashboards — local ports on localhost, the hosted reverse-proxy URL when hosted, never a raw tunnel host.
+
+### Changed
+
+- Tightened the shared dashboard spacing scale (cascades through nearly every `.ob-*` rule in both the local and hosted dashboards at once) and removed `text-transform: uppercase` from labels/eyebrows/table headers in favor of a heavier font-weight, for a denser, less shouty look. No shadcn component internals were touched.
+
 ## [0.1.25] - 2026-08-09
 
 ### Fixed
