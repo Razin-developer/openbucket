@@ -12,7 +12,7 @@ import { useAccountData } from "./hooks/useAccountData";
 import { useNodeData } from "./hooks/useNodeData";
 import { useObjectBrowser } from "./hooks/useObjectBrowser";
 import { useToasts } from "./hooks/useToasts";
-import { controlPlaneApi, nodeApiUrl, type AccountNode, type AccountUser } from "./api/account-api";
+import { controlPlaneApi, nodeApiUrl, nodeS3Url, type AccountNode, type AccountUser } from "./api/account-api";
 import type { NavSection } from "./api/types";
 import { AccountOverviewView } from "./views/account/AccountOverviewView";
 import { NodesView } from "./views/account/NodesView";
@@ -129,6 +129,7 @@ function HostedDashboardInner({ user, onLogout }: { user: AccountUser; onLogout:
     notify,
     objectBrowser,
     displayUrl: nodeApiUrl(selectedNode),
+    s3DisplayUrl: nodeS3Url(selectedNode),
     onNavigate: (id) => navigate(nodeViewPath(nodeBasePath!, id as NodeViewId)),
     basePath: nodeBasePath ?? "",
   } : null;

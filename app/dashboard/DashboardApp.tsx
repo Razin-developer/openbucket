@@ -73,7 +73,12 @@ function DashboardAppInner({ initialConnection }: { initialConnection?: InitialC
     refresh: data.refresh,
     notify,
     objectBrowser,
-    displayUrl: initialConnection?.displayUrl,
+    // initialConnection.displayUrl is only ever set by a hosted launch hint; for the standalone
+    // local dashboard (the only real caller — see app/[[...slug]]/page.tsx) it's always undefined,
+    // which used to make ConnectionsView fall back to window.location.origin — the DASHBOARD's own
+    // URL, not the management API's. connection.apiBase is the actual, correct local API URL.
+    displayUrl: initialConnection?.displayUrl ?? connection.apiBase,
+    s3DisplayUrl: data.status?.endpoints?.s3,
     onNavigate: (id) => navigate(nodeViewPath("", id as NodeViewId)),
     basePath: "",
   };

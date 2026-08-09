@@ -1075,15 +1075,20 @@ function printBanner(
   if (state.s3Url) line(`  ${label("S3")}${pc.cyan(state.s3Url)}`);
   if (state.dashboardUrl) line(`  ${label("Reopen")}openbucket dashboard`);
 
-  const hasRemote = Boolean(state.nodeApiUrl || state.publicManagementUrl || state.publicApiProxyUrl || state.publicUrl || state.publicS3ProxyUrl);
+  // Prefer the reverse-proxy URL through the hosted domain (openbucket.zydcode.in/api|s3/<node>)
+  // over the raw Cloudflare Quick Tunnel URL whenever a hosted node registration makes one
+  // available — the raw *.trycloudflare.com URL is an implementation detail, not something a
+  // user should ever need to see or share. It's only shown as a fallback when there's no hosted
+  // node (an anonymous/offline tunnel), since then the proxy URL doesn't exist at all.
+  const apiUrl = state.publicApiProxyUrl ?? state.publicManagementUrl;
+  const s3Url = state.publicS3ProxyUrl ?? state.publicUrl;
+  const hasRemote = Boolean(state.nodeApiUrl || apiUrl || s3Url);
   if (hasRemote) {
     line("");
     line(`  ${pc.bold("Remote")}`);
     if (state.nodeApiUrl) line(`  ${label("Dashboard")}${pc.cyan(state.nodeApiUrl)}`);
-    if (state.publicManagementUrl) line(`  ${label("API")}${pc.cyan(state.publicManagementUrl)}`);
-    if (state.publicApiProxyUrl) line(`  ${label("API (proxy)")}${pc.cyan(state.publicApiProxyUrl)}`);
-    if (state.publicUrl) line(`  ${label("S3")}${pc.cyan(state.publicUrl)}`);
-    if (state.publicS3ProxyUrl) line(`  ${label("S3 (proxy)")}${pc.cyan(state.publicS3ProxyUrl)}`);
+    if (apiUrl) line(`  ${label("API")}${pc.cyan(apiUrl)}`);
+    if (s3Url) line(`  ${label("S3")}${pc.cyan(s3Url)}`);
   }
   if (initialCredentials) {
     line("");
@@ -1808,6 +1813,47 @@ async function startHostedHeartbeatReporter(
     },
   };
 }
+interface SimpleSpinner {
+  start(message: string): void;
+  message(message: string): void;
+  stop(message?: string, code?: number): void;
+}
+
+/**
+ * A minimal hand-rolled spinner instead of @clack/prompts' spinner(), which installs its own
+ * process-level SIGINT/SIGTERM handlers while running to cancel itself gracefully — those
+ * handlers don't call process.exit(), so if Ctrl+C landed while the spinner was still active
+ * (e.g. during a slow dashboard/tunnel boot), it silently swallowed the signal and the daemon
+ * kept running with no way to stop it. This one only ever touches stdout.
+ */
+function createSimpleSpinner(io: CLIIO): SimpleSpinner {
+  const frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+  let frameIndex = 0;
+  let text = "";
+  let timer: NodeJS.Timeout | undefined;
+  const clearLine = () => io.stdout.write("\r\x1b[K");
+  return {
+    start(message) {
+      text = message;
+      timer = setInterval(() => {
+        clearLine();
+        io.stdout.write(`${pc.magenta(frames[frameIndex])}  ${text}`);
+        frameIndex = (frameIndex + 1) % frames.length;
+      }, 80);
+      timer.unref?.();
+    },
+    message(message) {
+      text = message;
+    },
+    stop(message, code = 0) {
+      clearInterval(timer);
+      clearLine();
+      const symbol = code === 0 ? pc.green("✓") : pc.red("✗");
+      writeLine(io.stdout, `${symbol}  ${message ?? text}`);
+    },
+  };
+}
+
 async function serveForeground(
   config: ResolvedServeConfig,
   io: CLIIO,
@@ -1819,7 +1865,7 @@ async function serveForeground(
   // A plain loading spinner for the whole "getting ready" window (dashboard boot, daemon boot,
   // tunnel setup) — no intermediate probe/status chatter, just an indicator something is
   // happening, ticking to a green checkmark once serve is actually ready to hand control back.
-  const spinner = io.stdout.isTTY ? prompts.spinner() : undefined;
+  const spinner = io.stdout.isTTY ? createSimpleSpinner(io) : undefined;
   spinner?.start("Starting OpenBucket…");
 
   let hostedHeartbeat: HostedHeartbeatReporter | undefined;
@@ -1950,8 +1996,8 @@ async function serveForeground(
     ...(quickTunnels.get("management")?.url ? { publicManagementUrl: quickTunnels.get("management")!.url } : {}),
     ...(publicUrl ? { tunnelMode: "quick" as const } : {}),
     ...(hostedNode ? { nodeApiUrl: new URL(`/dashboard/nodes/${encodeURIComponent(hostedNode.credential.nodeName)}`, hostedNode.session.controlPlaneUrl).toString() } : {}),
-    ...(hostedNode?.node.publicS3ProxyUrl ? { publicS3ProxyUrl: hostedNode.node.publicS3ProxyUrl } : {}),
-    ...(hostedNode?.node.publicApiProxyUrl ? { publicApiProxyUrl: hostedNode.node.publicApiProxyUrl } : {}),
+    ...(hostedNode?.node.endpoint?.publicS3ProxyUrl ? { publicS3ProxyUrl: hostedNode.node.endpoint.publicS3ProxyUrl } : {}),
+    ...(hostedNode?.node.endpoint?.publicApiProxyUrl ? { publicApiProxyUrl: hostedNode.node.endpoint.publicApiProxyUrl } : {}),
     root: config.storageRoot,
     node: handle.config.nodeName ?? config.nodeName,
     token: handle.config.adminToken ?? adminToken,
@@ -2056,6 +2102,10 @@ async function serveForeground(
       dashboardLaunchUrl(state.dashboardUrl, dashboardApiUrl, state.token) ?? state.dashboardUrl,
       io,
     );
+  }
+  if (!config.internalForeground) {
+    writeLine(io.stdout, "");
+    writeLine(io.stdout, pc.dim(`  Press ${pc.bold("Ctrl+C")} to stop the daemon.`));
   }
 
   const requestShutdown = (): void => {
