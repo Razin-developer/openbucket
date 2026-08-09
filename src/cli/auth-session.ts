@@ -37,8 +37,13 @@ export interface HostedNodeSummary {
   name: string;
   status?: string;
   routeSlug?: string;
-  publicS3ProxyUrl?: string | null;
-  publicApiProxyUrl?: string | null;
+  // The control plane nests these under `endpoint` (see server/control-plane/model.ts's
+  // NodeView.endpoint) — they are NOT top-level fields on the node object itself.
+  endpoint?: {
+    publicS3ProxyUrl?: string | null;
+    publicApiProxyUrl?: string | null;
+    [key: string]: unknown;
+  };
   [key: string]: unknown;
 }
 
