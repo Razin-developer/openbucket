@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.1.25] - 2026-08-09
+
+### Fixed
+
+- **Dashboard navigation is route-based now, in both the local and hosted dashboards.** It was flag-based (`useState`) before, which silently desynced from the browser's address bar on the hosted site (no `popstate` handling) and caused an id collision between the node and account nav arrays — Settings, and any account-section link clicked while a node was open, could route to the wrong destination. The sidebar and the Ctrl+K command palette share one dispatch function, so this affected both. Every nav item's id is now its resolved URL, eliminating the ambiguity; deep links and browser Back/Forward now work correctly everywhere.
+- **Real folder navigation in the bucket browser** (previously only a manual prefix text box, no clickable hierarchy): S3 `delimiter`-based grouping in the daemon, clickable folder rows with a breadcrumb trail in the dashboard, and it's a real deep-linkable URL (`/buckets/<name>/<folder>/...`). Also adds `CommonPrefixes` to the real S3 `ListObjectsV2` XML endpoint for genuine S3-client compatibility, not just the dashboard.
+- **The standalone "Account" page in the hosted dashboard is removed** — its content was a byte-for-byte duplicate of the Profile tab already on Settings.
+
+### Added
+
+- **`openbucket install`/`doctor` now support Node.js, npm, pnpm, bun, and cloudflared detection and installation**, matching `install.sh`/`install.ps1`'s cascade (OS package manager, then a direct download fallback). Auto-detects the invoking package manager via `npx`/`pnpm dlx`/`bunx` (no picker shown); otherwise an arrow-key picker renders all three with live install status. Installing cloudflared is now opt-in via the same arrow-key picker (Yes/No) rather than silent, asked only when it isn't already present.
+- **PATH-persistence fix**: `install.sh`/`install.ps1`'s archive-download fallback paths only exported `PATH` for their own process and printed instructions that were never carried out — they now actually write the install location to the shell profile / Windows User `PATH`.
+- **`openbucket serve` shows a plain loading spinner** through daemon/dashboard/tunnel startup (ticking to a green checkmark once ready, or a failure indicator on error) instead of silent waiting.
+
 ## [0.1.24] - 2026-08-09
 
 ### Fixed
