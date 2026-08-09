@@ -580,6 +580,29 @@ export class DiskStore {
     return results.sort((a, b) => a.key.localeCompare(b.key));
   }
 
+  /**
+   * S3 ListObjectsV2-style delimiter grouping: keys that share a common segment between `prefix`
+   * and the next `delimiter` are collapsed into one `commonPrefixes` entry (a "folder") instead of
+   * being listed individually, mirroring how every S3 console/CLI renders folder hierarchy. Objects
+   * that sit directly under `prefix` (no further delimiter) are returned as-is in `objects`.
+   */
+  async listObjectsGrouped(bucket: string, prefix = "", delimiter = "/"): Promise<{ objects: ObjectRecord[]; commonPrefixes: string[] }> {
+    const flat = await this.listObjects(bucket, prefix);
+    if (!delimiter) return { objects: flat, commonPrefixes: [] };
+    const objects: ObjectRecord[] = [];
+    const commonPrefixes = new Set<string>();
+    for (const object of flat) {
+      const rest = object.key.slice(prefix.length);
+      const boundary = rest.indexOf(delimiter);
+      if (boundary === -1) {
+        objects.push(object);
+      } else {
+        commonPrefixes.add(prefix + rest.slice(0, boundary + delimiter.length));
+      }
+    }
+    return { objects, commonPrefixes: [...commonPrefixes].sort() };
+  }
+
   async statObject(bucket: string, key: string): Promise<ObjectRecord> {
     await this.requireBucket(bucket);
     await this.assertSafeExistingPath(bucket, key);

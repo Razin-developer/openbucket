@@ -1,8 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { LogOut, RefreshCw, Settings as SettingsIcon, UserRound } from "lucide-react";
 import { DashboardShell } from "./shell/DashboardShell";
 import { WorkspaceSwitcher } from "./shell/WorkspaceSwitcher";
 import { ACCOUNT_ADMIN_NAV_ITEMS, ACCOUNT_NAV_ITEMS, NODE_NAV_ITEMS } from "./shell/nav-config";
+import {
+  accountViewFromPath, accountViewPath, hostedNodeBasePath, hostedNodeNameFromPath,
+  nodeViewFromPath, nodeViewPath, type AccountViewId, type NodeViewId,
+} from "./shell/paths";
 import { useAccountData } from "./hooks/useAccountData";
 import { useNodeData } from "./hooks/useNodeData";
 import { useObjectBrowser } from "./hooks/useObjectBrowser";
@@ -31,22 +36,34 @@ import {
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 
-type AccountNavId = "account-overview" | "nodes" | "usage" | "account" | "admin" | "support" | "settings";
-type NodeNavId = "overview" | "buckets" | "keys" | "connections" | "logs" | "settings";
-
-const NODE_NAME_PATH = /^\/dashboard\/nodes\/([a-z0-9][a-z0-9-]{1,47})$/;
-
 /**
  * Hosted account-level dashboard entry. Mounts the exact same DashboardShell/node-views used by
- * the standalone app — selecting a node only swaps activeNavId + the node data hooks, never the
- * shell itself, which is what replaces the old LiveNodeConsole full-page-shell-swap.
+ * the standalone app — selecting a node only swaps the routed content + the node data hooks, never
+ * the shell itself, which is what replaces the old LiveNodeConsole full-page-shell-swap.
+ *
+ * Route-based (react-router-dom): the URL is the single source of truth for both which node (if
+ * any) is selected and which section is active — no separate useState flags to desync from it, and
+ * no popstate handling to hand-roll. This is also what fixes the two previously-reported bugs: every
+ * nav destination is a real, unambiguous path (no id shared between the node and account nav arrays
+ * being checked against the wrong one), and clicking any account-section link while a node is open is
+ * a genuine route change instead of a state update guarded by a stale "no node selected" check.
  */
-export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogout: () => void }) {
+export function HostedDashboard(props: { user: AccountUser; onLogout: () => void }) {
+  return (
+    <BrowserRouter>
+      <HostedDashboardInner {...props} />
+    </BrowserRouter>
+  );
+}
+
+function HostedDashboardInner({ user, onLogout }: { user: AccountUser; onLogout: () => void }) {
   const account = useAccountData(user);
   const { notify } = useToasts();
-  const [selectedNode, setSelectedNode] = useState<AccountNode | null>(null);
-  const [accountNavId, setAccountNavId] = useState<AccountNavId>("account-overview");
-  const [nodeNavId, setNodeNavId] = useState<NodeNavId>("overview");
+  const navigate = useNavigate();
+  const location = useLocation();
+  const nodeName = hostedNodeNameFromPath(location.pathname);
+  const selectedNode = nodeName ? (account.nodes?.find((item) => item.name === nodeName) ?? null) : null;
+  const nodeBasePath = selectedNode ? hostedNodeBasePath(selectedNode.name) : null;
   const [nodeConnection, setNodeConnection] = useState<{ apiBase: string; token: string } | null>(null);
   const [nodeConnectError, setNodeConnectError] = useState("");
   const nodeGeneration = useRef(0);
@@ -68,50 +85,33 @@ export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogou
   const nodeData = useNodeData(nodeConnection?.apiBase ?? "", nodeConnection?.token ?? "", nodeGeneration, Boolean(nodeConnection));
   const objectBrowser = useObjectBrowser(nodeData.apiFetch, nodeConnection?.apiBase ?? "", nodeConnection?.token ?? "", notify);
 
-  // Preserve the old /dashboard/nodes/:name deep-link auto-open, now driving selectedNode instead of `view`.
-  useEffect(() => {
-    if (!account.nodes) return;
-    const match = NODE_NAME_PATH.exec(window.location.pathname);
-    const requested = match?.[1];
-    const node = requested ? account.nodes.find((item) => item.name === requested) : undefined;
-    if (node) {
-      const timer = window.setTimeout(() => { setSelectedNode(node); setNodeNavId("overview"); }, 0);
-      return () => window.clearTimeout(timer);
-    }
-  }, [account.nodes]);
-
-  const openNode = useCallback((node: AccountNode) => {
-    setSelectedNode(node);
-    setNodeNavId("overview");
-    window.history.pushState({}, "", `/dashboard/nodes/${encodeURIComponent(node.name)}`);
-  }, []);
-  const backToAccount = useCallback(() => {
-    setSelectedNode(null);
-    setAccountNavId("account-overview");
-    window.history.pushState({}, "", "/dashboard");
-  }, []);
+  const openNode = (node: AccountNode) => navigate(hostedNodeBasePath(node.name));
+  const backToAccount = () => navigate("/dashboard");
 
   const navSections: NavSection[] = useMemo(() => {
-    const sections: NavSection[] = [{
-      id: "account",
-      label: "Account",
-      items: user.role === "admin" ? [...ACCOUNT_NAV_ITEMS, ...ACCOUNT_ADMIN_NAV_ITEMS] : ACCOUNT_NAV_ITEMS,
-    }];
-    if (selectedNode) sections.push({ id: "node", label: selectedNode.name, items: NODE_NAV_ITEMS });
+    // Every item's id IS its resolved path (not a bare label like "settings"), not just a lookup
+    // key — this is what makes clicks unambiguous. The old bare-id scheme had "settings" defined
+    // in both the account and node nav arrays; a single onNavigate(id) had to guess which one was
+    // meant and got it wrong whenever a node was open (this broke both the sidebar and the Ctrl+K
+    // command palette, which both ultimately just call onNavigate(item.id)).
+    const accountItems = (user.role === "admin" ? [...ACCOUNT_NAV_ITEMS, ...ACCOUNT_ADMIN_NAV_ITEMS] : ACCOUNT_NAV_ITEMS)
+      .map((item) => ({ ...item, id: accountViewPath(item.id as AccountViewId) }));
+    const sections: NavSection[] = [{ id: "account", label: "Account", items: accountItems }];
+    if (selectedNode && nodeBasePath) {
+      const nodeItems = NODE_NAV_ITEMS.map((item) => ({ ...item, id: nodeViewPath(nodeBasePath, item.id as NodeViewId) }));
+      sections.push({ id: "node", label: selectedNode.name, items: nodeItems });
+    }
     return sections;
-  }, [selectedNode, user.role]);
+  }, [selectedNode, nodeBasePath, user.role]);
 
-  const activeNavId = selectedNode ? nodeNavId : accountNavId;
+  const nodeNavId: NodeViewId = nodeBasePath ? nodeViewFromPath(nodeBasePath, location.pathname) : "overview";
+  const accountNavId: AccountViewId = accountViewFromPath(location.pathname);
+  // Matches navSections' item ids above (full paths), so Sidebar's `activeNavId === item.id`
+  // highlight and the command palette both resolve to the exact same, unambiguous destination.
+  const activeNavId = selectedNode && nodeBasePath ? nodeViewPath(nodeBasePath, nodeNavId) : accountViewPath(accountNavId);
 
   function onNavigate(id: string) {
-    if ((NODE_NAV_ITEMS as { id: string }[]).some((item) => item.id === id)) {
-      if (!selectedNode) return;
-      setNodeNavId(id as NodeNavId);
-    } else {
-      setAccountNavId(id as AccountNavId);
-      // Leaving the node section back to account nav intentionally keeps selectedNode so the
-      // node tab stays available; explicit "back" (openNode's counterpart) is backToAccount().
-    }
+    navigate(id);
   }
 
   const nodeView: NodeViewContext | null = selectedNode ? {
@@ -130,7 +130,8 @@ export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogou
     notify,
     objectBrowser,
     displayUrl: nodeApiUrl(selectedNode),
-    onNavigate: (id) => setNodeNavId(id as NodeNavId),
+    onNavigate: (id) => navigate(nodeViewPath(nodeBasePath!, id as NodeViewId)),
+    basePath: nodeBasePath ?? "",
   } : null;
 
   const breadcrumbLabel = selectedNode
@@ -140,8 +141,8 @@ export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogou
   const inBucketObjectList = selectedNode && nodeNavId === "buckets" && objectBrowser.selectedBucket;
   const breadcrumbs = [
     { label: "Home", onClick: selectedNode ? backToAccount : undefined },
-    ...(selectedNode ? [{ label: selectedNode.name, onClick: inBucketObjectList ? () => { objectBrowser.setSelectedBucket(null); objectBrowser.setObjects([]); setNodeNavId("buckets"); } : undefined }] : []),
-    { label: breadcrumbLabel ?? "", onClick: inBucketObjectList ? () => { objectBrowser.setSelectedBucket(null); objectBrowser.setObjects([]); } : undefined },
+    ...(selectedNode ? [{ label: selectedNode.name, onClick: inBucketObjectList ? () => navigate(nodeViewPath(nodeBasePath!, "buckets")) : undefined }] : []),
+    { label: breadcrumbLabel ?? "", onClick: inBucketObjectList ? () => navigate(nodeViewPath(nodeBasePath!, "buckets")) : undefined },
     ...(inBucketObjectList ? [{ label: objectBrowser.selectedBucket! }] : []),
   ];
 
@@ -190,10 +191,10 @@ export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogou
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem onSelect={() => { setSelectedNode(null); setAccountNavId("account"); }}>
+              <DropdownMenuItem onSelect={() => navigate(accountViewPath("account"))}>
                 <UserRound size={14} /> Account overview
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => { setSelectedNode(null); setAccountNavId("settings"); }}>
+              <DropdownMenuItem onSelect={() => navigate(accountViewPath("settings"))}>
                 <SettingsIcon size={14} /> Settings
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -214,7 +215,7 @@ export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogou
           </Alert>
         ) : null}
         {!account.error && (!account.nodes || !account.usage) ? <div className="ob-loading" aria-live="polite"><span /><span /><span /><p>Loading account data…</p></div> : null}
-        {!account.error && account.nodes && account.usage && !selectedNode && accountNavId === "account-overview" ? <AccountOverviewView user={user} nodes={account.nodes} usage={account.usage} onView={(id) => setAccountNavId(id as AccountNavId)} onOpen={openNode} /> : null}
+        {!account.error && account.nodes && account.usage && !selectedNode && accountNavId === "account-overview" ? <AccountOverviewView user={user} nodes={account.nodes} usage={account.usage} onView={(id) => navigate(accountViewPath(id as AccountViewId))} onOpen={openNode} /> : null}
         {!account.error && account.nodes && !selectedNode && accountNavId === "nodes" ? <NodesView user={user} nodes={account.nodes} onOpen={openNode} /> : null}
         {!account.error && account.nodes && account.usage && !selectedNode && accountNavId === "usage" ? <UsageView usage={account.usage} nodes={account.nodes} /> : null}
         {!account.error && !selectedNode && accountNavId === "account" ? <AccountProfileView user={user} /> : null}
@@ -223,16 +224,21 @@ export function HostedDashboard({ user, onLogout }: { user: AccountUser; onLogou
         {!account.error && !selectedNode && accountNavId === "admin" && user.role === "admin" && !account.admin ? <div className="ob-loading" aria-live="polite"><span /><span /><span /><p>Loading authorized overview…</p></div> : null}
         {!account.error && !selectedNode && accountNavId === "support" && user.role === "admin" ? <SupportView /> : null}
 
-        {selectedNode && nodeView ? (
+        {selectedNode && nodeView && nodeBasePath ? (
           nodeConnection ? (
-            <>
-              {nodeNavId === "overview" ? <NodeOverviewView node={nodeView} onOpenConnectionSettings={() => {}} /> : null}
-              {nodeNavId === "buckets" ? <BucketsView node={nodeView} /> : null}
-              {nodeNavId === "keys" ? <KeysView node={nodeView} /> : null}
-              {nodeNavId === "connections" ? <ConnectionsView node={nodeView} onOpenConnectionSettings={() => {}} /> : null}
-              {nodeNavId === "logs" ? <LogsView node={nodeView} /> : null}
-              {nodeNavId === "settings" ? <SettingsView context="node" node={nodeView} onOpenConnectionSettings={() => {}} /> : null}
-            </>
+            // Real <Routes> here (not the bare nodeNavId conditional the account views above use)
+            // because BucketsView needs router-matched :bucket/* params for folder drill-down —
+            // paths are built from the already-resolved nodeBasePath string, not a :nodeName param.
+            <Routes>
+              <Route path={nodeBasePath} element={<NodeOverviewView node={nodeView} onOpenConnectionSettings={() => {}} />} />
+              <Route path={`${nodeBasePath}/buckets`} element={<BucketsView node={nodeView} />} />
+              <Route path={`${nodeBasePath}/buckets/:bucket/*`} element={<BucketsView node={nodeView} />} />
+              <Route path={`${nodeBasePath}/keys`} element={<KeysView node={nodeView} />} />
+              <Route path={`${nodeBasePath}/connections`} element={<ConnectionsView node={nodeView} onOpenConnectionSettings={() => {}} />} />
+              <Route path={`${nodeBasePath}/logs`} element={<LogsView node={nodeView} />} />
+              <Route path={`${nodeBasePath}/settings`} element={<SettingsView context="node" node={nodeView} onOpenConnectionSettings={() => {}} />} />
+              <Route path="*" element={<NodeOverviewView node={nodeView} onOpenConnectionSettings={() => {}} />} />
+            </Routes>
           ) : (
             <div className="ob-loading" aria-live="polite"><span /><span /><span /><p>{nodeConnectError || `Connecting securely to ${selectedNode.name}…`}</p></div>
           )

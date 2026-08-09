@@ -37,6 +37,9 @@ import {
   type NodeCredential,
 } from "./auth-session.js";
 import { startQuickTunnel, type QuickTunnelHandle } from "./tunnel.js";
+import {
+  ensureCloudflared, ensureNodeVersion, installOpenBucketGlobally, pickPackageManager, toolVersion,
+} from "./system-install.js";
 import * as prompts from "@clack/prompts";
 import pc from "picocolors";
 import chalk from "chalk";
@@ -467,8 +470,8 @@ export function parseCLIArgs(argv: readonly string[]): ParsedCLICommand {
       return { command, ...parsed, raw } as ParsedCLICommand;
     }
     case "install": {
-      parsed = parseOptions(tail, [], ["yes"]);
-      assertPositionals("install [--yes]", parsed.positionals, 0);
+      parsed = parseOptions(tail, ["package-manager"], ["yes"]);
+      assertPositionals("install [--yes] [--package-manager npm|pnpm]", parsed.positionals, 0);
       return { command: "install", ...parsed, raw };
     }
     case "status": {
@@ -1119,7 +1122,7 @@ function renderHelp(topic?: string): string {
     version: "Usage: openbucket version",
     ui: "Usage: openbucket ui (beta; also launched by running \"openbucket\" with no command)",
     install:
-      "Usage: openbucket install [--yes]\n\nInstalls (or updates) the global openbucket npm package to the latest\nversion and runs the equivalent of \"openbucket doctor\" to confirm the\nmachine is ready. Useful as: npx openbucket install",
+      "Usage: openbucket install [--yes] [--package-manager npm|pnpm]\n\nEnsures Node.js meets the minimum version, installs (or updates) the global\nopenbucket package with npm or pnpm, and installs cloudflared if it's\nmissing (all with the same OS-package-manager-then-direct-download fallback\nas install.sh/install.ps1). Useful as: npx openbucket install",
     help: "Usage: openbucket help [command]",
   };
   if (topic && commandHelp[topic]) return `${commandHelp[topic]}\n`;
@@ -1159,7 +1162,7 @@ S3 credentials
   key revoke ID        Revoke a key
 
 Other
-  install [--yes]      Install/update the global CLI and run doctor (e.g. via "npx openbucket install")
+  install [--yes]      Install/update Node.js, npm or pnpm, cloudflared, and the global CLI (e.g. via "npx openbucket install")
   config               Show client configuration
   version              Show the OpenBucket version
   help [command]       Show help
@@ -1813,6 +1816,12 @@ async function serveForeground(
   await ensureStorageDirectory(config.storageRoot);
   await ensureNoRunningDaemon(io);
 
+  // A plain loading spinner for the whole "getting ready" window (dashboard boot, daemon boot,
+  // tunnel setup) — no intermediate probe/status chatter, just an indicator something is
+  // happening, ticking to a green checkmark once serve is actually ready to hand control back.
+  const spinner = io.stdout.isTTY ? prompts.spinner() : undefined;
+  spinner?.start("Starting OpenBucket…");
+
   let hostedHeartbeat: HostedHeartbeatReporter | undefined;
   let dashboardHandle: DashboardServerHandle | undefined;
   let effectiveDashboardUrl = config.dashboardUrl;
@@ -1883,6 +1892,7 @@ async function serveForeground(
       beforeStop: async () => { await hostedHeartbeat?.stop(); },
     });
   } catch (error) {
+    spinner?.stop("OpenBucket failed to start", 1);
     await dashboardHandle?.stop().catch(() => undefined);
     throw error;
   }
@@ -1894,7 +1904,7 @@ async function serveForeground(
 
   let quickTunnelFailure: string | undefined;
   if (config.quickTunnel) {
-    writeLine(io.stdout, "Preparing secure OpenBucket access…");
+    spinner?.message("Preparing secure OpenBucket access…");
     const surfaces: Array<{ surface: QuickTunnelSurface; origin: string }> = [
       {
         surface: "s3",
@@ -1962,6 +1972,7 @@ async function serveForeground(
       );
     }
   } catch (error) {
+    spinner?.stop("OpenBucket failed to start", 1);
     shutdownStarted = true;
     await stopQuickTunnels(quickTunnels);
     await handle.stop();
@@ -2023,6 +2034,8 @@ async function serveForeground(
       },
     });
   }
+
+  spinner?.stop("OpenBucket is ready");
 
   if (quickTunnelFailure) {
     writeLine(io.stdout, "");
@@ -2742,6 +2755,31 @@ async function runDoctor(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {
         : `v${nodeVersion}; OpenBucket requires Node.js 22.13 or newer`,
   });
 
+  const npmVersion = await toolVersion(io, "npm");
+  checks.push({
+    name: "npm",
+    status: npmVersion ? "pass" : "fail",
+    detail: npmVersion ?? "not found on PATH; required to install and update openbucket",
+  });
+  const pnpmVersion = await toolVersion(io, "pnpm");
+  checks.push({
+    name: "pnpm",
+    status: pnpmVersion ? "pass" : "warn",
+    detail: pnpmVersion ?? "not found on PATH (optional alternative to npm)",
+  });
+  const bunVersion = await toolVersion(io, "bun");
+  checks.push({
+    name: "bun",
+    status: bunVersion ? "pass" : "warn",
+    detail: bunVersion ?? "not found on PATH (optional alternative to npm)",
+  });
+  const cloudflaredVersion = await toolVersion(io, io.env.OPENBUCKET_CLOUDFLARED_PATH || "cloudflared");
+  checks.push({
+    name: "cloudflared",
+    status: cloudflaredVersion ? "pass" : "warn",
+    detail: cloudflaredVersion ?? "not found on PATH (optional — only required for `openbucket serve --tunnel`; run `openbucket install` to add it)",
+  });
+
   const active = await readActiveState(io.env, io.homedir());
   const directory = resolve(
     io.cwd(),
@@ -2993,6 +3031,28 @@ async function runInstall(parsed: ParsedCLICommand, io: CLIIO): Promise<number> 
   writeLine(io.stdout, `  ${pc.bold("▲ OpenBucket install")}${pc.dim("  ·  global CLI setup")}`);
   writeLine(io.stdout, "");
 
+  writeLine(io.stdout, "Checking Node.js…");
+  const nodeResult = await ensureNodeVersion(io, supportsCurrentNode);
+  writeLine(io.stdout, `  ${nodeResult.ok ? pc.green("*") : pc.red("x")} ${nodeResult.detail}`);
+  if (!nodeResult.ok) {
+    writeLine(io.stderr, "");
+    writeLine(io.stderr, `${pc.red("x")} Could not prepare Node.js — install Node.js 22.13+ yourself, then re-run \`openbucket install\`.`);
+    return EXIT_FAILURE;
+  }
+
+  writeLine(io.stdout, "");
+  writeLine(io.stdout, "Checking cloudflared (optional — used by `openbucket serve --tunnel`)…");
+  const cloudflaredResult = await ensureCloudflared(io);
+  writeLine(io.stdout, `  ${cloudflaredResult.ok ? pc.green("*") : pc.yellow("!")} ${cloudflaredResult.detail}`);
+
+  writeLine(io.stdout, "");
+  const packageManager = await pickPackageManager(
+    io,
+    typeof parsed.options.packageManager === "string" ? parsed.options.packageManager : undefined,
+  );
+  writeLine(io.stdout, `  ${pc.dim(".")} using ${packageManager} to install openbucket`);
+
+  writeLine(io.stdout, "");
   writeLine(io.stdout, "Checking the global openbucket install…");
   const [installedVersion, latestVersion] = await Promise.all([
     getInstalledGlobalVersion(io),
@@ -3017,42 +3077,39 @@ async function runInstall(parsed: ParsedCLICommand, io: CLIIO): Promise<number> 
   if (needsInstall) {
     const target = latestVersion ? `openbucket@${latestVersion}` : "openbucket@latest";
     writeLine(io.stdout, "");
-    writeLine(io.stdout, `Installing ${target} globally with npm…`);
-    const npmResult = await new Promise<{ code: number | null }>((resolveInstall) => {
-      const spawnTarget = shimSafeSpawnTarget(io, "npm", ["install", "--global", "--no-audit", "--no-fund", target]);
-      const child = io.spawn(spawnTarget.command, spawnTarget.args, {
-        stdio: "inherit",
-        shell: false,
-        windowsHide: true,
-      });
-      child.once("error", () => resolveInstall({ code: null }));
-      child.once("close", (code) => resolveInstall({ code }));
-    });
-    if (npmResult.code !== 0) {
+    writeLine(io.stdout, `Installing ${target} globally with ${packageManager}…`);
+    const exitCode = await installOpenBucketGlobally(io, packageManager, target);
+    if (exitCode !== 0) {
       installFailed = true;
       writeLine(io.stderr, "");
-      writeLine(io.stderr, `${pc.red("x")} npm install failed. Install manually with: npm install --global ${target}`);
+      writeLine(io.stderr, `${pc.red("x")} ${packageManager} install failed. Install manually with: ${packageManager === "pnpm" ? "pnpm add --global" : "npm install --global"} ${target}`);
     } else {
-      writeLine(io.stdout, `${pc.green("*")} npm install finished`);
+      writeLine(io.stdout, `${pc.green("*")} ${packageManager} install finished`);
     }
   } else {
     writeLine(io.stdout, `${pc.green("*")} openbucket is already up to date`);
   }
 
   writeLine(io.stdout, "");
-  writeLine(io.stdout, "Running openbucket doctor…");
-  writeLine(io.stdout, "");
-  const doctorParsed: ParsedCLICommand = { command: "doctor", positionals: [], options: {}, raw: ["doctor"] };
-  const doctorExitCode = await runDoctor(doctorParsed, io);
-
-  writeLine(io.stdout, "");
   writeLine(io.stdout, `${pc.bold("Next steps")}`);
   writeLine(io.stdout, `  ${pc.bold("openbucket login --email you@example.com")}`);
   writeLine(io.stdout, `  ${pc.bold("openbucket serve /path/to/storage --name my-node")}`);
+  if (cloudflaredResult.ok) {
+    writeLine(io.stdout, "");
+    writeLine(io.stdout, `${pc.bold("Optional: a permanent Cloudflare tunnel")}`);
+    writeLine(io.stdout, "`openbucket serve --tunnel` already publishes a free, no-login Quick Tunnel automatically.");
+    writeLine(io.stdout, "For a stable URL on your own domain instead, set up a named tunnel once via your Cloudflare account:");
+    writeLine(io.stdout, `  ${pc.bold("cloudflared tunnel login")}`);
+    writeLine(io.stdout, "    Opens a browser to sign in to your Cloudflare account and saves a certificate on this machine that authorizes it to create tunnels.");
+    writeLine(io.stdout, `  ${pc.bold("cloudflared tunnel create openbucket")}`);
+    writeLine(io.stdout, "    Creates a named tunnel under your account and stores its credentials (a JSON file + UUID) locally.");
+    writeLine(io.stdout, `  ${pc.bold("cloudflared tunnel route dns openbucket <subdomain>.yourdomain.com")}`);
+    writeLine(io.stdout, "    Adds a DNS record in a Cloudflare-managed zone for that domain, pointing it at the tunnel.");
+    writeLine(io.stdout, pc.dim("  Note: `openbucket serve` doesn't run against a named tunnel yet — this sets up the Cloudflare-side account and DNS pieces only."));
+  }
   writeLine(io.stdout, "");
 
-  if (installFailed) return EXIT_FAILURE;
-  return doctorExitCode;
+  return installFailed ? EXIT_FAILURE : EXIT_SUCCESS;
 }
 
 async function executeCommand(parsed: ParsedCLICommand, io: CLIIO): Promise<number> {

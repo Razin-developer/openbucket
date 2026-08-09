@@ -1,11 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
+import { BrowserRouter, Route, Routes, StaticRouter, useLocation, useNavigate } from "react-router-dom";
 import { ExternalLink, RefreshCw } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../components/ui/tooltip";
 import { DashboardShell } from "./shell/DashboardShell";
 import { WorkspaceSwitcher } from "./shell/WorkspaceSwitcher";
 import { NODE_NAV_ITEMS } from "./shell/nav-config";
+import { nodeViewFromPath, nodeViewPath, type NodeViewId } from "./shell/paths";
 import { useNodeConnection, type InitialConnectionHint } from "./hooks/useNodeConnection";
 import { useNodeData } from "./hooks/useNodeData";
 import { useObjectBrowser } from "./hooks/useObjectBrowser";
@@ -19,14 +21,35 @@ import { LogsView } from "./views/node/LogsView";
 import { SettingsView } from "./views/settings/SettingsView";
 import type { NodeViewContext } from "./views/node/context";
 
-type NodeViewId = "overview" | "buckets" | "keys" | "connections" | "logs" | "settings";
-
 /**
  * Standalone local dashboard entry — served both by the daemon itself and by the Vercel static
- * build at app/page.tsx. Owns local connection bootstrap (URL params / localStorage / sessionStorage).
+ * build at app/[[...slug]]/page.tsx. Owns local connection bootstrap (URL params / localStorage / sessionStorage).
+ * Route-based (react-router-dom BrowserRouter): each section is a real, deep-linkable URL, served
+ * for every path via the vinext optional catch-all at app/[[...slug]]/page.tsx.
  */
-export function DashboardApp({ initialConnection }: { initialConnection?: InitialConnectionHint } = {}) {
-  const [activeNavId, setActiveNavId] = useState<NodeViewId>("overview");
+export function DashboardApp(props: { initialConnection?: InitialConnectionHint } = {}) {
+  return (
+    <IsomorphicRouter>
+      <DashboardAppInner {...props} />
+    </IsomorphicRouter>
+  );
+}
+
+/**
+ * BrowserRouter calls createBrowserHistory(), which touches `document` — fine in the browser, but
+ * this component is still server-rendered once for the initial HTML shell (vinext SSRs "use client"
+ * components too). StaticRouter renders the same tree without touching any DOM global; the client
+ * then hydrates into a real BrowserRouter and takes over from the actual URL.
+ */
+function IsomorphicRouter({ children }: { children: ReactNode }) {
+  if (typeof document === "undefined") return <StaticRouter location="/">{children}</StaticRouter>;
+  return <BrowserRouter>{children}</BrowserRouter>;
+}
+
+function DashboardAppInner({ initialConnection }: { initialConnection?: InitialConnectionHint }) {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const activeNavId: NodeViewId = nodeViewFromPath("", location.pathname);
   const [connectionOpen, setConnectionOpen] = useState(false);
   const { notify } = useToasts();
   const connection = useNodeConnection(initialConnection);
@@ -51,7 +74,8 @@ export function DashboardApp({ initialConnection }: { initialConnection?: Initia
     notify,
     objectBrowser,
     displayUrl: initialConnection?.displayUrl,
-    onNavigate: (id) => setActiveNavId(id as NodeViewId),
+    onNavigate: (id) => navigate(nodeViewPath("", id as NodeViewId)),
+    basePath: "",
   };
 
   function saveConnection(nextApi: string, nextToken: string) {
@@ -70,7 +94,7 @@ export function DashboardApp({ initialConnection }: { initialConnection?: Initia
       <DashboardShell
         navSections={[{ id: "node", items: NODE_NAV_ITEMS }]}
         activeNavId={activeNavId}
-        onNavigate={(id) => setActiveNavId(id as NodeViewId)}
+        onNavigate={(id) => navigate(nodeViewPath("", id as NodeViewId))}
         workspaceSwitcher={
           <WorkspaceSwitcher
             statusDot={data.loadState === "connected" ? "online" : "offline"}
@@ -81,7 +105,7 @@ export function DashboardApp({ initialConnection }: { initialConnection?: Initia
         }
         breadcrumbs={[
           { label: data.status?.nodeName ?? "OpenBucket" },
-          { label: NODE_NAV_ITEMS.find((item) => item.id === activeNavId)?.label ?? "", onClick: activeNavId === "buckets" && objectBrowser.selectedBucket ? () => { objectBrowser.setSelectedBucket(null); objectBrowser.setObjects([]); } : undefined },
+          { label: NODE_NAV_ITEMS.find((item) => item.id === activeNavId)?.label ?? "", onClick: activeNavId === "buckets" && objectBrowser.selectedBucket ? () => navigate(nodeViewPath("", "buckets")) : undefined },
           ...(activeNavId === "buckets" && objectBrowser.selectedBucket ? [{ label: objectBrowser.selectedBucket }] : []),
         ]}
         topbarActions={<>
@@ -95,12 +119,16 @@ export function DashboardApp({ initialConnection }: { initialConnection?: Initia
           <a className="ob-docs-link" href={docsUrl} target="_blank" rel="noreferrer">Docs <ExternalLink size={13} /></a>
         </>}
       >
-        {activeNavId === "overview" ? <NodeOverviewView node={nodeView} onOpenConnectionSettings={() => setConnectionOpen(true)} /> : null}
-        {activeNavId === "buckets" ? <BucketsView node={nodeView} /> : null}
-        {activeNavId === "keys" ? <KeysView node={nodeView} /> : null}
-        {activeNavId === "connections" ? <ConnectionsView node={nodeView} onOpenConnectionSettings={() => setConnectionOpen(true)} /> : null}
-        {activeNavId === "logs" ? <LogsView node={nodeView} /> : null}
-        {activeNavId === "settings" ? <SettingsView context="node" node={nodeView} onOpenConnectionSettings={() => setConnectionOpen(true)} /> : null}
+        <Routes>
+          <Route path="/" element={<NodeOverviewView node={nodeView} onOpenConnectionSettings={() => setConnectionOpen(true)} />} />
+          <Route path="/buckets" element={<BucketsView node={nodeView} />} />
+          <Route path="/buckets/:bucket/*" element={<BucketsView node={nodeView} />} />
+          <Route path="/keys" element={<KeysView node={nodeView} />} />
+          <Route path="/connections" element={<ConnectionsView node={nodeView} onOpenConnectionSettings={() => setConnectionOpen(true)} />} />
+          <Route path="/logs" element={<LogsView node={nodeView} />} />
+          <Route path="/settings" element={<SettingsView context="node" node={nodeView} onOpenConnectionSettings={() => setConnectionOpen(true)} />} />
+          <Route path="*" element={<NodeOverviewView node={nodeView} onOpenConnectionSettings={() => setConnectionOpen(true)} />} />
+        </Routes>
       </DashboardShell>
       {connectionOpen ? <ConnectionModal apiBase={connection.apiBase} adminToken={connection.adminToken} onSave={saveConnection} onClose={() => setConnectionOpen(false)} /> : null}
     </>

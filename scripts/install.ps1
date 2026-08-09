@@ -5,7 +5,7 @@ param(
   [string]$Prefix,
   [int]$TimeoutSeconds,
   [switch]$SkipNodeInstall,
-  [ValidateSet("npm", "pnpm")]
+  [ValidateSet("npm", "pnpm", "bun")]
   [string]$PackageManager,
   [switch]$Help
 )
@@ -78,6 +78,27 @@ function Write-Info([string]$Message) { Write-Host "  . $Message" -ForegroundCol
 function Write-Warn2([string]$Message) { Write-Host "  ! $Message" -ForegroundColor Yellow }
 function Write-Fail([string]$Message) { Write-Host "  x $Message" -ForegroundColor Red }
 
+# Actually persists $Directory to the current user's PATH (idempotent - safe to call on every
+# run), instead of only setting $env:Path for this script's own process and printing instructions
+# that were never carried out. No admin rights required (User scope, not Machine).
+function Persist-PathEntry([string]$Directory) {
+  try {
+    $current = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($null -eq $current) { $current = "" }
+    if (($current -split ";") -contains $Directory) {
+      Write-Info "$Directory is already in your User PATH"
+      return
+    }
+    $updated = "$current;$Directory"
+    if ($current -eq "") { $updated = $Directory }
+    [Environment]::SetEnvironmentVariable("Path", $updated, "User")
+    Write-Ok "Added $Directory to your User PATH - open a new shell to pick it up"
+  } catch {
+    Write-Warn2 "Could not update the persistent PATH automatically - add this directory to your PATH yourself:"
+    Write-Info "  $Directory"
+  }
+}
+
 Write-Host "OpenBucket installer" -ForegroundColor Magenta
 Write-Host "Turns a local folder into an S3-compatible endpoint." -ForegroundColor DarkGray
 
@@ -144,9 +165,8 @@ function Install-NodeFromOfficialArchive {
   Remove-Item -Force $zipPath -ErrorAction SilentlyContinue
 
   $env:Path = "$targetDir;$env:Path"
-  Write-Ok "Node.js v$NodeDistVersion is ready for this session at $targetDir"
-  Write-Info "To keep using it in new shells, add this to your PowerShell profile:"
-  Write-Info "  `$env:Path = `"$targetDir;`$env:Path`""
+  Write-Ok "Node.js v$NodeDistVersion is ready at $targetDir"
+  Persist-PathEntry $targetDir
   return $true
 }
 
@@ -239,24 +259,56 @@ Write-Step "Preparing the OpenBucket package"
 
 $hasNpm = [bool](Get-Command npm -ErrorAction SilentlyContinue)
 $hasPnpm = [bool](Get-Command pnpm -ErrorAction SilentlyContinue)
+$hasBun = [bool](Get-Command bun -ErrorAction SilentlyContinue)
 
+# If this script was itself fetched/run via `npm exec`/`pnpm dlx`/`bunx`, npm/pnpm/bun set
+# $env:npm_config_user_agent on the child process - that already tells us which package manager
+# the user chose, so there is nothing to ask.
+$invokingPm = ""
+if ($env:npm_config_user_agent) {
+  if ($env:npm_config_user_agent -like "npm/*") { $invokingPm = "npm" }
+  elseif ($env:npm_config_user_agent -like "pnpm/*") { $invokingPm = "pnpm" }
+  elseif ($env:npm_config_user_agent -like "bun/*") { $invokingPm = "bun" }
+}
+
+$availableCount = @($hasNpm, $hasPnpm, $hasBun | Where-Object { $_ }).Count
 if ($PackageManager) {
   Write-Info "Using package manager: $PackageManager (from -PackageManager/OPENBUCKET_PACKAGE_MANAGER)"
-} elseif ($hasNpm -and $hasPnpm) {
+} elseif ($invokingPm) {
+  $PackageManager = $invokingPm
+  Write-Info "Using $PackageManager (this is how the installer was invoked)"
+} elseif ($availableCount -gt 1) {
   if (-not [System.Console]::IsInputRedirected -and -not [System.Console]::IsOutputRedirected) {
-    $pmChoice = Read-Host "Both npm and pnpm are available. Which should install openbucket? [npm/pnpm] (default: npm)"
-    if ($pmChoice -eq "pnpm") { $PackageManager = "pnpm" } else { $PackageManager = "npm" }
+    $npmLabel = if ($hasNpm) { "npm (installed)" } else { "npm" }
+    $pnpmLabel = if ($hasPnpm) { "pnpm (installed)" } else { "pnpm" }
+    $bunLabel = if ($hasBun) { "bun (installed)" } else { "bun" }
+    Write-Host "  Which package manager should install openbucket?"
+    Write-Host "      1) $npmLabel"
+    Write-Host "      2) $pnpmLabel"
+    Write-Host "      3) $bunLabel"
+    $pmChoice = Read-Host "  Choice [1/2/3] (default: 1)"
+    if ($pmChoice -eq "2") { $PackageManager = "pnpm" }
+    elseif ($pmChoice -eq "3") { $PackageManager = "bun" }
+    else { $PackageManager = "npm" }
   } else {
     $PackageManager = "npm"
-    Write-Info "Both npm and pnpm are available; defaulting to npm (not an interactive terminal)."
+    Write-Info "Multiple package managers are available; defaulting to npm (not an interactive terminal)."
   }
 } elseif ($hasPnpm) {
   $PackageManager = "pnpm"
-  Write-Info "Using pnpm (npm was not found on PATH)."
+} elseif ($hasBun) {
+  $PackageManager = "bun"
 } else {
   $PackageManager = "npm"
 }
 Write-Ok "Package manager: $PackageManager"
+
+if (-not (Get-Command $PackageManager -ErrorAction SilentlyContinue)) {
+  if ($PackageManager -eq "pnpm") { Write-Fail "pnpm was selected but isn't installed. Install it from https://pnpm.io/installation, or re-run with -PackageManager npm." }
+  elseif ($PackageManager -eq "bun") { Write-Fail "bun was selected but isn't installed. Install it from https://bun.sh, or re-run with -PackageManager npm." }
+  else { Write-Fail "$PackageManager is not on PATH." }
+  exit 1
+}
 
 $spec = $Package
 if ($Version) {
@@ -272,6 +324,8 @@ if ($PackageManager -eq "pnpm") {
   $arguments = @("add", "--global")
   if ($Prefix) { $arguments += @("--global-dir", $Prefix) }
   $arguments += $spec
+} elseif ($PackageManager -eq "bun") {
+  $arguments = @("add", "--global", $spec)
 } else {
   $arguments = @(
     "install", "--global", "--no-audit", "--no-fund",

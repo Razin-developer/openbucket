@@ -208,7 +208,7 @@ export function routeForPath(pathname: string): HostedRoute {
   if (normalized === "/register") return "register";
   if (normalized === "/forgot-password") return "forgot-password";
   if (normalized === "/reset-password") return "reset-password";
-  if (normalized === "/dashboard" || /^\/dashboard\/nodes\/[a-z0-9][a-z0-9-]{1,47}$/.test(normalized)) return "dashboard";
+  if (normalized === "/dashboard" || normalized.startsWith("/dashboard/")) return "dashboard";
   if (normalized === "/feedback") return "feedback";
   if (normalized === "/report-bug") return "report-bug";
   if (normalized === "/faq") return "faq";

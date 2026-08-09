@@ -8,6 +8,7 @@ import { useUploadQueue } from "../../lib/useUploadQueue";
 export function useObjectBrowser(apiFetch: NodeApiFetch, apiBase: string, adminToken: string, notify: (message: string, tone?: "success" | "error") => void) {
   const [selectedBucket, setSelectedBucket] = useState<string | null>(null);
   const [objects, setObjects] = useState<StorageObject[]>([]);
+  const [folders, setFolders] = useState<string[]>([]);
   const [objectPrefix, setObjectPrefix] = useState("");
   const [busy, setBusy] = useState("");
   const generation = useRef(0);
@@ -16,6 +17,7 @@ export function useObjectBrowser(apiFetch: NodeApiFetch, apiBase: string, adminT
   const reset = useCallback(() => {
     setSelectedBucket(null);
     setObjects([]);
+    setFolders([]);
     setObjectPrefix("");
   }, []);
 
@@ -23,9 +25,10 @@ export function useObjectBrowser(apiFetch: NodeApiFetch, apiBase: string, adminT
     const gen = ++generation.current;
     setBusy("objects");
     try {
-      const payload = await apiFetch<unknown>(`/v1/buckets/${encodeURIComponent(bucket)}/objects?prefix=${encodeURIComponent(prefix)}`);
+      const payload = await apiFetch<unknown>(`/v1/buckets/${encodeURIComponent(bucket)}/objects?prefix=${encodeURIComponent(prefix)}&delimiter=${encodeURIComponent("/")}`);
       if (gen !== generation.current) return;
       setObjects(arrayFrom<unknown>(payload, "objects").map(normalizeObject));
+      setFolders(arrayFrom<unknown>(payload, "commonPrefixes").map(String));
       setSelectedBucket(bucket);
       setObjectPrefix(prefix);
     } catch (error) {
@@ -101,7 +104,7 @@ export function useObjectBrowser(apiFetch: NodeApiFetch, apiBase: string, adminT
   }, [apiFetch, notify, selectedBucket]);
 
   return {
-    selectedBucket, objects, objectPrefix, busy, setObjectPrefix, setSelectedBucket, setObjects,
+    selectedBucket, objects, folders, objectPrefix, busy, setObjectPrefix, setSelectedBucket, setObjects,
     reset, loadObjects, uploadFiles, downloadObject, deleteObject, shareObject,
     uploadItems: uploadQueue.items, cancelUpload: uploadQueue.cancel, clearFinishedUploads: uploadQueue.clearFinished,
   };

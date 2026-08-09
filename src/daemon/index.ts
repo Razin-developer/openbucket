@@ -588,11 +588,13 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
       }
       if (tail === "objects" && req.method === "GET") {
         const prefix = url.searchParams.get("prefix") ?? "";
-        const objects = (await store.listObjects(bucket, prefix)).map((object) => ({
+        const delimiter = url.searchParams.get("delimiter") ?? "";
+        const { objects: rawObjects, commonPrefixes } = await store.listObjectsGrouped(bucket, prefix, delimiter);
+        const objects = rawObjects.map((object) => ({
           ...object,
           url: `${config.s3Url}/${encodeURIComponent(bucket)}/${encodePath(object.key)}`,
         }));
-        sendJson(res, ctx, 200, { bucket, prefix, objects });
+        sendJson(res, ctx, 200, { bucket, prefix, delimiter, objects, commonPrefixes });
         return;
       }
       if (tail?.startsWith("objects/")) {
@@ -826,23 +828,35 @@ export async function startDaemon(options: DaemonOptions): Promise<DaemonHandle>
     if (!key && req.method === "GET") {
       await store.requireBucket(bucket);
       const prefix = url.searchParams.get("prefix") ?? "";
+      const delimiter = url.searchParams.get("delimiter") ?? "";
       const maxKeysRaw = Number(url.searchParams.get("max-keys") ?? 1000);
       const maxKeys = Number.isInteger(maxKeysRaw) ? Math.max(0, Math.min(1000, maxKeysRaw)) : 1000;
-      let objects = await store.listObjects(bucket, prefix);
+      const grouped = await store.listObjectsGrouped(bucket, prefix, delimiter);
+      // S3 merges Contents and CommonPrefixes into one lexicographically-sorted keyspace for
+      // pagination/truncation purposes — build that unified sequence, then split it back apart.
+      type Entry = { sortKey: string; kind: "object" | "prefix"; object?: ObjectRecord; prefix?: string };
+      const entries: Entry[] = [
+        ...grouped.objects.map((object): Entry => ({ sortKey: object.key, kind: "object", object })),
+        ...grouped.commonPrefixes.map((commonPrefix): Entry => ({ sortKey: commonPrefix, kind: "prefix", prefix: commonPrefix })),
+      ].sort((a, b) => a.sortKey.localeCompare(b.sortKey));
       const token = url.searchParams.get("continuation-token");
       const startAfter = url.searchParams.get("start-after");
       let cursor = startAfter ?? "";
       if (token) {
         try { cursor = Buffer.from(token, "base64url").toString("utf8"); } catch { throw new StoreError("InvalidArgument", "Invalid continuation token."); }
       }
-      if (cursor) objects = objects.filter((object) => object.key > cursor);
-      const page = objects.slice(0, maxKeys);
-      const truncated = objects.length > page.length;
-      const nextToken = truncated && page.length ? Buffer.from(page.at(-1)!.key).toString("base64url") : undefined;
+      const filtered = cursor ? entries.filter((entry) => entry.sortKey > cursor) : entries;
+      const page = filtered.slice(0, maxKeys);
+      const truncated = filtered.length > page.length;
+      const nextToken = truncated && page.length ? Buffer.from(page.at(-1)!.sortKey).toString("base64url") : undefined;
       const encodingType = url.searchParams.get("encoding-type");
       const keyValue = (value: string) => encodingType === "url" ? encodeURIComponent(value).replaceAll("%2F", "/") : xmlEscape(value);
-      const contents = page.map((object) => `<Contents><Key>${keyValue(object.key)}</Key><LastModified>${xmlEscape(object.lastModified)}</LastModified><ETag>&quot;${object.etag}&quot;</ETag><Size>${object.size}</Size><StorageClass>STANDARD</StorageClass></Contents>`).join("");
-      sendXml(res, ctx, 200, `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>${xmlEscape(bucket)}</Name><Prefix>${keyValue(prefix)}</Prefix><KeyCount>${page.length}</KeyCount><MaxKeys>${maxKeys}</MaxKeys><IsTruncated>${truncated}</IsTruncated>${token ? `<ContinuationToken>${xmlEscape(token)}</ContinuationToken>` : ""}${nextToken ? `<NextContinuationToken>${xmlEscape(nextToken)}</NextContinuationToken>` : ""}${startAfter ? `<StartAfter>${keyValue(startAfter)}</StartAfter>` : ""}${encodingType === "url" ? "<EncodingType>url</EncodingType>" : ""}${contents}</ListBucketResult>`);
+      const contents = page.filter((entry) => entry.kind === "object").map((entry) => {
+        const object = entry.object!;
+        return `<Contents><Key>${keyValue(object.key)}</Key><LastModified>${xmlEscape(object.lastModified)}</LastModified><ETag>&quot;${object.etag}&quot;</ETag><Size>${object.size}</Size><StorageClass>STANDARD</StorageClass></Contents>`;
+      }).join("");
+      const commonPrefixesXml = page.filter((entry) => entry.kind === "prefix").map((entry) => `<CommonPrefixes><Prefix>${keyValue(entry.prefix!)}</Prefix></CommonPrefixes>`).join("");
+      sendXml(res, ctx, 200, `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>${xmlEscape(bucket)}</Name><Prefix>${keyValue(prefix)}</Prefix>${delimiter ? `<Delimiter>${keyValue(delimiter)}</Delimiter>` : ""}<KeyCount>${page.length}</KeyCount><MaxKeys>${maxKeys}</MaxKeys><IsTruncated>${truncated}</IsTruncated>${token ? `<ContinuationToken>${xmlEscape(token)}</ContinuationToken>` : ""}${nextToken ? `<NextContinuationToken>${xmlEscape(nextToken)}</NextContinuationToken>` : ""}${startAfter ? `<StartAfter>${keyValue(startAfter)}</StartAfter>` : ""}${encodingType === "url" ? "<EncodingType>url</EncodingType>" : ""}${contents}${commonPrefixesXml}</ListBucketResult>`);
       return;
     }
     if (!key) throw new StoreError("InvalidURI", "An object key is required.");

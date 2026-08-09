@@ -224,6 +224,11 @@
 .ob-back-button:hover { color: var(--ink); }
 .ob-browser-toolbar h2 { margin: 6px 0 0; font-size: 23px; font-weight: 600; letter-spacing: -.8px; }
 .ob-browser-toolbar p { margin: 2px 0 0; color: var(--mute); font-size: 12px; }
+.ob-folder-crumbs { display: flex; align-items: baseline; flex-wrap: wrap; }
+.ob-folder-crumbs button { padding: 0; border: 0; background: none; cursor: pointer; font: inherit; color: var(--ink); }
+.ob-folder-crumbs button:hover { color: var(--link); }
+.ob-folder-crumbs span:last-child button { color: var(--ink); }
+.ob-folder-row .ob-bucket-link { font-weight: 500; }
 .ob-toolbar-actions { display: flex; gap: 8px; }
 .ob-upload-button input { position: absolute; width: 1px; height: 1px; opacity: 0; }
 .ob-prefix-bar { display: flex; align-items: center; gap: 10px; padding: 12px var(--space-6); border-top: 1px solid var(--hairline); background: var(--canvas-soft); }

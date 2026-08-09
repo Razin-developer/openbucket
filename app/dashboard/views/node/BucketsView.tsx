@@ -1,5 +1,7 @@
-import { useMemo, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type DragEvent, type FormEvent } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, Download, FolderOpen, Plus, RefreshCw, Share2, Trash2, Upload, UploadCloud } from "lucide-react";
+import { nodeViewPath } from "../../shell/paths";
 import { createBucketFormSchema, validateForm } from "../../../lib/validation";
 import { EmptyState } from "../../components/EmptyState";
 import { Modal } from "../../components/Modal";
@@ -95,9 +97,9 @@ function CreateBucketModal({ node, onClose }: { node: NodeViewContext; onClose: 
 }
 
 export function BucketsView({ node }: { node: NodeViewContext }) {
-  const { buckets, loadState, notify, refresh, apiFetch, objectBrowser } = node;
+  const { buckets, loadState, notify, refresh, apiFetch, objectBrowser, basePath } = node;
   const {
-    selectedBucket, objects, objectPrefix, busy, setObjectPrefix, setSelectedBucket, setObjects, loadObjects,
+    selectedBucket, objects, folders, objectPrefix, busy, setObjectPrefix, setSelectedBucket, setObjects, loadObjects,
     uploadFiles, downloadObject, deleteObject, shareObject, uploadItems, cancelUpload, clearFinishedUploads,
   } = objectBrowser;
   const [createOpen, setCreateOpen] = useState(false);
@@ -107,6 +109,30 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
   const uploading = uploadItems.some((item) => item.status === "queued" || item.status === "uploading");
   const bucketsPager = usePager(buckets);
   const objectsPager = usePager(objects);
+  const navigate = useNavigate();
+  const params = useParams<{ bucket?: string; "*": string }>();
+  const bucketParam = params.bucket ? decodeURIComponent(params.bucket) : null;
+  // The trailing wildcard segments are the folder path (e.g. "photos/2026") — each segment is its
+  // own encodeURIComponent unit (see nodeViewPath), so split/decode/rejoin rather than decoding
+  // the whole splat string at once.
+  const folderParam = (params["*"] ?? "").split("/").filter(Boolean).map(decodeURIComponent).join("/");
+  const folderPrefix = folderParam ? `${folderParam}/` : "";
+
+  // The URL (:bucket + the folder wildcard) is the source of truth for what's open — this is what
+  // makes a bucket/folder URL deep-linkable/refreshable/back-button-able instead of pure in-memory
+  // state, the same class of bug the rest of the dashboard nav rewrite fixed.
+  useEffect(() => {
+    if (bucketParam && (bucketParam !== selectedBucket || folderPrefix !== objectPrefix)) {
+      void loadObjects(bucketParam, folderPrefix);
+    } else if (!bucketParam && selectedBucket) {
+      setSelectedBucket(null);
+      setObjects([]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bucketParam, folderPrefix]);
+
+  const breadcrumbSegments = objectPrefix.split("/").filter(Boolean);
+  const openFolder = (depth: number) => navigate(nodeViewPath(basePath, "buckets", selectedBucket ?? undefined, breadcrumbSegments.slice(0, depth).join("/")));
 
   function onDrop(event: DragEvent<HTMLDivElement>) {
     event.preventDefault();
@@ -117,7 +143,7 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
   async function deleteBucket(bucket: Bucket) {
     try {
       await apiFetch(`/v1/buckets/${encodeURIComponent(bucket.name)}`, { method: "DELETE" });
-      if (selectedBucket === bucket.name) setSelectedBucket(null);
+      if (selectedBucket === bucket.name) navigate(nodeViewPath(basePath, "buckets"));
       notify("Bucket deleted");
       await refresh(true);
     } catch (error) {
@@ -139,7 +165,7 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
               <TableBody>
                 {bucketsPager.pageItems.map((bucket) => (
                   <TableRow key={bucket.name}>
-                    <TableCell><button className="ob-bucket-link" type="button" onClick={() => void loadObjects(bucket.name)}><span className="ob-bucket-glyph"><FolderOpen size={14} /></span>{bucket.name}</button></TableCell>
+                    <TableCell><button className="ob-bucket-link" type="button" onClick={() => navigate(nodeViewPath(basePath, "buckets", bucket.name))}><span className="ob-bucket-glyph"><FolderOpen size={14} /></span>{bucket.name}</button></TableCell>
                     <TableCell>{formatNumber(bucket.objectCount)}</TableCell>
                     <TableCell>{formatBytes(bucket.sizeBytes)}</TableCell>
                     <TableCell><Badge variant={bucket.public ? "outline" : "secondary"} className={bucket.public ? "border-[color:var(--accent)] text-[color:var(--accent-deep)] bg-[color:var(--accent-soft)]" : ""}>{bucket.public ? "Public" : "Private"}</Badge></TableCell>
@@ -171,9 +197,17 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
           ) : null}
           <div className="ob-browser-toolbar">
             <div>
-              <button className="ob-back-button" type="button" onClick={() => { setSelectedBucket(null); setObjects([]); }}><ArrowLeft size={14} /> All buckets</button>
-              <h2>{selectedBucket}</h2>
-              <p>{objects.length} visible object{objects.length === 1 ? "" : "s"} · drag and drop files to upload</p>
+              <button className="ob-back-button" type="button" onClick={() => navigate(nodeViewPath(basePath, "buckets"))}><ArrowLeft size={14} /> All buckets</button>
+              <h2 className="ob-folder-crumbs">
+                <button type="button" onClick={() => openFolder(0)}>{selectedBucket}</button>
+                {breadcrumbSegments.map((segment, index) => (
+                  <span key={index}>
+                    <span aria-hidden="true"> / </span>
+                    <button type="button" onClick={() => openFolder(index + 1)}>{segment}</button>
+                  </span>
+                ))}
+              </h2>
+              <p>{folders.length ? `${folders.length} folder${folders.length === 1 ? "" : "s"}, ` : ""}{objects.length} object{objects.length === 1 ? "" : "s"} here · drag and drop files to upload</p>
             </div>
             <div className="ob-toolbar-actions">
               <label className="ob-button primary compact ob-upload-button">
@@ -195,16 +229,29 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
             <div className="ob-loading-rows" aria-label="Loading objects">
               <Skeleton className="h-9 mb-2.5" /><Skeleton className="h-9 mb-2.5" /><Skeleton className="h-9" />
             </div>
-          ) : objects.length ? (
+          ) : objects.length || folders.length ? (
             <div className="ob-table-card flush">
               <Table>
                 <TableHeader><TableRow><TableHead>Object key</TableHead><TableHead>Size</TableHead><TableHead>Modified</TableHead><TableHead>ETag</TableHead><TableHead><span className="ob-sr-only">Actions</span></TableHead></TableRow></TableHeader>
                 <TableBody>
+                  {folders.map((folder) => {
+                    const name = folder.slice(objectPrefix.length).replace(/\/$/, "");
+                    return (
+                      <TableRow key={folder} className="ob-folder-row">
+                        <TableCell colSpan={4}>
+                          <button className="ob-bucket-link" type="button" onClick={() => navigate(nodeViewPath(basePath, "buckets", selectedBucket ?? undefined, folder))}>
+                            <span className="ob-bucket-glyph"><FolderOpen size={14} /></span>{name}
+                          </button>
+                        </TableCell>
+                        <TableCell />
+                      </TableRow>
+                    );
+                  })}
                   {objectsPager.pageItems.map((object) => (
                     <ContextMenu key={object.key}>
                       <ContextMenuTrigger asChild>
                         <TableRow>
-                          <TableCell className="ob-object-key">{object.key}</TableCell>
+                          <TableCell className="ob-object-key">{object.key.slice(objectPrefix.length)}</TableCell>
                           <TableCell>{formatBytes(object.sizeBytes)}</TableCell>
                           <TableCell>{formatDate(object.lastModified)}</TableCell>
                           <TableCell><code className="ob-etag">{object.etag?.replaceAll('"', "").slice(0, 14) || "—"}</code></TableCell>
@@ -232,7 +279,7 @@ export function BucketsView({ node }: { node: NodeViewContext }) {
               </div>
             </div>
           ) : (
-            <EmptyState title="This bucket is empty." body="Upload a file here or send a PutObject request to the S3 endpoint." />
+            <EmptyState title={objectPrefix ? "This folder is empty." : "This bucket is empty."} body="Upload a file here or send a PutObject request to the S3 endpoint." />
           )}
         </div>
       )}

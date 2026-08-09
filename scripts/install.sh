@@ -84,8 +84,8 @@ while [ "$#" -gt 0 ]; do
       [ "$#" -ge 2 ] || { echo "--package-manager requires a value" >&2; exit 2; }
       package_manager=$2
       case "$package_manager" in
-        npm|pnpm) ;;
-        *) echo "--package-manager must be npm or pnpm" >&2; exit 2 ;;
+        npm|pnpm|bun) ;;
+        *) echo "--package-manager must be npm, pnpm, or bun" >&2; exit 2 ;;
       esac
       shift 2
       ;;
@@ -122,6 +122,29 @@ ok()   { printf '  %s✓%s %s\n' "$c_green" "$c_reset" "$1"; }
 info() { printf '  %s·%s %s\n' "$c_dim" "$c_reset" "$1"; }
 warn() { printf '  %s!%s %s\n' "$c_yellow" "$c_reset" "$1"; }
 fail() { printf '  %s✗%s %s\n' "$c_red" "$c_reset" "$1" >&2; }
+
+# Actually persists $1 to the user's shell profile (idempotent — safe to call on every run),
+# instead of only exporting PATH for this script's own process and printing instructions that were
+# never carried out. Picks the profile file by $SHELL; falls back to ~/.profile.
+persist_path_entry() {
+  dir="$1"
+  case "$SHELL" in
+    */zsh) profile="${HOME}/.zshrc" ;;
+    */bash) profile="${HOME}/.bashrc" ;;
+    *) profile="${HOME}/.profile" ;;
+  esac
+  line="export PATH=\"${dir}:\$PATH\""
+  if [ -f "$profile" ] && grep -qF "$line" "$profile" 2>/dev/null; then
+    info "${dir} is already in ${profile}"
+    return 0
+  fi
+  if { printf '\n# openbucket: added by install.sh\n%s\n' "$line" >> "$profile"; } 2>/dev/null; then
+    ok "Added ${dir} to ${profile} — open a new shell to pick it up"
+  else
+    warn "Could not update ${profile} automatically — add this line to your shell profile yourself:"
+    info "  ${line}"
+  fi
+}
 
 printf '%s%s\n' "$c_magenta$c_bold" "OpenBucket installer"
 printf '%s%s\n' "$c_dim" "Turns a local folder into an S3-compatible endpoint.$c_reset"
@@ -203,9 +226,8 @@ install_node_from_official_archive() {
   rm -f "$tmp_tar"
 
   export PATH="${install_root}/${archive}/bin:${PATH}"
-  ok "Node.js v${node_dist_version} is ready for this session at ${install_root}/${archive}/bin"
-  info "To keep using it in new shells, add this to your shell profile:"
-  info "  export PATH=\"${install_root}/${archive}/bin:\$PATH\""
+  ok "Node.js v${node_dist_version} is ready at ${install_root}/${archive}/bin"
+  persist_path_entry "${install_root}/${archive}/bin"
   return 0
 }
 
@@ -330,9 +352,8 @@ install_cloudflared_from_release() {
 
   chmod +x "$target" 2>/dev/null || true
   export PATH="${install_root}:${PATH}"
-  ok "cloudflared is ready for this session at ${target}"
-  info "To keep using it in new shells, add this to your shell profile:"
-  info "  export PATH=\"${install_root}:\$PATH\""
+  ok "cloudflared is ready at ${target}"
+  persist_path_entry "${install_root}"
   return 0
 }
 
@@ -361,30 +382,63 @@ step "Preparing the OpenBucket package"
 
 has_npm=0
 has_pnpm=0
+has_bun=0
 command -v npm >/dev/null 2>&1 && has_npm=1
 command -v pnpm >/dev/null 2>&1 && has_pnpm=1
+command -v bun >/dev/null 2>&1 && has_bun=1
+
+# If this script was itself fetched/run via `npm exec`/`pnpm dlx`/`bunx` (or any npm-family
+# invocation), npm/pnpm/bun set $npm_config_user_agent on the child process — that already tells
+# us which package manager the user chose, so there is nothing to ask.
+invoking_pm=""
+if [ -n "${npm_config_user_agent:-}" ]; then
+  case "$npm_config_user_agent" in
+    npm/*) invoking_pm=npm ;;
+    pnpm/*) invoking_pm=pnpm ;;
+    bun/*) invoking_pm=bun ;;
+  esac
+fi
 
 if [ -n "$package_manager" ]; then
   info "Using package manager: $package_manager (from --package-manager/OPENBUCKET_PACKAGE_MANAGER)"
-elif [ "$has_npm" -eq 1 ] && [ "$has_pnpm" -eq 1 ]; then
+elif [ -n "$invoking_pm" ]; then
+  package_manager=$invoking_pm
+  info "Using $package_manager (this is how the installer was invoked)"
+elif [ "$((has_npm + has_pnpm + has_bun))" -gt 1 ]; then
   if [ -t 0 ] && [ -t 1 ]; then
-    printf '  %s?%s Both npm and pnpm are available. Which should install openbucket? [npm/pnpm] (default: npm): ' "$c_blue" "$c_reset"
+    npm_label="npm"; [ "$has_npm" -eq 1 ] && npm_label="npm (installed)"
+    pnpm_label="pnpm"; [ "$has_pnpm" -eq 1 ] && pnpm_label="pnpm (installed)"
+    bun_label="bun"; [ "$has_bun" -eq 1 ] && bun_label="bun (installed)"
+    printf '  %s?%s Which package manager should install openbucket?\n' "$c_blue" "$c_reset"
+    printf '      1) %s\n      2) %s\n      3) %s\n' "$npm_label" "$pnpm_label" "$bun_label"
+    printf '      Choice [1/2/3] (default: 1): '
     read -r pm_choice || pm_choice=""
     case "$pm_choice" in
-      pnpm) package_manager=pnpm ;;
+      2) package_manager=pnpm ;;
+      3) package_manager=bun ;;
       *) package_manager=npm ;;
     esac
   else
     package_manager=npm
-    info "Both npm and pnpm are available; defaulting to npm (not an interactive terminal)."
+    info "Multiple package managers are available; defaulting to npm (not an interactive terminal)."
   fi
 elif [ "$has_pnpm" -eq 1 ]; then
   package_manager=pnpm
-  info "Using pnpm (npm was not found on PATH)."
+elif [ "$has_bun" -eq 1 ]; then
+  package_manager=bun
 else
   package_manager=npm
 fi
 ok "Package manager: $package_manager"
+
+if ! command -v "$package_manager" >/dev/null 2>&1; then
+  case "$package_manager" in
+    pnpm) fail "pnpm was selected but isn't installed. Install it from https://pnpm.io/installation, or re-run with --package-manager npm." ;;
+    bun) fail "bun was selected but isn't installed. Install it from https://bun.sh, or re-run with --package-manager npm." ;;
+    *) fail "$package_manager is not on PATH." ;;
+  esac
+  exit 1
+fi
 
 spec=$package
 if [ -n "$version" ]; then
@@ -411,6 +465,9 @@ if [ "$package_manager" = "pnpm" ]; then
     pm_args="$pm_args --global-dir $prefix"
   fi
   pm_args="$pm_args $spec"
+elif [ "$package_manager" = "bun" ]; then
+  pm_bin="bun"
+  pm_args="add --global $spec"
 else
   pm_bin="npm"
   pm_args="install --global --no-audit --no-fund --fetch-timeout=30000 --fetch-retries=1 --fetch-retry-mintimeout=2000 --fetch-retry-maxtimeout=5000"

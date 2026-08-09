@@ -20,4 +20,7 @@ export type NodeViewContext = {
   objectBrowser: ReturnType<typeof useObjectBrowser>;
   displayUrl?: string;
   onNavigate: (id: string) => void;
+  /** "" for the standalone local dashboard, "/dashboard/nodes/:name" for the hosted one — lets
+   *  views build real node-scoped URLs (e.g. the bucket object-browser route) via nodeViewPath. */
+  basePath: string;
 };

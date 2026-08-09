@@ -41,7 +41,7 @@ test("removes starter preview code and wires only live daemon data", async () =>
   // Workstream C split the old single-file app/dashboard.tsx into app/dashboard/* (shell, hooks,
   // node-api client, views) — these assertions were ported to read the new locations instead.
   const [page, layout, nodeApi, nodeDataHook, connectionHook, dashboardApp, connectionsView, css, shellCss, packageJson] = await Promise.all([
-    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/[[...slug]]/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/api/node-api.ts", import.meta.url), "utf8"),
     readFile(new URL("../app/dashboard/hooks/useNodeData.ts", import.meta.url), "utf8"),
