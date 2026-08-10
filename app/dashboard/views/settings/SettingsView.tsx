@@ -30,7 +30,7 @@ function ProfilePanel(props: SettingsViewProps) {
   }
 
   const { node, onOpenConnectionSettings } = props;
-  const { status, loadState, apiBase, adminToken, displayUrl } = node;
+  const { status, loadState, adminToken, displayUrl } = node;
   return (
     <section className="ob-profile-card" style={{ gridTemplateColumns: "75px repeat(3, 1fr)" }}>
       <Avatar size="lg" className="size-[75px] rounded-md">
@@ -42,11 +42,14 @@ function ProfilePanel(props: SettingsViewProps) {
       <div><span>Status</span><strong className="ob-role">{loadState === "connected" ? "Online" : loadState === "loading" ? "Connecting" : "Offline"}</strong></div>
       <div><span>Version</span><strong>{status?.version || "—"}</strong></div>
       <div><span>Storage root</span><code>{status?.storageRoot || "—"}</code></div>
-      <div><span>Management API</span><code>{displayUrl ?? apiBase}</code></div>
+      {/* No raw-tunnel fallback here: for the local dashboard displayUrl always resolves to the
+          real local address upstream; for the hosted dashboard it's only ever the reverse-proxy
+          URL, or unset, so this never shows/copies a raw *.trycloudflare.com management URL. */}
+      <div><span>Management API</span><code>{displayUrl ?? "Not connected"}</code></div>
       <div><span>Uptime</span><strong>{status ? formatDuration(status.uptimeSeconds) : "—"}</strong></div>
       {adminToken ? <div><span>Session</span><strong>Token-authenticated</strong></div> : null}
       <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 10, paddingTop: 8 }}>
-        {apiBase ? <CopyButton value={displayUrl ?? apiBase} label="Copy API URL" /> : null}
+        {displayUrl ? <CopyButton value={displayUrl} label="Copy API URL" /> : null}
         <button className="ob-button secondary compact" type="button" onClick={onOpenConnectionSettings}>Connection settings</button>
       </div>
     </section>

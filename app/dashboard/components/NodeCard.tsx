@@ -19,7 +19,7 @@ export function NodeCard({ node, onOpen }: { node: AccountNode; onOpen?: (node: 
         <div><span>Last seen</span><strong>{relativeHeartbeat(node.lastSeenAt)}</strong></div>
       </div>
       <div className="ob-node-endpoints">
-        <div className="ob-node-endpoint"><span>OpenBucket API</span><code>{apiUrl}</code><CopyButton value={apiUrl} /></div>
+        <div className="ob-node-endpoint"><span>OpenBucket API</span><code>{apiUrl ?? "Not connected"}</code>{apiUrl ? <CopyButton value={apiUrl} /> : null}</div>
         <div className="ob-node-endpoint"><span>Node services</span><em>{node.status === "online" ? "Available" : "Offline"}</em></div>
       </div>
       <footer><span>OpenBucket {node.version || "version pending"}</span>{onOpen ? <button type="button" onClick={() => onOpen(node)}>Open node <ArrowRight size={14} /></button> : <span>Registered {formatDate(node.createdAt)}</span>}</footer>

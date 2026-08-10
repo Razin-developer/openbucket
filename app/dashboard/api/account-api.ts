@@ -130,12 +130,13 @@ export function summarizeFleet(nodes: AccountNode[], usage: UsageSummary): Fleet
   };
 }
 
-/** The management API URL to display/share — always the reverse-proxy URL through this hosted
- *  domain (never the raw tunnel host) when the node has one; falls back to the raw control-plane
- *  node path only for a node with no live proxy (e.g. never actually reachable). */
-export function nodeApiUrl(node: AccountNode): string {
-  if (node.endpoint.publicApiProxyUrl) return node.endpoint.publicApiProxyUrl;
-  return new URL(node.endpoint.nodePath, node.endpoint.controlPlaneUrl).toString();
+/** The management API URL to display/share — the reverse-proxy URL through this hosted domain,
+ *  or undefined if the node isn't proxyable yet (not yet publicly discoverable, or its S3 tunnel
+ *  isn't healthy). Never the raw tunnel host, and never `node.endpoint.nodePath` — that field is
+ *  the daemon-to-server heartbeat POST path, not a browser/S3-client-facing URL; resolving it
+ *  against `controlPlaneUrl` produced a non-functional `<origin>/<node-name>` URL. */
+export function nodeApiUrl(node: AccountNode): string | undefined {
+  return node.endpoint.publicApiProxyUrl ?? undefined;
 }
 
 /** The S3 URL to display/share — the reverse-proxy URL, or undefined if the node has none
