@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import type { LucideIcon } from "lucide-react";
 import type { NavSection } from "../api/types";
 import { Sidebar } from "./Sidebar";
 import { Topbar, type BreadcrumbCrumb } from "./Topbar";
@@ -9,6 +10,13 @@ import {
   Command, CommandDialog, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList,
 } from "../../components/ui/command";
 import "../dashboard-shell.css";
+
+/** Extra Ctrl+K palette entries beyond navSections' fixed destinations — e.g. jump-to-node. */
+export type CommandGroupConfig = {
+  id: string;
+  heading: string;
+  items: { id: string; label: string; icon: LucideIcon; onSelect: () => void }[];
+};
 
 const MOBILE_GUARD_MIN_WIDTH = 768;
 
@@ -42,7 +50,7 @@ function MobileGuard() {
  */
 export function DashboardShell({
   navSections, activeNavId, onNavigate, workspaceSwitcher, sidebarFooter, breadcrumbs, search, topbarActions,
-  avatarStack, children,
+  avatarStack, commandGroups, children,
 }: {
   navSections: NavSection[];
   activeNavId: string;
@@ -53,6 +61,7 @@ export function DashboardShell({
   search?: ReactNode;
   topbarActions?: ReactNode;
   avatarStack?: ReactNode;
+  commandGroups?: CommandGroupConfig[];
   children: ReactNode;
 }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -119,6 +128,23 @@ export function DashboardShell({
                           key={item.id}
                           value={`${section.label ?? ""} ${item.label}`}
                           onSelect={() => { onNavigate(item.id); setPaletteOpen(false); }}
+                        >
+                          <Icon size={15} aria-hidden="true" />
+                          {item.label}
+                        </CommandItem>
+                      );
+                    })}
+                  </CommandGroup>
+                ))}
+                {(commandGroups ?? []).filter((group) => group.items.length).map((group) => (
+                  <CommandGroup key={group.id} heading={group.heading}>
+                    {group.items.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <CommandItem
+                          key={item.id}
+                          value={`${group.heading} ${item.label}`}
+                          onSelect={() => { item.onSelect(); setPaletteOpen(false); }}
                         >
                           <Icon size={15} aria-hidden="true" />
                           {item.label}

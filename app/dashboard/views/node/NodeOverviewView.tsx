@@ -6,9 +6,9 @@ import { Alert, AlertDescription, AlertTitle } from "../../../components/ui/aler
 import type { NodeViewContext } from "./context";
 
 export function NodeOverviewView({ node, onOpenConnectionSettings }: { node: NodeViewContext; onOpenConnectionSettings: () => void }) {
-  const { status, loadState, lastError, analytics, refresh, onNavigate } = node;
+  const { status, loadState, lastError, analytics, refresh, onNavigate, s3DisplayUrl } = node;
   const capacityPercent = status?.capacityBytes ? Math.min(100, (status.filesystemUsedBytes / status.capacityBytes) * 100) : 0;
-  const endpoint = "${OPENBUCKET_S3_ENDPOINT}";
+  const endpoint = s3DisplayUrl ?? "Not connected";
 
   return (
     <>
@@ -56,7 +56,7 @@ export function NodeOverviewView({ node, onOpenConnectionSettings }: { node: Nod
       <section className="ob-split-grid">
         <article className="ob-panel">
           <div className="ob-panel-head"><div><p className="ob-eyebrow">S3 endpoint</p><h2>Ready for existing tools.</h2></div><span className={`ob-status-badge ${status ? "success" : "neutral"}`}>{status ? "Active" : "Waiting"}</span></div>
-          <div className="ob-endpoint-box"><code>{endpoint}</code><CopyButton value={endpoint} /></div>
+          <div className="ob-endpoint-box"><code>{endpoint}</code>{s3DisplayUrl ? <CopyButton value={s3DisplayUrl} /> : null}</div>
           <p className="ob-panel-note">Path-style requests work with AWS SDKs, Boto3, the AWS CLI, backup tools, and frameworks.</p>
         </article>
         <article className="ob-panel ob-quickstart-panel">

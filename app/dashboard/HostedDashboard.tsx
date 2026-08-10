@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { LogOut, RefreshCw, Settings as SettingsIcon, UserRound } from "lucide-react";
+import { HardDrive, LogOut, RefreshCw, Settings as SettingsIcon, UserRound } from "lucide-react";
 import { DashboardShell } from "./shell/DashboardShell";
 import { WorkspaceSwitcher } from "./shell/WorkspaceSwitcher";
 import { ACCOUNT_ADMIN_NAV_ITEMS, ACCOUNT_NAV_ITEMS, NODE_NAV_ITEMS } from "./shell/nav-config";
@@ -93,14 +93,17 @@ function HostedDashboardInner({ user, onLogout }: { user: AccountUser; onLogout:
     // in both the account and node nav arrays; a single onNavigate(id) had to guess which one was
     // meant and got it wrong whenever a node was open (this broke both the sidebar and the Ctrl+K
     // command palette, which both ultimately just call onNavigate(item.id)).
-    const accountItems = (user.role === "admin" ? [...ACCOUNT_NAV_ITEMS, ...ACCOUNT_ADMIN_NAV_ITEMS] : ACCOUNT_NAV_ITEMS)
-      .map((item) => ({ ...item, id: accountViewPath(item.id as AccountViewId) }));
-    const sections: NavSection[] = [{ id: "account", label: "Account", items: accountItems }];
+    // While a node is open, its sidebar/palette real estate is node-scoped only — the Account
+    // section would otherwise render stacked below it with no way to tell which is "current".
+    // Getting back to the account is still one click away via the workspace switcher or the
+    // "Home" breadcrumb, both always visible.
     if (selectedNode && nodeBasePath) {
       const nodeItems = NODE_NAV_ITEMS.map((item) => ({ ...item, id: nodeViewPath(nodeBasePath, item.id as NodeViewId) }));
-      sections.push({ id: "node", label: selectedNode.name, items: nodeItems });
+      return [{ id: "node", label: selectedNode.name, items: nodeItems }];
     }
-    return sections;
+    const accountItems = (user.role === "admin" ? [...ACCOUNT_NAV_ITEMS, ...ACCOUNT_ADMIN_NAV_ITEMS] : ACCOUNT_NAV_ITEMS)
+      .map((item) => ({ ...item, id: accountViewPath(item.id as AccountViewId) }));
+    return [{ id: "account", label: "Account", items: accountItems }];
   }, [selectedNode, nodeBasePath, user.role]);
 
   const nodeNavId: NodeViewId = nodeBasePath ? nodeViewFromPath(nodeBasePath, location.pathname) : "overview";
@@ -152,8 +155,16 @@ function HostedDashboardInner({ user, onLogout }: { user: AccountUser; onLogout:
         navSections={navSections}
         activeNavId={activeNavId}
         onNavigate={onNavigate}
+        commandGroups={[{
+          id: "jump-to-node",
+          heading: "Jump to node",
+          items: (account.nodes ?? []).map((item) => ({ id: item.id, label: item.name, icon: HardDrive, onSelect: () => openNode(item) })),
+        }]}
         workspaceSwitcher={
-          <WorkspaceSwitcher title={user.name || user.email} subtitle="Cloud workspace">
+          <WorkspaceSwitcher
+            title={selectedNode ? selectedNode.name : user.name || user.email}
+            subtitle={selectedNode ? `Node · ${selectedNode.status === "online" ? "Online" : selectedNode.status === "offline" ? "Offline" : "Revoked"}` : "Cloud workspace"}
+          >
             <Select
               value={selectedNode?.id || "__account__"}
               onValueChange={(value) => {
@@ -166,7 +177,11 @@ function HostedDashboardInner({ user, onLogout }: { user: AccountUser; onLogout:
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__account__">Account overview</SelectItem>
-                {(account.nodes ?? []).map((node) => <SelectItem key={node.id} value={node.id}>{node.name}</SelectItem>)}
+                {(account.nodes ?? []).map((node) => (
+                  <SelectItem key={node.id} value={node.id}>
+                    <span className={`ob-status-dot ${node.status === "online" ? "online" : "offline"}`} aria-hidden="true" /> {node.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </WorkspaceSwitcher>

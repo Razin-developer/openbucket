@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { X } from "lucide-react";
 import type { NavSection } from "../api/types";
 
 function OpenBucketMark({ size = 30 }: { size?: number }) {
@@ -30,7 +29,6 @@ export function Sidebar({
         <div className="ob-brand-row">
           <OpenBucketMark />
           <div><strong>OpenBucket</strong><span>Dashboard</span></div>
-          <button className="ob-mobile-close ob-icon-button" type="button" aria-label="Close navigation" onClick={onCloseMobile}><X size={16} /></button>
         </div>
         {workspaceSwitcher}
         {navSections.map((section) => (

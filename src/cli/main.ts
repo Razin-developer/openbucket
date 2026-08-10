@@ -1968,7 +1968,11 @@ async function serveForeground(
       effectiveDashboardUrl = quickTunnels.get("dashboard")?.url ?? effectiveDashboardUrl;
       if (!publicUrl) throw new Error("The S3 Quick Tunnel did not return a public URL.");
 
-      handle.config.publicBaseUrl = publicUrl;
+      // Prefer the hosted reverse-proxy URL over the raw Cloudflare tunnel host for anything the
+      // daemon reports about itself (`/v1/status`, `/v1/config/client`) — the tunnel URL is still
+      // needed to build working file share links below, since those must resolve to this daemon
+      // directly, not through the proxy.
+      handle.config.publicBaseUrl = hostedNode?.node.endpoint?.publicS3ProxyUrl ?? publicUrl;
       handle.config.filesUrl = `${publicUrl}/files`;
       handle.config.dashboardUrl = effectiveDashboardUrl;
       if (effectiveDashboardUrl) effectiveOrigins.add(new URL(effectiveDashboardUrl).origin);

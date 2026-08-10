@@ -4,6 +4,7 @@ import { EmptyState } from "../../components/EmptyState";
 import { StatCard } from "../../components/StatCard";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "../../../components/ui/chart";
+import { usePager, ListPagination } from "../../components/Pager";
 import { formatBytes, formatNumber, methodTone } from "../../api/format";
 import type { NodeViewContext } from "./context";
 
@@ -16,6 +17,7 @@ export function LogsView({ node }: { node: NodeViewContext }) {
   const { logs, analytics, refresh } = node;
   const [logFilter, setLogFilter] = useState("all");
   const visibleLogs = useMemo(() => logs.filter((log) => logFilter === "all" || (logFilter === "errors" ? log.status >= 400 : log.method === logFilter)), [logFilter, logs]);
+  const logsPager = usePager(visibleLogs);
 
   // Requests-over-time — buckets recent request logs into minute-wide slots so the chart reads as
   // a real timeline of traffic and error rate, computed entirely from data this view already has.
@@ -74,7 +76,7 @@ export function LogsView({ node }: { node: NodeViewContext }) {
           <Table>
             <TableHeader><TableRow><TableHead>Time</TableHead><TableHead>Method</TableHead><TableHead>Request</TableHead><TableHead>Status</TableHead><TableHead>Transfer</TableHead><TableHead>Duration</TableHead></TableRow></TableHeader>
             <TableBody>
-              {visibleLogs.map((log, index) => (
+              {logsPager.pageItems.map((log, index) => (
                 <TableRow key={log.requestId ?? `${log.timestamp}-${index}`}>
                   <TableCell>{new Date(log.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</TableCell>
                   <TableCell><span className={`ob-method ${methodTone(log.method)}`}>{log.method}</span></TableCell>
@@ -86,6 +88,10 @@ export function LogsView({ node }: { node: NodeViewContext }) {
               ))}
             </TableBody>
           </Table>
+          <div className="ob-pagination-bar">
+            <span>{visibleLogs.length} request{visibleLogs.length === 1 ? "" : "s"}</span>
+            <ListPagination page={logsPager.page} pageCount={logsPager.pageCount} onChange={logsPager.setPage} />
+          </div>
         </div>
       ) : (
         <EmptyState title="No matching requests." body="Use the S3 endpoint or upload an object from the Buckets page; handled requests will appear here." />
