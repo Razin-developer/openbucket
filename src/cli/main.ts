@@ -1704,6 +1704,34 @@ function safeDashboardEndpoint(value: string | undefined): string | undefined {
   }
 }
 
+/**
+ * A node only becomes publicDiscoverable server-side (and therefore gets a reverse-proxy URL at
+ * all) once its first heartbeat reports a live tunnel — the state used to build the printed
+ * banner and `active.json` is captured before that heartbeat ever fires, so without this it stays
+ * stuck showing the raw Cloudflare tunnel host for the entire session. Applies whatever proxy URLs
+ * the heartbeat response reports and persists them so the banner, `openbucket status`, and
+ * `openbucket dashboard` all pick up the change.
+ */
+async function applyHeartbeatEndpoint(
+  response: Record<string, unknown>,
+  state: ActiveDaemonState,
+  io: CLIIO,
+): Promise<void> {
+  const node = response.node && typeof response.node === "object" ? response.node as Record<string, unknown> : undefined;
+  const endpoint = node?.endpoint && typeof node.endpoint === "object" ? node.endpoint as Record<string, unknown> : undefined;
+  const nextS3 = typeof endpoint?.publicS3ProxyUrl === "string" ? endpoint.publicS3ProxyUrl : undefined;
+  const nextApi = typeof endpoint?.publicApiProxyUrl === "string" ? endpoint.publicApiProxyUrl : undefined;
+  if (nextS3 === state.publicS3ProxyUrl && nextApi === state.publicApiProxyUrl) return;
+  if (nextS3) state.publicS3ProxyUrl = nextS3; else delete state.publicS3ProxyUrl;
+  if (nextApi) state.publicApiProxyUrl = nextApi; else delete state.publicApiProxyUrl;
+  await writeActiveState(state, io).catch((error: unknown) => {
+    writeLine(
+      io.stderr,
+      `Warning: could not persist the updated hosted endpoint: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  });
+}
+
 async function startHostedHeartbeatReporter(
   runtime: HostedNodeRuntime,
   state: ActiveDaemonState,
@@ -1743,7 +1771,7 @@ async function startHostedHeartbeatReporter(
   });
 
   try {
-    await remote.heartbeat(payload(true, baseline));
+    await applyHeartbeatEndpoint(await remote.heartbeat(payload(true, baseline)), state, io);
   } catch (error) {
     if (!(error instanceof HostedAuthError) || error.status !== 401) throw error;
     runtime.credential = await rotateSavedNodeCredential({
@@ -1759,7 +1787,7 @@ async function startHostedHeartbeatReporter(
       nodeToken: runtime.credential.token,
       fetch: io.fetch,
     });
-    await remote.heartbeat(payload(true, baseline));
+    await applyHeartbeatEndpoint(await remote.heartbeat(payload(true, baseline)), state, io);
   }
 
   const configuredInterval = Number(io.env.OPENBUCKET_HEARTBEAT_INTERVAL_MS ?? 30_000);
@@ -1772,7 +1800,7 @@ async function startHostedHeartbeatReporter(
     active = (async () => {
       try {
         latest = await collectLocalTelemetry(state, io);
-        await remote.heartbeat(payload(true, latest));
+        await applyHeartbeatEndpoint(await remote.heartbeat(payload(true, latest)), state, io);
         warningShown = false;
       } catch (error) {
         if (!warningShown) {

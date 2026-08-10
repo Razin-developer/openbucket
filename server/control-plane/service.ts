@@ -576,6 +576,12 @@ export async function handleNodeHeartbeat(request: Request): Promise<Response> {
     }
     if (!updatedNode) throw new Error("Heartbeat transaction did not return a node.");
 
+    // This heartbeat is what first makes the node publicDiscoverable server-side (it only
+    // becomes true once a live tunnel is reported), so the proxy URLs computed here are the
+    // earliest point they can exist at all. The CLI has no other way to learn them without an
+    // extra round trip, so return them directly instead of leaving the daemon stuck advertising
+    // the raw tunnel host until some unrelated request happens to refresh it.
+    const view = toNodeView(updatedNode, requestOrigin(request));
     return jsonResponse({
       accepted: true,
       duplicate,
@@ -585,6 +591,10 @@ export async function handleNodeHeartbeat(request: Request): Promise<Response> {
         name: updatedNode.name,
         status: nodeStatus(updatedNode),
         lastSeenAt: updatedNode.lastSeenAt?.toISOString() ?? null,
+        endpoint: {
+          publicS3ProxyUrl: view.endpoint.publicS3ProxyUrl,
+          publicApiProxyUrl: view.endpoint.publicApiProxyUrl,
+        },
       },
     });
   } catch (error) {
