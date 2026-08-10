@@ -33,7 +33,10 @@ test("server-renders the complete OpenBucket dashboard shell", async () => {
   assert.match(html, /API keys/);
   assert.match(html, /Connections/);
   assert.match(html, /Logs &amp; analytics/);
-  assert.match(html, /OPENBUCKET_S3_ENDPOINT/);
+  // Disconnected overview no longer shows the raw env-var placeholder as if it were a real,
+  // copyable endpoint (that bug is fixed) — it shows a "not connected" state instead.
+  assert.match(html, /Not connected/);
+  assert.doesNotMatch(html, /OPENBUCKET_S3_ENDPOINT/);
   assert.doesNotMatch(html, /codex-preview|Your site is taking shape|react-loading-skeleton/i);
 });
 

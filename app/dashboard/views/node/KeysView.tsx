@@ -8,6 +8,7 @@ import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
+import { usePager, ListPagination } from "../../components/Pager";
 import { formatDate } from "../../api/format";
 import type { ApiKey } from "../../api/types";
 import type { NodeViewContext } from "./context";
@@ -77,6 +78,7 @@ export function KeysView({ node }: { node: NodeViewContext }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [revealedKey, setRevealedKey] = useState<Record<string, string> | null>(null);
   const [keyToRevoke, setKeyToRevoke] = useState<ApiKey | null>(null);
+  const keysPager = usePager(keys);
 
   async function revokeKey(key: ApiKey) {
     try {
@@ -103,7 +105,7 @@ export function KeysView({ node }: { node: NodeViewContext }) {
           <Table>
             <TableHeader><TableRow><TableHead>Name</TableHead><TableHead>Access key</TableHead><TableHead>Scope</TableHead><TableHead>Created</TableHead><TableHead><span className="ob-sr-only">Actions</span></TableHead></TableRow></TableHeader>
             <TableBody>
-              {keys.map((key) => (
+              {keysPager.pageItems.map((key) => (
                 <TableRow key={key.id}>
                   <TableCell className="ob-strong-cell">{key.name}</TableCell>
                   <TableCell><div className="ob-inline-code"><code>{key.accessKeyId}</code><CopyButton value={key.accessKeyId} /></div></TableCell>
@@ -114,6 +116,10 @@ export function KeysView({ node }: { node: NodeViewContext }) {
               ))}
             </TableBody>
           </Table>
+          <div className="ob-pagination-bar">
+            <span>{keys.length} key{keys.length === 1 ? "" : "s"}</span>
+            <ListPagination page={keysPager.page} pageCount={keysPager.pageCount} onChange={keysPager.setPage} />
+          </div>
         </div>
       ) : (
         <EmptyState title="No API keys available." body="Create credentials for your first S3 client. The initial key is printed by the daemon on first run." />

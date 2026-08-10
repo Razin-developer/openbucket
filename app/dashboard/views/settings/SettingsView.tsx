@@ -46,7 +46,7 @@ function ProfilePanel(props: SettingsViewProps) {
       <div><span>Uptime</span><strong>{status ? formatDuration(status.uptimeSeconds) : "—"}</strong></div>
       {adminToken ? <div><span>Session</span><strong>Token-authenticated</strong></div> : null}
       <div style={{ gridColumn: "1 / -1", display: "flex", justifyContent: "flex-end", gap: 10, paddingTop: 8 }}>
-        {apiBase ? <CopyButton value={apiBase} label="Copy API URL" /> : null}
+        {apiBase ? <CopyButton value={displayUrl ?? apiBase} label="Copy API URL" /> : null}
         <button className="ob-button secondary compact" type="button" onClick={onOpenConnectionSettings}>Connection settings</button>
       </div>
     </section>
