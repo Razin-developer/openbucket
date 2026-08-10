@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.1.27] - 2026-08-10
+
+### Fixed
+
+- **`openbucket status --json` and the hosted dashboard's "Copy API URL" button still leaked the raw Cloudflare tunnel host** even after 0.1.26's banner/dashboard-text fix — the daemon's own `/v1/status` (and `/v1/config/client`) had no concept of the hosted reverse-proxy URL, and the Settings "Copy API URL" button copied `apiBase` directly instead of the already-computed proxy-aware display URL shown next to it. Both now prefer the proxy URL consistently with what's on screen.
+- **The node overview page still showed the literal `${OPENBUCKET_S3_ENDPOINT}` placeholder as if it were a real, copyable endpoint** in its "S3 endpoint" card and "Quick start" AWS CLI snippet — the Connections page had already been fixed for this same bug, but the overview page was missed. It now uses the real S3 URL (local or hosted, never a raw tunnel host), falling back to a "Not connected" state.
+
+### Changed
+
+- **Hosted dashboard sidebar/command palette no longer show the Account section while a node is open.** Previously both the Account and Node nav sections rendered stacked with no clear "current" scope; the account is still one click away via the workspace switcher or the "Home" breadcrumb.
+- **Workspace switcher shows per-node online/offline status** and reflects the currently open node's name instead of a static placeholder.
+- **Removed the sidebar's mobile "close" button** — it was fully redundant with the existing scrim-tap-to-close and close-on-nav-item-click behavior.
+- **Added pagination to Logs, API keys, and the account Nodes list**, which previously rendered every row unbounded; only the Buckets page had pagination before.
+- **Ctrl+K command palette can jump directly to any node by name**, not just the sidebar's fixed destinations.
+
 ## [0.1.26] - 2026-08-09
 
 ### Fixed
