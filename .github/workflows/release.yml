@@ -220,7 +220,7 @@ jobs:
           path: python-dist
 
       - name: Publish with PyPI trusted publishing
-        uses: pypa/gh-action-pypi-publish@cef221092ed1bacb1cc03d23a2d87d1d172e277b # release/v1
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1 (includes "Update twine to v7", which understands metadata-version 2.5)
         with:
           packages-dir: python-dist/
 
