@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.29] - 2026-08-11
+
+### Fixed
+
+- **`openbucket.zydcode.in/api/<node>/` and `/s3/<node>/` (a bare trailing slash right after the node segment, nothing after it) 404'd before ever reaching the app**, returning Vercel's raw platform 404 page instead of the API's own JSON error — or, once a node is live, never reaching the daemon at all for that exact path shape. Root cause: the Vercel rewrite `source` patterns (`/api/:path*`, `/s3/:path*`) don't match a trailing slash with an empty final segment, even though the app's own router (`api/router.ts`) already normalized trailing slashes correctly downstream — the request just never got there. Every other path shape (no trailing slash, or a real path after the slug) was unaffected. Rewrote both patterns as plain regex (`/api(?:/(.*))?`, `/s3(?:/(.*))?`) to match every shape the app already handled internally.
+
 ## [0.1.28] - 2026-08-11
 
 ### Fixed

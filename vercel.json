@@ -11,12 +11,20 @@
   },
   "rewrites": [
     {
-      "source": "/api/:path*",
-      "destination": "/api/router?__openbucket_path=:path*"
+      "source": "/api",
+      "destination": "/api/router?__openbucket_path="
     },
     {
-      "source": "/s3/:path*",
-      "destination": "/api/router?__openbucket_path=:path*&__openbucket_kind=s3"
+      "source": "/api/(.*)",
+      "destination": "/api/router?__openbucket_path=$1"
+    },
+    {
+      "source": "/s3",
+      "destination": "/api/router?__openbucket_path=&__openbucket_kind=s3"
+    },
+    {
+      "source": "/s3/(.*)",
+      "destination": "/api/router?__openbucket_path=$1&__openbucket_kind=s3"
     },
     {
       "source": "/((?!api(?:/|$)|s3(?:/|$)).*)",
