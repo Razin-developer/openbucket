@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.28] - 2026-08-11
+
+### Fixed
+
+- **Nodes created before the routeSlug/reverse-proxy system existed (or that otherwise ended up without one) could never become "proxyable," permanently showing the raw Cloudflare tunnel host no matter how many heartbeats they sent.** 0.1.27's heartbeat-response fix was necessary but not sufficient — it correctly applies whatever proxy URL the server reports, but the server's `proxyable` check requires a `routeSlug`, and nothing ever backfilled one for a node that predates it or otherwise lost it. Both the heartbeat handler and node (re-)registration now self-heal a missing `routeSlug` the moment they see one, so an affected node becomes fully proxyable on its very next heartbeat instead of staying stuck forever. Added an integration test against a real MongoDB instance covering this exact scenario.
+
 ## [0.1.27] - 2026-08-10
 
 ### Fixed

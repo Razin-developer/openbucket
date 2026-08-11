@@ -1189,9 +1189,9 @@ async function getProductVersion(io: CLIIO): Promise<string> {
     const packageData = JSON.parse(await readFile(packageUrl, "utf8")) as {
       version?: unknown;
     };
-    return typeof packageData.version === "string" ? packageData.version : "0.1.27";
+    return typeof packageData.version === "string" ? packageData.version : "0.1.28";
   } catch {
-    return "0.1.27";
+    return "0.1.28";
   }
 }
 
@@ -1717,6 +1717,7 @@ async function applyHeartbeatEndpoint(
   state: ActiveDaemonState,
   io: CLIIO,
 ): Promise<void> {
+  if (io.env.OPENBUCKET_DEBUG_HEARTBEAT) writeLine(io.stderr, `DEBUG heartbeat response: ${JSON.stringify(response)}`);
   const node = response.node && typeof response.node === "object" ? response.node as Record<string, unknown> : undefined;
   const endpoint = node?.endpoint && typeof node.endpoint === "object" ? node.endpoint as Record<string, unknown> : undefined;
   const nextS3 = typeof endpoint?.publicS3ProxyUrl === "string" ? endpoint.publicS3ProxyUrl : undefined;

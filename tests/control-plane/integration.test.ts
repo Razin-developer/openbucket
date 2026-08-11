@@ -416,6 +416,58 @@ describe("MongoDB-backed control plane", { skip: !testUri }, () => {
     void nodeD;
   });
 
+  test("a node missing routeSlug (created before the field existed, or otherwise incomplete) self-heals on its next heartbeat", async () => {
+    const owner = await handleRegister(sessionRequest("/api/auth/register", "POST", {
+      email: "legacy-slug-owner@example.com",
+      password: "correct horse battery staple",
+      name: "Legacy Slug Owner",
+    }, undefined, "192.0.2.90"));
+    assert.equal(owner.status, 201);
+    const cookie = cookiePair(owner);
+
+    const created = await handleCreateNode(sessionRequest("/api/nodes", "POST", { name: "legacy-node" }, cookie, "192.0.2.91"));
+    assert.equal(created.status, 201);
+    const createdPayload = await created.json() as {
+      node: { id: string; name: string };
+      credential: { token: string };
+    };
+
+    // Simulate a pre-existing document that predates routeSlug (or lost it some other way) —
+    // directly strip it in the database, bypassing the normal creation path.
+    const control = await getControlPlaneCollections();
+    await control.nodes.updateOne(
+      { _id: new ObjectId(createdPayload.node.id) },
+      { $unset: { routeSlug: "" } },
+    );
+    const stripped = await control.nodes.findOne({ _id: new ObjectId(createdPayload.node.id) });
+    assert.equal(stripped?.routeSlug, undefined);
+
+    // Without a self-heal, this node would be permanently stuck un-proxyable: `toNodeView`'s
+    // `proxyable` check requires `Boolean(node.routeSlug)`, and nothing else in the heartbeat
+    // path would ever assign one.
+    const heartbeatResponse = await handleNodeHeartbeat(heartbeatRequest(
+      createdPayload.credential.token,
+      heartbeat(createdPayload.node.id, createdPayload.node.name, "legacy-heartbeat-0001", { requests: 1, bytesIn: 10, bytesOut: 20, errors: 0 }),
+    ));
+    assert.equal(heartbeatResponse.status, 200);
+    const heartbeatPayload = await heartbeatResponse.json() as {
+      node: { endpoint: { publicS3ProxyUrl: string | null; publicApiProxyUrl: string | null } };
+    };
+    assert.ok(heartbeatPayload.node.endpoint.publicS3ProxyUrl, "heartbeat response carries the freshly-backfilled proxy URL");
+    assert.ok(heartbeatPayload.node.endpoint.publicApiProxyUrl);
+
+    const healed = await control.nodes.findOne({ _id: new ObjectId(createdPayload.node.id) });
+    assert.ok(healed?.routeSlug, "routeSlug is now persisted, not just returned once");
+
+    // Re-registering (the CLI's own pre-tunnel step, before any heartbeat) must also self-heal,
+    // for a node that gets looked up before it ever sends a heartbeat.
+    await control.nodes.updateOne({ _id: new ObjectId(createdPayload.node.id) }, { $unset: { routeSlug: "" } });
+    const reRegistered = await handleCreateNode(sessionRequest("/api/nodes", "POST", { name: "legacy-node" }, cookie, "192.0.2.92"));
+    assert.equal(reRegistered.status, 200);
+    const reRegisteredPayload = await reRegistered.json() as { node: { routeSlug: string } };
+    assert.ok(reRegisteredPayload.node.routeSlug);
+  });
+
   test("the /s3/<routeSlug> and /api/<routeSlug> reverse proxy forwards real requests to the node's tunnel", async () => {
     const received: { last: { method: string; url: string; authorization: string | null; body: string } | null } = { last: null };
     const upstream: Server = createServer((request: IncomingMessage, response: ServerResponse) => {
