@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.31] - 2026-08-11
+
+### Fixed
+
+- **PyPI publishing (and, as a result, the GitHub Release) for 0.1.30 still failed after the twine pin fix**, with the exact same `Invalid distribution metadata: '2.5' is not a valid metadata version` error. 0.1.30 fixed the wrong twine: `python/pyproject.toml`'s pin only affects the pip-installed twine used by the workflow's own build/verify job, but the actual PyPI upload runs through the official `pypa/gh-action-pypi-publish` GitHub Action, which bundles its own twine inside a pinned Docker image, entirely independent of anything pip installs. The commit this workflow was pinned to predated that action's own "Update twine to v7" fix (merged 2026-07-27 upstream). Updated the pin to the current `release/v1` HEAD, which includes it. (npm and the container images for 0.1.30 did publish successfully; only PyPI/GitHub Release were blocked. This release supersedes 0.1.30 everywhere.)
+
 ## [0.1.30] - 2026-08-11
 
 ### Fixed
