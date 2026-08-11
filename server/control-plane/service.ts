@@ -1,4 +1,4 @@
-import { ObjectId } from "mongodb";
+import { ObjectId, type ClientSession } from "mongodb";
 import { getAuthConfig } from "../auth/config.js";
 import { createSessionToken, keyedHash } from "../auth/crypto.js";
 import { getAuthCollections, getAuthDatabaseContext } from "../auth/database.js";
@@ -186,9 +186,13 @@ async function authenticateNode(request: Request): Promise<{ node: NodeDocument;
   return { node, tokenHash };
 }
 
-async function generateUniqueRouteSlug(nodes: ControlPlaneCollections["nodes"], name: string): Promise<string> {
+async function generateUniqueRouteSlug(
+  nodes: ControlPlaneCollections["nodes"],
+  name: string,
+  options?: { session?: ClientSession },
+): Promise<string> {
   for (const candidate of routeSlugCandidates(name)) {
-    const taken = await nodes.findOne({ routeSlug: candidate }, { projection: { _id: 1 } });
+    const taken = await nodes.findOne({ routeSlug: candidate }, { projection: { _id: 1 }, session: options?.session });
     if (!taken) return candidate;
   }
   throw new ApiError(503, "ROUTE_SLUG_UNAVAILABLE", "Could not allocate a unique node route; try again.");
@@ -270,6 +274,12 @@ export async function handleCreateNode(request: Request): Promise<Response> {
     // project. Uniqueness is enforced on `routeSlug` instead (see generateUniqueRouteSlug).
     const existing = await collections.nodes.findOne({ userId, name, lifecycle: { $ne: "deleted" } });
     if (existing) {
+      // Same self-heal as the heartbeat handler: a node created before routeSlug existed (or
+      // otherwise missing one) would otherwise never become proxyable.
+      if (!existing.routeSlug) {
+        existing.routeSlug = await generateUniqueRouteSlug(collections.nodes, existing.name);
+        await collections.nodes.updateOne({ _id: existing._id }, { $set: { routeSlug: existing.routeSlug } });
+      }
       return jsonResponse({
         created: false,
         node: toNodeView(existing, requestOrigin(request)),
@@ -527,6 +537,13 @@ export async function handleNodeHeartbeat(request: Request): Promise<Response> {
           delta,
         }, { session });
 
+        // Self-heals nodes that predate routeSlug (or otherwise ended up without one, e.g. an
+        // interrupted creation) — without this, such a node can NEVER become proxyable
+        // (`toNodeView`'s `proxyable` check requires `Boolean(node.routeSlug)`), so it's
+        // permanently stuck advertising only the raw Cloudflare tunnel host no matter how many
+        // heartbeats it sends.
+        const routeSlug = fresh.routeSlug || await generateUniqueRouteSlug(nodes, fresh.name, { session });
+
         updatedNode = await nodes.findOneAndUpdate(
           {
             _id: fresh._id,
@@ -547,6 +564,7 @@ export async function handleNodeHeartbeat(request: Request): Promise<Response> {
               managementUrl: heartbeat.managementUrl,
               dashboardUrl: heartbeat.dashboardUrl,
               endpoints: heartbeat.endpoints,
+              routeSlug,
               updatedAt: receivedAt,
             },
             $inc: {
