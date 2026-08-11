@@ -80,12 +80,18 @@ for (const required of requiredPackageFiles) {
 const vercelConfig = await readJson("vercel.json");
 if (vercelConfig.outputDirectory !== "vercel-dist") failures.push("Vercel outputDirectory must be vercel-dist.");
 if (vercelConfig.buildCommand !== "npm run build:vercel") failures.push("Vercel buildCommand must use build:vercel.");
-const apiRouter = vercelConfig.rewrites?.find((rewrite) => rewrite.source === "/api/:path*");
-if (apiRouter?.destination !== "/api/router?__openbucket_path=:path*") {
+// Two rules per prefix (bare path, and path + a capturing group) rather than a single
+// path-to-regexp ":path*" rule — that single-rule form doesn't match a bare trailing slash
+// (e.g. "/api/test/"), which never reached the app at all. Vercel's rewrite source is
+// path-to-regexp, not raw JS regex, so this can't be one optional-group pattern either.
+const apiBare = vercelConfig.rewrites?.find((rewrite) => rewrite.source === "/api");
+const apiWildcard = vercelConfig.rewrites?.find((rewrite) => rewrite.source === "/api/(.*)");
+if (apiBare?.destination !== "/api/router?__openbucket_path=" || apiWildcard?.destination !== "/api/router?__openbucket_path=$1") {
   failures.push("Vercel API rewrite must target the consolidated router.");
 }
-const s3Router = vercelConfig.rewrites?.find((rewrite) => rewrite.source === "/s3/:path*");
-if (s3Router?.destination !== "/api/router?__openbucket_path=:path*&__openbucket_kind=s3") {
+const s3Bare = vercelConfig.rewrites?.find((rewrite) => rewrite.source === "/s3");
+const s3Wildcard = vercelConfig.rewrites?.find((rewrite) => rewrite.source === "/s3/(.*)");
+if (s3Bare?.destination !== "/api/router?__openbucket_path=&__openbucket_kind=s3" || s3Wildcard?.destination !== "/api/router?__openbucket_path=$1&__openbucket_kind=s3") {
   failures.push("Vercel S3 proxy rewrite must target the consolidated router.");
 }
 const spaFallback = vercelConfig.rewrites?.find((rewrite) => rewrite.destination === "/index.html");
