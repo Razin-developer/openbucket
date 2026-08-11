@@ -28,7 +28,7 @@ from .models import (
     StorageInfo,
 )
 
-__version__ = "0.1.29"
+__version__ = "0.1.30"
 
 __all__ = [
     "AccessKey",

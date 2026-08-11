@@ -1,10 +1,16 @@
 # Changelog
 
+## [0.1.30] - 2026-08-11
+
+### Fixed
+
+- **PyPI, GHCR, and the GitHub Release for 0.1.29 never published** — the release workflow's Python job failed on `twine check` with `Invalid distribution metadata: '2.5' is not a valid metadata version`, which cascaded into skipping every downstream publish job. Root cause: `python/pyproject.toml`'s dev extras capped `twine<7`, and `hatchling` now emits metadata-version 2.5, which only twine 7.x understands. Bumped the pin to `twine>=7,<8`. (npm's 0.1.29 did publish successfully before the Python job failed, and stays as a real but PyPI/GHCR-orphaned version; this release supersedes it everywhere.)
+
 ## [0.1.29] - 2026-08-11
 
 ### Fixed
 
-- **`openbucket.zydcode.in/api/<node>/` and `/s3/<node>/` (a bare trailing slash right after the node segment, nothing after it) 404'd before ever reaching the app**, returning Vercel's raw platform 404 page instead of the API's own JSON error — or, once a node is live, never reaching the daemon at all for that exact path shape. Root cause: the Vercel rewrite `source` patterns (`/api/:path*`, `/s3/:path*`) don't match a trailing slash with an empty final segment, even though the app's own router (`api/router.ts`) already normalized trailing slashes correctly downstream — the request just never got there. Every other path shape (no trailing slash, or a real path after the slug) was unaffected. Rewrote both patterns as plain regex (`/api(?:/(.*))?`, `/s3(?:/(.*))?`) to match every shape the app already handled internally.
+- **`openbucket.zydcode.in/api/<node>/` and `/s3/<node>/` (a bare trailing slash right after the node segment, nothing after it) 404'd before ever reaching the app**, returning Vercel's raw platform 404 page instead of the API's own JSON error — or, once a node is live, never reaching the daemon at all for that exact path shape. Root cause: the Vercel rewrite `source` patterns (`/api/:path*`, `/s3/:path*`) don't match a trailing slash with an empty final segment, even though the app's own router (`api/router.ts`) already normalized trailing slashes correctly downstream — the request just never got there. Every other path shape (no trailing slash, or a real path after the slug) was unaffected. Vercel's rewrite `source` is path-to-regexp, not raw JS regex — it accepts a plain capturing group with a custom pattern (e.g. `/api/(.*)`) but not JS-only constructs like non-capturing groups. Split each prefix into two explicit rules (a bare-path rule and a `/api/(.*)`-style rule) to match every shape the app already handled internally.
 
 ## [0.1.28] - 2026-08-11
 
